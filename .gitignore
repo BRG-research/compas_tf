@@ -138,3 +138,6 @@ docs/api/generated/
 scripts/
 
 .ruff_cache
+
+# UV virtual environment
+uv_compas_tf
