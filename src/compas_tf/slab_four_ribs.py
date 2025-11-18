@@ -1,12 +1,16 @@
-from compas.geometry import Point, Vector, Line, Polygon, Polyline, Rotation, Scale, Frame, Plane, Transformation
-from compas.geometry import intersection_line_line
+from compas.geometry import Point, Vector, Line, Polygon, Polyline, Rotation, Scale, Frame, Plane, Transformation, Box
+from compas.datastructures import Mesh
+from compas.geometry import intersection_line_line, intersection_line_plane, intersection_segment_plane
 import math
 from compas_viewer import Viewer
 from compas_viewer.config import Config
+from session_py.intersection import line_plane
 from compas_tf.beam import BeamElement
 from compas_tf.plate import PlateElement
 from compas_tf.slicer import SliceElement
+from compas_tf.solid import Solid
 from compas_tf.slicemodifier import SliceModifier
+from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 from compas_model.models import Model
 
 class SlabFourRibs:
@@ -197,13 +201,11 @@ class SlabFourRibs:
         self.ribs_lines[1] = Line(new_corner+self.points[4], p0)
         self.ribs_lines[2] = Line(new_corner+self.points[4], p1)
         self.ribs_lines[3] = Line(new_corner+self.points[4], line2_offset.end+Vector(thickness*0.5, 0, 0))
+        # self.points[5] = Point(*(line0_offset.start+Vector(0, thickness*0.5, 0)))
+        # self.points[0] = Point(*p0)
+        # self.points[3] = Point(*p1)
+        # self.points[6] = Point(*(line2_offset.end+Vector(thickness*0.5, 0, 0)))
 
-        # Shorted ribs
-        # shorted_rib_lines = []
-        # for idx, rib_line in enumerate(self.ribs_lines):
-        #     direction = rib_line.direction.unitized()
-        #     shorted_rib_line = Line(rib_line.start+direction*shorten_ribs, rib_line.end)
-        #     shorted_rib_lines.append(shorted_rib_line)
 
         rib0 = BeamElement(width=thickness, depth=self.zsize, length=self.ribs_lines[0].length, transformation=Transformation.from_frame(Frame(-Vector(0,0,self.zsize*0.5)+self.ribs_lines[0].start, -self.ribs_lines[0].direction.cross(zaxis), zaxis)))    
         rib1 = BeamElement(width=thickness, depth=self.zsize, length=self.ribs_lines[1].length, transformation=Transformation.from_frame(Frame(-Vector(0,0,self.zsize*0.5)+self.ribs_lines[1].start, -self.ribs_lines[1].direction.cross(zaxis), zaxis)))    
@@ -258,87 +260,55 @@ class SlabFourRibs:
 
 
         # Create parabolic boolean from below
+        self.ribs_lines[0] = Line(self.ribs_lines[0].start, intersection_line_plane(self.ribs_lines[0], Plane(line0_offset.start, line0_offset.direction.cross(zaxis))))
+        self.ribs_lines[1] = Line(self.ribs_lines[1].start, intersection_line_plane(self.ribs_lines[1], Plane(line0_offset.start, line0_offset.direction.cross(zaxis))))
+        self.ribs_lines[2] = Line(self.ribs_lines[2].start, intersection_line_plane(self.ribs_lines[2], Plane(line2_offset.start, line2_offset.direction.cross(zaxis))))
+        self.ribs_lines[3] = Line(self.ribs_lines[3].start, intersection_line_plane(self.ribs_lines[3], Plane(line2_offset.start, line2_offset.direction.cross(zaxis))))
+
+        parabola0, parabola0_translated, mesh0, planes0 = slab.parabola(self.ribs_lines[0].start, self.ribs_lines[0].end, Vector(1,0,0), 7, Plane.from_frame(cut_frame0_front), Plane.from_frame(cut_frame0_back), extend=10, thickness=thickness)
+        parabola1, parabola1_translated, mesh1, planes1 = slab.parabola(self.ribs_lines[1].start, self.ribs_lines[1].end, Vector(1,0,0), 7, Plane.from_frame(cut_frame1_front), Plane.from_frame(cut_frame1_back), extend=10, thickness=thickness)
+        parabola2, parabola2_translated, mesh2, planes2 = slab.parabola(self.ribs_lines[2].start, self.ribs_lines[2].end, Vector(0,1,0), 7, Plane.from_frame(cut_frame1_front), Plane.from_frame(cut_frame1_back), extend=10, thickness=thickness)
+        parabola3, parabola3_translated, mesh3, planes3 = slab.parabola(self.ribs_lines[3].start, self.ribs_lines[3].end, Vector(0,1,0), 7, Plane.from_frame(cut_frame2_front), Plane.from_frame(cut_frame2_back), extend=10, thickness=thickness)
+        
+        # xform0 = Transformation.from_frame(parabola0.frame)
+        # xform1 = Transformation.from_frame(parabola1.frame)
+        # xform2 = Transformation.from_frame(parabola2.frame)
+        # xform3 = Transformation.from_frame(parabola3.frame)
+
+        # solid0 = Solid(mesh0.transformed(xform0.inverse()), transformation=xform0)
+        # solid1 = Solid(mesh1.transformed(xform1.inverse()), transformation=xform1)
+        # solid2 = Solid(mesh2.transformed(xform2.inverse()), transformation=xform2)
+        # solid3 = Solid(mesh3.transformed(xform3.inverse()), transformation=xform3)
 
 
+        solid0 = Solid(mesh0)
+        solid1 = Solid(mesh1)
+        solid2 = Solid(mesh2)
+        solid3 = Solid(mesh3)
+
+        self.model.add_element(solid0)
+        self.model.add_element(solid1)
+        self.model.add_element(solid2)
+        self.model.add_element(solid3)
+
+        self.model.add_modifier(solid0, rib0, SolidDifferenceModifier())
+        self.model.add_modifier(solid1, rib1, SolidDifferenceModifier())
+        self.model.add_modifier(solid2, rib2, SolidDifferenceModifier())
+        self.model.add_modifier(solid3, rib3, SolidDifferenceModifier())
         
     
-        return [beam0, beam1, beam2], [Point(*p0),  Point(*p0_offset), Point(*p1), Point(*p1_offset)]
+        return [beam0, beam1, beam2], [Point(*p0),  Point(*p0_offset), Point(*p1), Point(*p1_offset)], [mesh0, mesh1, mesh2, mesh3], [cut_frame2_front, cut_frame2_back, parabola0, parabola1, parabola2, parabola3, parabola0_translated, parabola1_translated, parabola2_translated, parabola3_translated], planes0+planes1+planes2+planes3
 
 
-    def get_boundary_offset(self, thickness =100, shorten_ribs = 300):
-
-
-
-        zaxis = Vector(0,0,1)
-
-        # Offset boundary lines inwards
-        line0 = Line(self.points[5], self.points[0])
-        line1 = Line(self.points[0], self.points[3])
-        line2 = Line(self.points[3], self.points[6])
-
-        line0_offset = line0.translated(zaxis.cross(line0.direction).unitized() * thickness)
-        line1_offset = line1.translated(zaxis.cross(line1.direction).unitized() * thickness)
-        line2_offset = line2.translated(zaxis.cross(line2.direction).unitized() * thickness)
-        axis0 = line0.translated(zaxis.cross(line0.direction).unitized() * thickness)
-        axis1 = line1.translated(zaxis.cross(line1.direction).unitized() * thickness)
-        axis2 = line2.translated(zaxis.cross(line2.direction).unitized() * thickness)
-
-        p0, _ = intersection_line_line(line0_offset, line1_offset)
-        p1, _ = intersection_line_line(line1_offset, line2_offset)
-        line0_offset = Line(line0_offset.start, p0)
-        line1_offset = Line(p0, p1)
-        line2_offset = Line(p1, line2_offset.end)
-        lines_offset = [line0_offset, line1_offset, line2_offset]
-
-        # Boundary polygons
-        boundary_polygons = []
-        boundary_polygons.append(Polygon([line0.start, line0.end, line0_offset.end, line0_offset.start]))
-        boundary_polygons.append(Polygon([line1.start, line1.end, line1_offset.end, line1_offset.start]))
-        boundary_polygons.append(Polygon([line2.start, line2.end, line2_offset.end, line2_offset.start]))
-
-        # Update axes
-        new_corner = Vector(thickness*0.5,thickness*0.5,0)
-        
-        self.ribs_lines[0] = Line(new_corner+self.points[4], line0_offset.start+Vector(0, thickness*0.5, 0))
-        self.ribs_lines[1] = Line(new_corner+self.points[4], line0_offset.end)
-        self.ribs_lines[2] = Line(new_corner+self.points[4], line2_offset.start)
-        self.ribs_lines[3] = Line(new_corner+self.points[4], line2_offset.end+Vector(thickness*0.5, 0, 0))
-
-        # Shorted ribs
-        shorted_rib_lines = []
-        for idx, rib_line in enumerate(self.ribs_lines):
-            direction = rib_line.direction.unitized()
-            shorted_rib_line = Line(rib_line.start+direction*shorten_ribs, rib_line.end)
-            shorted_rib_lines.append(shorted_rib_line)
-    
-
-        # Offset ribs to two sides
-        # Two options
-        # 1. Rib offsets intersected with the two boundary lines
-        # 2. Ribs are rotated
-        rib_polygons = []
-        for idx, rib_line in enumerate(shorted_rib_lines):
-
-            rib_line_offset0 = rib_line.translated(zaxis.cross(rib_line.direction).unitized() * -thickness*0.5)
-            rib_line_offset1 = rib_line.translated(zaxis.cross(rib_line.direction).unitized() * thickness*0.5)
-
-            if idx > 0 and idx < len(shorted_rib_lines)-1:
-                print(idx)
-                rib_p0, _ = intersection_line_line(rib_line_offset0, lines_offset[-1+idx])
-                rib_p1, _ = intersection_line_line(rib_line_offset1, lines_offset[0+idx])
-                polygon = Polygon([rib_line_offset0.start, rib_p0, rib_line.end, rib_p1, rib_line_offset1.start])
-                rib_polygons.append(polygon)
-            else:
-                polygon = Polygon([rib_line_offset0.start, rib_line_offset0.end, rib_line_offset1.end, rib_line_offset1.start])
-                rib_polygons.append(polygon)
-
-
-
-
-
-        return boundary_polygons+rib_polygons
-
-    def parabola(self, start_point, end_point, axis_for_plane_intersection=Vector(1,0,0), divisions=7):
+    def parabola(self, 
+        start_point, 
+        end_point, 
+        axis_for_plane_intersection=Vector(1,0,0), 
+        divisions=7, 
+        cut_plane_0=None, 
+        cut_plane_1=None,
+        extend = 10,
+        thickness = 10):
 
 
         import session_py
@@ -353,12 +323,13 @@ class SlabFourRibs:
         
         # Create planes perpendicular to X-axis at regular intervals
         planes = []
-        divisions = 7
-        step = self.half_xysize / (divisions-1)
+        step = (self.half_xysize-thickness) / (divisions-1)
         start_point = points[0]
         for i in range(divisions):
             translation = axis_for_plane_intersection*step*i
+
             planes.append(session_py.Plane.from_point_normal(translation+start_point, axis_for_plane_intersection))
+        
 
         # Intersect curve with each plane
         sampled_points = []
@@ -366,13 +337,83 @@ class SlabFourRibs:
             intersection_points = curve.intersect_plane_points(plane)
             if intersection_points:
                 sampled_points.append(intersection_points[0])
-        print(sampled_points)
 
         # Convert session_py points to compas points
         compas_points = [Point(p.x, p.y, p.z) for p in sampled_points]
+        print("number of points of original parabola:", len(compas_points))
         parabola = Polyline(compas_points)
-        # parabola = Polyline(points)
-        return parabola, planes
+        subdivided_parabola = Polyline(curve.divide_by_count(10)[0])
+        # divisions_points = curve.divide_by_count(divisions)
+        # print(divisions_points)
+        # parabola = Polyline(divisions_points[0])
+        
+
+        # Cut polyline by planes
+
+        # cut_parabola_points = []
+        # for i in range(len(sampled_points)-1):
+        #     # Add point if there is intersection
+        #     line = Line(sampled_points[i], sampled_points[i+1])
+        #     result0 = intersection_segment_plane(line, cut_plane_0)
+        #     result1 = intersection_segment_plane(line, cut_plane_1)
+  
+        #     if result0:
+        #         cut_parabola_points.append(Point(*result0))
+        #     if result1:
+        #         cut_parabola_points.append(Point(*result1))
+
+        # for i in range(len(sampled_points)-1):
+        #     line = Line(sampled_points[i], sampled_points[i+1])
+        #     # Add point only if it is between the two planes
+        #     vector = line.start - cut_plane_0.point
+        #     d0 = cut_plane_0.normal.dot(vector)
+        #     vector = line.start - cut_plane_1.point
+        #     d1 = cut_plane_1.normal.dot(vector)
+        #     if d0 < 0 and d1 < 0:
+        #         cut_parabola_points.insert(i, line.start)
+
+        # cut_parabola = Polyline(cut_parabola_points)
+        cut_parabola = Polyline(sampled_points)
+        # cut_parabola = Polyline(parabola)
+        cut_parabola.extend((extend, extend))
+        
+
+        cut_parabola.insert(0, Point(cut_parabola[0][0], cut_parabola[0][1], -self.zsize-extend))
+        cut_parabola.append(Point(cut_parabola[-1][0], cut_parabola[-1][1], -self.zsize-extend))
+        cut_parabola = Polygon(cut_parabola)
+
+
+        # Translate the polyline
+        cut_parabola_translated = cut_parabola.translated(cut_parabola.normal*thickness)
+        cut_parabola.translate(cut_parabola.normal*-1.0*thickness)
+
+        # Loft the polyline
+        vertices = cut_parabola.points + cut_parabola_translated.points
+        print("number of vertices:", len(cut_parabola.points))
+        print("number of vertices:", len(vertices))
+        faces = []
+        for i in range(len(cut_parabola.points)):
+            n = len(cut_parabola.points)
+            a = i
+            b = (i+1) if i < n-1 else 0
+            c = i + n
+            d = (i+1) + n if i < n-1 else n
+            faces.append([a, b, d, c])
+
+        v0, f0 = cut_parabola.to_vertices_and_faces()
+        f0 = f0[0]
+
+        f1 = []
+        for i in range(len(f0)):
+            f1.append(f0[i]+len(f0))
+        f0.reverse()
+        faces.append(f0)
+        faces.append(f1)
+
+        mesh = Mesh.from_vertices_and_faces(vertices, faces)
+
+        return cut_parabola, subdivided_parabola, mesh, planes
+        # return cut_parabola, Polyline(points), Mesh(), planes
 
 
 
@@ -390,7 +431,7 @@ class SlabFourRibs:
         return polar_arrays
 
 slab = SlabFourRibs()
-slab.get_boundary_beams()
+result = slab.get_boundary_beams()
 
 
 
@@ -405,80 +446,37 @@ viewer = Viewer(config)
 scale = 1e-3
 xform = Scale.from_factors([scale, scale, scale])
     
-print(len(list(slab.model.elements())))
-
 beams = viewer.scene.add_group("beams")
+cuts = viewer.scene.add_group("cuts")
+parabolas = viewer.scene.add_group("parabolas")
 other = viewer.scene.add_group("other")
-for element in slab.model.elements():
+cut_planes = viewer.scene.add_group("cut_planes")
+axes = viewer.scene.add_group("axes")
 
+# for p in result[2]:
+#     if isinstance(p, Mesh):
+#         mesh = p.scaled(scale)
+#         cuts.add(mesh, hide_coplanaredges=True)
+#     else:
+#         parabolas.add(p.scaled(scale), color=[255,0,255])
+        
+# for p in result[4]:
+#     point = p.origin
+#     point.scale(scale)
+#     normal = p.z_axis
+#     cut_planes.add(Plane(point, normal))
     
+# for p in result[3]:
+#     parabolas.add(p.scaled(scale), color=[255,0,255])
 
+
+for element in slab.model.elements():
     if isinstance(element, BeamElement):
         geometry = element.modelgeometry.transformed(xform)
-        beams.add(geometry)
-    else:
-        geometry = element.modelgeometry.transformed(xform)
-        other.add(geometry)
+        beams.add(geometry,hide_coplanaredges=True)
+
 
 for ribline in slab.ribs_lines:
-    viewer.scene.add(ribline.scaled(scale))
+    axes.add(ribline.scaled(scale), color=[255,0,0])
 
-    # lines = element.get_long_lines()
-    # for line in lines:
-    #     viewer.scene.add(line.scaled(scale))
-
-# line0 = Line(points[0], points[1]).scaled(scale)
-# line1 = Line(points[2], points[3]).scaled(scale)
-# print(line0)
-# viewer.scene.add(line0, name="a", color=[255,0,0])
-# viewer.scene.add(line1, name="b", color=[0,255,0])
-
-
-# oculus_lines = slab.oculus_lines
-# ribs_lines = slab.ribs_lines
-# boundaries_lines = slab.boundary_lines
-
-# group = viewer.scene.add_group("oculus")
-# for i in oculus_lines:
-#     group.add(i.scaled(scale))
-
-# group = viewer.scene.add_group("parabola")
-# parabola0, planes0 = slab.parabola(slab.points[4], slab.points[5], Vector(1,0,0))
-# parabola1, planes1 = slab.parabola(slab.points[4], slab.points[0], Vector(1,0,0))
-# parabola2, planes2 = slab.parabola(slab.points[4], slab.points[6], Vector(0,1,0))
-# parabola3, planes3 = slab.parabola(slab.points[4], slab.points[3], Vector(0,1,0))
-# group.add(parabola0.scaled(scale))
-# group.add(parabola1.scaled(scale))
-# group.add(parabola2.scaled(scale))
-# group.add(parabola3.scaled(scale))
-# lines = slab.get_boundary_offset()
-# for i in lines:
-#     group.add(i.scaled(scale))
-
-
-# for p in parabola0.points:
-#     group.add(Box(0.1,0.1,0.1,Frame(p.scaled(scale))))
-
-# for p in parabola1.points:
-#     group.add(Box(0.1,0.1,0.1,Frame(p.scaled(scale))))
-
-# for p in parabola2.points:
-#     group.add(Box(0.1,0.1,0.1,Frame(p.scaled(scale))))
-
-# for p in parabola3.points:
-#     group.add(Box(0.1,0.1,0.1,Frame(p.scaled(scale))))
-
-# polar_array = slab.polar_array(ribs_lines)
-# for i in range(len(polar_array)):
-#     group = viewer.scene.add_group("ribs " + str(i))
-#     for j in polar_array[i]:
-#         group.add(j.scaled(scale))
-#     break
-
-# polar_array = slab.polar_array(boundaries_lines)
-# for i in range(len(polar_array)):
-#     group = viewer.scene.add_group("boundaries " + str(i))
-#     for j in polar_array[i]:
-#         group.add(j.scaled(scale))
-#     break
 viewer.show()
