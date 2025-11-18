@@ -194,8 +194,8 @@ class SlabFourRibs:
         new_corner = Vector(thickness*0.5,thickness*0.5,0)
         
         self.ribs_lines[0] = Line(new_corner+self.points[4], line0_offset.start+Vector(0, thickness*0.5, 0))
-        self.ribs_lines[1] = Line(new_corner+self.points[4], line0_offset.end)
-        self.ribs_lines[2] = Line(new_corner+self.points[4], line2_offset.start)
+        self.ribs_lines[1] = Line(new_corner+self.points[4], p0)
+        self.ribs_lines[2] = Line(new_corner+self.points[4], p1)
         self.ribs_lines[3] = Line(new_corner+self.points[4], line2_offset.end+Vector(thickness*0.5, 0, 0))
 
         # Shorted ribs
@@ -208,34 +208,58 @@ class SlabFourRibs:
         rib0 = BeamElement(width=thickness, depth=self.zsize, length=self.ribs_lines[0].length, transformation=Transformation.from_frame(Frame(-Vector(0,0,self.zsize*0.5)+self.ribs_lines[0].start, -self.ribs_lines[0].direction.cross(zaxis), zaxis)))    
         rib1 = BeamElement(width=thickness, depth=self.zsize, length=self.ribs_lines[1].length, transformation=Transformation.from_frame(Frame(-Vector(0,0,self.zsize*0.5)+self.ribs_lines[1].start, -self.ribs_lines[1].direction.cross(zaxis), zaxis)))    
         rib2 = BeamElement(width=thickness, depth=self.zsize, length=self.ribs_lines[2].length, transformation=Transformation.from_frame(Frame(-Vector(0,0,self.zsize*0.5)+self.ribs_lines[2].start, -self.ribs_lines[2].direction.cross(zaxis), zaxis)))    
-        rib3 = BeamElement(width=thickness, depth=self.zsize, length=self.ribs_lines[3].length, transformation=Transformation.from_frame(Frame(-Vector(0,0,self.zsize*0.5)+self.ribs_lines[3].start, -self.ribs_lines[3].direction.cross(zaxis), zaxis)))    
+        rib3 = BeamElement(width=thickness, depth=self.zsize, length=self.ribs_lines[3].length, transformation=Transformation.from_frame(Frame(-Vector(0,0,self.zsize*0.5)+self.ribs_lines[3].start, -self.ribs_lines[3].direction.cross(zaxis), zaxis)))
+        rib1.extend(thickness*0.5)
+        rib2.extend(thickness*0.5)
+        rib3.extend(thickness*0.5)
+        rib0.extend(thickness*0.5)   
 
         self.model.add_element(rib0)
         self.model.add_element(rib1)
         self.model.add_element(rib2)
         self.model.add_element(rib3)
 
-        # Offset ribs to two sides
-        # Two options
-        # 1. Rib offsets intersected with the two boundary lines
-        # 2. Ribs are rotated
-        # rib_polygons = []
-        # for idx, rib_line in enumerate(self.ribs_lines):
+        # Cut frames
+        cut_frame0_front = Frame(line0.midpoint, line0.direction, zaxis)
+        cut_frame1_front = Frame(line1.midpoint, line1.direction, zaxis)
+        cut_frame2_front = Frame(line2.midpoint, line2.direction, zaxis)
+        slice_rib_end0 = SliceElement(transformation=Transformation.from_frame(cut_frame0_front))
+        slice_rib_end1 = SliceElement(transformation=Transformation.from_frame(cut_frame1_front))
+        slice_rib_end2 = SliceElement(transformation=Transformation.from_frame(cut_frame2_front))
+        self.model.add_element(slice_rib_end0)
+        self.model.add_element(slice_rib_end1)
+        self.model.add_element(slice_rib_end2)
+        self.model.add_modifier(slice_rib_end0, rib0, SliceModifier())
+        self.model.add_modifier(slice_rib_end0, rib1, SliceModifier())
+        self.model.add_modifier(slice_rib_end1, rib1, SliceModifier())
+        self.model.add_modifier(slice_rib_end1, rib2, SliceModifier())
+        self.model.add_modifier(slice_rib_end2, rib2, SliceModifier())
+        self.model.add_modifier(slice_rib_end2, rib3, SliceModifier())
 
-        #     rib_line_offset0 = rib_line.translated(zaxis.cross(rib_line.direction).unitized() * -thickness*0.5)
-        #     rib_line_offset1 = rib_line.translated(zaxis.cross(rib_line.direction).unitized() * thickness*0.5)
+        
+        cut_frame0_back = Frame(self.ribs_lines[0].start, self.ribs_lines[0].direction.cross(zaxis), zaxis)
+        cut_frame1_back = Frame(self.ribs_lines[0].start, (self.ribs_lines[1].direction+self.ribs_lines[2].direction).cross(zaxis), zaxis)
+        cut_frame2_back = Frame(self.ribs_lines[0].start, self.ribs_lines[3].direction.cross(zaxis), zaxis)
+    
 
-        #     if idx > 0 and idx < len(self.ribs_lines)-1:
-        #         print(idx)
-        #         rib_p0, _ = intersection_line_line(rib_line_offset0, lines_offset[-1+idx])
-        #         rib_p1, _ = intersection_line_line(rib_line_offset1, lines_offset[0+idx])
-        #         polygon = Polygon([rib_line_offset0.start, rib_p0, rib_line.end, rib_p1, rib_line_offset1.start])
-        #         rib_polygons.append(polygon)
-        #     else:
-        #         polygon = Polygon([rib_line_offset0.start, rib_line_offset0.end, rib_line_offset1.end, rib_line_offset1.start])
-        #         rib_polygons.append(polygon)
+        cut_frame0_back.translate(cut_frame0_back.zaxis*-shorten_ribs)
+        cut_frame1_back.translate(cut_frame1_back.zaxis*-shorten_ribs)
+        cut_frame2_back.translate(cut_frame2_back.zaxis*-shorten_ribs)
+        slice_rib_end0 = SliceElement(transformation=Transformation.from_frame(cut_frame0_back))
+        slice_rib_end1 = SliceElement(transformation=Transformation.from_frame(cut_frame1_back))
+        slice_rib_end2 = SliceElement(transformation=Transformation.from_frame(cut_frame2_back))
+        self.model.add_element(slice_rib_end0)
+        self.model.add_element(slice_rib_end1)
+        self.model.add_element(slice_rib_end2)
+        self.model.add_modifier(slice_rib_end0, rib0, SliceModifier())
+        self.model.add_modifier(slice_rib_end1, rib1, SliceModifier())
+        self.model.add_modifier(slice_rib_end1, rib2, SliceModifier())
+        self.model.add_modifier(slice_rib_end2, rib3, SliceModifier())
 
-          
+
+        # Create parabolic boolean from below
+
+
         
     
         return [beam0, beam1, beam2], [Point(*p0),  Point(*p0_offset), Point(*p1), Point(*p1_offset)]
@@ -382,14 +406,19 @@ scale = 1e-3
 xform = Scale.from_factors([scale, scale, scale])
     
 print(len(list(slab.model.elements())))
+
+beams = viewer.scene.add_group("beams")
+other = viewer.scene.add_group("other")
 for element in slab.model.elements():
-    # geometry = element.elementgeometry.transformed(xform)
+
     
-    # print(geometry)
-    # viewer.scene.add(geometry)
-    geometry = element.modelgeometry.transformed(xform)
-    print(geometry)
-    viewer.scene.add(geometry)
+
+    if isinstance(element, BeamElement):
+        geometry = element.modelgeometry.transformed(xform)
+        beams.add(geometry)
+    else:
+        geometry = element.modelgeometry.transformed(xform)
+        other.add(geometry)
 
 for ribline in slab.ribs_lines:
     viewer.scene.add(ribline.scaled(scale))
