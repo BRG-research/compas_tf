@@ -25,7 +25,7 @@ class FloorSkeleton:
     
     """
 
-    def __init__(self, xy = 3000, z = 600, r = 453, o = 1000):
+    def __init__(self, xy = 3000, z = 600, r = 453, o = 1000, t = 100):
         self.xy = xy # Half size of the floor
         self.z = z # Total height of the floor
         self.r = r # Rise of the parabola
@@ -38,6 +38,7 @@ class FloorSkeleton:
         self._fs = None # Bottom points describind the whole floor
         self._mt = None # Low poly representation of the top mesh for each triangle and quad
         self._ms = None # Low poly representation of the top mesh for each slab outline
+        self.t = t # Thickness of the beam elements
 
         self.model = Model() # Model with discrete elements
 
@@ -175,6 +176,13 @@ class FloorSkeleton:
         # Beams are mapped to mesh edges
         # Beams have planes at the longest faces
 
+        # Central axis to position recangle beams
+        polygons = self.mt.to_polygons()
+        for polygon in polygons:
+            planes = []
+            for l in polygon.lines:
+                planes.append(l.midpoint, Vector.Zaxis().cross(l.direction))
+
         pass
 
     @property
@@ -207,7 +215,7 @@ class FloorSkeleton:
 
 
 floor_skeleton = FloorSkeleton()
-
+floor_skeleton.axes
 
 
 config = Config()
@@ -220,6 +228,7 @@ for point in floor_skeleton.pt:
 
 for point in floor_skeleton.pb:
     viewer.scene.add(Box(100,100,100, Frame(point=point), name=point.name))
+
 
 viewer.scene.add(floor_skeleton.mt)
 viewer.scene.add(floor_skeleton.ms)
