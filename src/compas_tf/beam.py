@@ -5,6 +5,7 @@ from compas.geometry import Box
 from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Point
+from compas.geometry import Plane
 from compas.geometry import Transformation
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
@@ -76,6 +77,14 @@ class BeamElement(Element):
         self._box = Box.from_width_height_depth(width, length, depth)
 
         self._box.frame = Frame(point=[0,0, self._box.zsize / 2], xaxis=[1, 0, 0], yaxis=[0, 1, 0])
+
+    @property
+    def length_plane0() -> Plane:
+        plane = Plane.worldYZ().offset(self.width*0.5)
+        plane.transform(self.transformation)
+        return plane
+
+        
 
     @property
     def box(self) -> Box:
@@ -198,54 +207,13 @@ class BeamElement(Element):
     # =============================================================================
     def get_long_lines(self):
 
-        line0 = Line(self.box.corner(0), self.box.corner(4))
-        line1 = Line(self.box.corner(1), self.box.corner(5))
-        line2 = Line(self.box.corner(2), self.box.corner(6))
-        line3 = Line(self.box.corner(3), self.box.corner(7))
+        line0 = Line(self.box.corner(0), self.box.corner(4)) # Bottom
+        line1 = Line(self.box.corner(1), self.box.corner(5)) # Top
+        line2 = Line(self.box.corner(2), self.box.corner(6)) # Top
+        line3 = Line(self.box.corner(3), self.box.corner(7)) # Bottom
         lines = [line2, line1, line3, line0]
         for line in lines:
             line.transform(self.transformation)
         return lines
 
-    # =============================================================================
-    # Modifier methods (WIP)
-    # =============================================================================
-
-    # def _add_modifier_with_beam(self, target_element: "BeamElement", modifier_type: Type[Modifier] = None, **kwargs) -> Modifier:
-    #     #  This method constructs boolean and slicing modifiers for the pairs for beams.
-    #     if issubclass(modifier_type, BooleanModifier):
-    #         return BooleanModifier(self.elementgeometry.transformed(self.modeltransformation))
-
-    #     if issubclass(modifier_type, SlicerModifier):
-    #         return self._create_slicer_modifier(target_element)
-
-    #     raise ValueError(f"Unsupported modifier type: {modifier_type}")
-
-    # def _create_slicer_modifier(self, target_element: "BeamElement") -> Modifier:
-    #     # This method performs mesh-ray intersection for detecting the slicing plane.
-    #     mesh = self.elementgeometry.transformed(self.modeltransformation)
-    #     center_line: Line = target_element.center_line.transformed(target_element.modeltransformation)
-
-    #     p0 = center_line.start
-    #     p1 = center_line.end
-
-    #     closest_distance_to_end_point = float("inf")
-    #     closest_face = 0
-    #     for face in self.elementgeometry.faces():
-    #         polygon = mesh.face_polygon(face)
-    #         frame = polygon.frame
-    #         result = intersection_line_plane(center_line, Plane.from_frame(frame))
-    #         if result:
-    #             point = Point(*result)
-    #             xform = Transformation.from_frame_to_frame(frame, Frame.worldXY())
-    #             point = point.transformed(xform)
-    #             polygon = polygon.transformed(xform)
-    #             if is_point_in_polygon_xy(point, polygon):
-    #                 d = max(p0.distance_to_point(point), p1.distance_to_point(point))
-    #                 if d < closest_distance_to_end_point:
-    #                     closest_distance_to_end_point = d
-    #                     closest_face = face
-
-    #     plane = Plane.from_frame(mesh.face_polygon(closest_face).frame)
-    #     plane = Plane(plane.point, -plane.normal)
-    #     return SlicerModifier(plane)
+    
