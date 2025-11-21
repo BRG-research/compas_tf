@@ -1,4 +1,4 @@
-from compas.geometry import Point, Vector, Line, Polygon, Polyline, Rotation, Scale, Frame, Plane, Transformation, Box
+from compas.geometry import Point, Vector, Line, Polygon, Polyline, Rotation, Scale, Frame, Plane, Transformation, Box, Projection
 from compas.datastructures import Mesh
 from compas.geometry import intersection_line_line, intersection_line_plane, intersection_plane_plane_plane, midpoint_point_point, intersection_segment_polyline, intersection_segment_segment
 import math
@@ -25,7 +25,7 @@ class FloorSkeleton:
     
     """
 
-    def __init__(self, xy = 3000, z = 600, r = 453, o = 1000, t = 100):
+    def __init__(self, xy = 3000, z = 600, r = 453, o = 1000, t = 40, t_panels = 27):
         self.xy = xy # Half size of the floor
         self.z = z # Total height of the floor
         self.r = r # Rise of the parabola
@@ -39,8 +39,14 @@ class FloorSkeleton:
         self._mt = None # Low poly representation of the top mesh for each triangle and quad
         self._ms = None # Low poly representation of the top mesh for each slab outline
         self._axes = None # Axes of the floor
-        self._par_b = None # Two parabolas at the boundary
+        self._bp = None # Two parabolas at the boundary
         self.t = t # Thickness of the beam elements
+        self.t_panels = t_panels # Thickness of the panel elements
+
+        self.ribs_polylines = []
+        self.ribs_tsections = []
+        self.surfaces_polylines = []
+        self.temp = []
 
         self.model = Model() # Model with discrete elements
 
@@ -192,7 +198,40 @@ class FloorSkeleton:
 
         polygon = Polygon(points)
         return polygon
-            
+
+
+    def offset_polyline(self, polyline, distance, baseplane = Plane.worldXY()):
+
+        # End planes
+        start_plane = Plane(polyline[0], polyline[1]- polyline[0])
+        end_plane = Plane(polyline[-1], polyline[-2]- polyline[-1])
+        
+        # Planes for intersection
+        planes = [start_plane]
+        for line in polyline.lines:
+            xaxis = line.direction
+            yaxis = Vector.Zaxis().cross(xaxis)
+            zaxis = xaxis.cross(yaxis)
+
+            planes.append(Plane(line.midpoint, zaxis).offset(distance))
+        planes.append(end_plane)
+
+        # Base plane
+        baseplane = Plane(polyline[0], Vector.Zaxis().cross(polyline[-1]-polyline[0]))
+
+        # Perform offset by plane intersection
+        points = []
+        for i in range(len(planes)-1):
+            a = planes[i]
+            b = planes[(i+1)]
+            c = baseplane
+            result = intersection_plane_plane_plane(a,b,c)
+            if not result:
+                raise Exception("No intersection at offset_polygon. Index: ", i)
+            points.append(result)
+
+        offset_polyline = Polyline(points)
+        return offset_polyline            
 
     @property
     def axes(self):
@@ -226,11 +265,11 @@ class FloorSkeleton:
                 p2 = offset_polygons_full[i].points[2]
                 p3 = offset_polygons_full[i].points[3]
 
-                line2= Line(corner, p2)
+                line2 = Line(corner, p2)
                 line3 = Line(corner, p3)
 
-                axes[i].append(line2)
-                axes[i].append(line3)
+                axes[i].insert(1,line2)
+                axes[i].insert(2,line3)
 
 
             # Extend axes to intersect with the boundary
@@ -244,7 +283,7 @@ class FloorSkeleton:
                     dir = (p1-p0).unitized()
                     p0 = -dir*self.t*4+p0
                     p1 = dir*self.t*4+p1
-                    line = Line(p0,p1)
+                    line = Line(p1,p0)
                     
                     intersection_points = []
 
@@ -260,89 +299,188 @@ class FloorSkeleton:
 
                     if len(intersection_points) != 2:
                         raise Exception("Intersection points not 2", len(intersection_points))
+
                     line = Line(intersection_points[0], intersection_points[1])
+
+                    # Check orientation
+                    cp0, cpt0 = axes[i][j].closest_point(line.start, True)
+                    cp1, cpt1 = axes[i][j].closest_point(line.end, True)
+
+                    # print(cpt0, cpt1)
+                    if cpt0 > cpt1:
+                        line = Line(line.end, line.start)
 
 
                     extended_axes[i].append(line)
             
             self._axes = extended_axes
+            # self._axes = axes
 
         return self._axes
 
     @property
-    def boundary_parabolas(self, divisions = 7):
+    def boundary_parabolas(self):
         # Two boundary parabolas with a step for the column head
         # We skip the first list of axes because it is a key stone
 
+        if self._bp is None:
 
-        if self._par_b is None:
-            
-            self._par_b = []
+            divisions = 7
+            boundary_parabolas = []
 
             for i in range(len(self.axes)):
-                if not (i==1 or i==len(self.axes)-1):
-                    p0 = self.axes[i][0].start
-                    p1 = self.axes[i][0].midpoint
-                    p2 = self.axes[i][0].end
-                    length = self.axes[i][0].length
-                    dir = self.axes[i][0].direction
-                    
+                boundary_parabolas.append([])
+                if i == 0:
+                    continue
 
-                    p0 = -Vector(0,0,self.z)+p0
-                    p1 = -Vector(0,0,self.s)+p1
-                    p2 = -Vector(0,0,self.s)+p2
+                for j in range(len(self.axes[i])):
 
+                    if j != 0 and j != len(self.axes[i])-1:
+                        continue
+                    elif j == 0:
+                        p0 = Vector(0,0,-self.z) + self.axes[i][j].start
+                        p1 = Vector(0,0,-self.s) + self.axes[i][j].midpoint
+                        p2 = Vector(0,0,-self.s) + self.axes[i][j].end
+                        boundary_parabolas[i].append(Polyline([p0,p1,p2]))
+                    elif j == len(self.axes[i])-1:
+                        p0 = Vector(0,0,-self.s) + self.axes[i][j].start
+                        p1 = Vector(0,0,-self.s) + self.axes[i][j].midpoint
+                        p2 = Vector(0,0,-self.z) + self.axes[i][j].end
+                        boundary_parabolas[i].append(Polyline([p0,p1,p2]))
 
-                    import session_py
+                    # Bezier curve: quadratic Bézier (parabola) formula 
+                    points = []
+                    for k in range(divisions):          # e.g. divisions = 7  ->  7 points, 6 segments
+                        t = k / (divisions - 1)         # t in [0, 1]
+                        pt = (1 - t)**2 * p0 + 2*(1 - t)*t * p1 + t**2 * p2
+                        points.append(pt)
 
-                    points = [
-                        session_py.Point(p0[0], p0[1], p0[2]),
-                        session_py.Point(p1[0], p1[1], p1[2]),
-                        session_py.Point(p2[0], p2[1], p2[2]),
-                    ]
+                    boundary_parabolas[i][-1] = Polyline(points)
 
-                    curve = session_py.NurbsCurve.create(periodic=False, degree=len(points)-1, points=points)
-                    
-                    # Create planes perpendicular to X-axis at regular intervals
-                    planes = []
-                    step = length / (divisions-1)
-                    start_point = points[0]
-                    for i in range(divisions):
-                        translation = dir*step*i
-                        planes.append(session_py.Plane.from_point_normal(translation+start_point, axis_for_plane_intersection))
-                    
+            self._bp = boundary_parabolas
 
-                    # Intersect curve with each plane
-                    sampled_points = []
-                    for plane in planes:
-                        intersection_points = curve.intersect_plane_points(plane)
-                        if intersection_points:
-                            sampled_points.append(intersection_points[0])
+        return self._bp 
 
-                    self._par_b.append(Polyline(sampled_points))
+    def average_polyline(self, polyline0, polyline1):
 
-        return self._par_b
-                    
-                
+        points = []
+        for i in range(len(polyline0)):
+            points.append((polyline0[i] + polyline1[i]) / 2)
         
+        return Polyline(points)
 
-        
+    def loft_polylines(self, polyline0, polyline1):
+        vertices = polyline0.points + polyline1.points
+        faces = []
+        for i in range(len(polyline0)-1):
+            faces.append([i, i+1, i+len(polyline0)+1, i+len(polyline0)])
+        return Mesh.from_vertices_and_faces(vertices, faces)
 
     @property
     def projected_parabolas(self):
         # These parabolas will be projected to beam long faces
         # Parabolas will be cut second direction beam long faces
-        pass
+
+        projected_parabolas = []
+        projected_parabolas_offset = []
+
+
+        for i in range(len(self.boundary_parabolas)):
+            if i == 0:
+                continue
+
+            # 4 Axis planes
+            axis_planes = []
+            for j in range(len(self.axes[i])):
+                axis_planes.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)))
+
+            # 8 Surface planes, stored 2n pairs
+            surface_planes_a = []
+            surface_planes_b = []
+            step_planes_a = []
+            step_planes_b = []
+            for j in range(len(self.axes[i])):
+                surface_planes_a.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)).offset(self.t*0.5))
+                surface_planes_b.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)).offset(-self.t*0.5))
+                step_planes_a.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)).offset(self.t*1.0))
+                step_planes_b.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)).offset(-self.t*1.0))
+
+            # Projection vectors, for the three inner triangles
+            # Usage_ xform = Projection.from_plane_and_direction(target_plane, projection_direction0)
+            projection_direction0 = Vector.Zaxis().cross(self.axes[i][0].direction)
+            projection_direction1 = Vector.Zaxis().cross(self.axes[i][1].direction) + Vector.Zaxis().cross(self.axes[i][2].direction)
+            projection_direction3 = Vector.Zaxis().cross(self.axes[i][3].direction)
+
+
+
+            # Projected parabolas
+            target_plane00 = Plane(self.axes[i][0].start,  Vector.Zaxis().cross(self.axes[i][0].direction))
+            target_plane10 = Plane(self.axes[i][1].start,  Vector.Zaxis().cross(self.axes[i][1].direction))
+            target_plane20 = Plane(self.axes[i][2].start,  Vector.Zaxis().cross(self.axes[i][2].direction))
+            target_plane30 = Plane(self.axes[i][3].start,  Vector.Zaxis().cross(self.axes[i][3].direction))
+            target_planes = [target_plane00, target_plane10, target_plane20, target_plane30]
+            
+            target_plane11 = target_plane10.offset(-self.t*0.5)
+            target_plane21 = target_plane20.offset(self.t*0.5)
+
+            xform10 = Projection.from_plane_and_direction(target_plane11, projection_direction0)
+            xform20 = Projection.from_plane_and_direction(target_plane21, projection_direction3)
+            xform11 = Projection.from_plane(target_plane10)
+            xform21 = Projection.from_plane(target_plane20)
+
+            # Axis parabolas
+            boundary_parabola0 = self.boundary_parabolas[i][0]
+            boundary_parabola1 = self.boundary_parabolas[i][0].transformed(xform10)
+            boundary_parabola2 = self.boundary_parabolas[i][1].transformed(xform20)
+            
+            boundary_parabola1.translate(target_plane11.normal * self.t*0.5)
+            boundary_parabola2.translate(target_plane21.normal * -self.t*0.5)
+            boundary_parabola3 = self.boundary_parabolas[i][1]
+            boundary_parabola2.points.reverse()
+            boundary_parabola3.points.reverse()
+
+            current_projected_parabolas = [boundary_parabola0, boundary_parabola1, boundary_parabola2, boundary_parabola3]
+            projected_parabolas += current_projected_parabolas
+
+
+            # Beams - translation to two sides
+            beams = []
+
+            for i in range(len(current_projected_parabolas)):
+                projected_parabola_0 = current_projected_parabolas[i].translated(target_planes[i].normal * self.t*0.5)
+                projected_parabola_1 = current_projected_parabolas[i].translated(target_planes[i].normal * -self.t*0.5)
+                self.ribs_polylines.append(projected_parabola_0)
+                self.ribs_polylines.append(projected_parabola_1)
+                mesh = self.loft_polylines(projected_parabola_0, projected_parabola_1)
+                self.temp.append(mesh)
+            
+            idx = len(self.ribs_polylines) - 1 - 7
+            self.temp.append(self.loft_polylines(self.ribs_polylines[idx+0], self.ribs_polylines[idx+3]))
+            self.temp.append(self.loft_polylines(self.ribs_polylines[idx+2], self.ribs_polylines[idx+5]))
+            self.temp.append(self.loft_polylines(self.ribs_polylines[idx+4], self.ribs_polylines[idx+6]))
+
+
+            # T-section - bottom translation to two sides, top projection from one side
+
+            # Surface * projection from one side
+
+            # Cut all the bottom profiles the 3 boundary beams
+            # Meaning the two inner beams are cut by one and the same plane
+
+
+
+        print(len(projected_parabolas))
+        return projected_parabolas
 
     @property
-    def floor_surfaces(self):
+    def floor_surfaces_polylines(self):
         # From projected parabolas we make lofted mesh faces
         # We wound need to offset the outlines too
         pass
 
     @property
     def tsection(self):
-        # Define little beem step to position the floor surfaces
+        # Define little beem step to position the floor surfaces_polylines
         pass
 
     @property
@@ -360,7 +498,7 @@ config = Config()
 config.unit = "mm"
 viewer = Viewer(config)
 
-viewer.renderer.rendermode = "shaded"  # "lighted", "wireframe", "shaded", "ghosted"
+viewer.renderer.rendermode = "wireframe"  # "lighted", "wireframe", "shaded", "ghosted"
 
 # for point in floor_skeleton.pt:
 #     viewer.scene.add(Box(100,100,100, Frame(point=point), name=point.name))
@@ -368,16 +506,41 @@ viewer.renderer.rendermode = "shaded"  # "lighted", "wireframe", "shaded", "ghos
 # for point in floor_skeleton.pb:
 #     viewer.scene.add(Box(100,100,100, Frame(point=point), name=point.name))
 
+geometry = viewer.scene.add_group("geometry")
 
-viewer.scene.add(floor_skeleton.mt)
+geometry.add(floor_skeleton.mt)
 # viewer.scene.add(floor_skeleton.ms)
 
 for lines in floor_skeleton.axes:
     for line in lines:
         if isinstance(line, Line):
-            viewer.scene.add(line, color=(255, 0, 0))
+            geometry.add(line, color=(255, 0, 0))
         else:
-            viewer.scene.add(Polyline(line), color=(0, 255, 0))
+            geometry.add(Polyline(line), color=(0, 255, 0))
+
+
+for parabola in floor_skeleton.boundary_parabolas:
+    for polyline in parabola:
+        geometry.add(polyline, color=(0, 0, 255))
+
+floor_skeleton.projected_parabolas
+
+rib_polylines = viewer.scene.add_group("rib_polylines")
+ribs_tsections = viewer.scene.add_group("ribs_tsections")
+surfaces_polylines = viewer.scene.add_group("surfaces_polylines")
+temp = viewer.scene.add_group("temp")
+
+for polyline in floor_skeleton.ribs_polylines:
+    rib_polylines.add(polyline)
+
+for polyline in floor_skeleton.ribs_tsections:
+    ribs_tsections.add(polyline)
+
+for polyline in floor_skeleton.surfaces_polylines:
+    surfaces_polylines.add(polyline)
+
+for mesh in floor_skeleton.temp:
+    temp.add(mesh)
 
 
 
