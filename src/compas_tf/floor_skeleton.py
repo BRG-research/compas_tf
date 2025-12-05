@@ -1,6 +1,7 @@
-from compas.geometry import Point, Vector, Line, Polygon, Polyline, Rotation, Scale, Frame, Plane, Transformation, Box, Projection
+from compas.geometry import Point, Vector, Line, Polygon, Polyline, Rotation, Scale, Frame, Plane, Transformation, Box, Projection, Translation
 from compas.datastructures import Mesh
 from compas.geometry import intersection_line_line, intersection_line_plane, intersection_plane_plane_plane, midpoint_point_point, intersection_segment_polyline, intersection_segment_segment, intersection_segment_plane
+from compas.geometry import earclip_polygon
 import math
 from compas_viewer import Viewer
 from compas_viewer.config import Config
@@ -42,6 +43,14 @@ class FloorSkeleton:
         self._bp = None # Two parabolas at the boundary
         self.t = t # Thickness of the beam elements
         self.t_panels = t_panels # Thickness of the panel elements
+        self._projected_parabolas = None # Parabolas for each rib quarter (4 lists)
+        self._target_planes = None
+        self._axis_boundary_planes = None
+        self._axis_planes = None
+        self._cutplanes = None
+        self._offset_axes = None
+        self._lofted_lines = None
+        self._boundary_beams = None
 
         self.ribs_polylines = []
         self.ribs_tsections = []
@@ -200,7 +209,6 @@ class FloorSkeleton:
         polygon = Polygon(points)
         return polygon
 
-
     def offset_polyline(self, polyline, distance, baseplane = Plane.worldXY()):
 
         # End planes
@@ -211,14 +219,14 @@ class FloorSkeleton:
         planes = [start_plane]
         for line in polyline.lines:
             xaxis = line.direction
-            yaxis = Vector.Zaxis().cross(xaxis)
+            yaxis = baseplane.normal.cross(xaxis)
             zaxis = xaxis.cross(yaxis)
 
             planes.append(Plane(line.midpoint, zaxis).offset(distance))
         planes.append(end_plane)
 
         # Base plane
-        baseplane = Plane(polyline[0], Vector.Zaxis().cross(polyline[-1]-polyline[0]))
+        baseplane = Plane(polyline[0], baseplane.normal.cross(polyline[-1]-polyline[0]))
 
         # Perform offset by plane intersection
         points = []
@@ -233,6 +241,38 @@ class FloorSkeleton:
 
         offset_polyline = Polyline(points)
         return offset_polyline            
+
+    def offset_polyline_xy(self, polyline, distance):
+        """Offset a polyline in the XY plane."""
+        
+        # End planes (perpendicular to first/last segment)
+        start_plane = Plane(polyline[0], polyline[1] - polyline[0])
+        end_plane = Plane(polyline[-1], polyline[-2] - polyline[-1])
+        
+        # Offset planes for each segment (same approach as offset_polygon)
+        planes = [start_plane]
+        for line in polyline.lines:
+            zaxis = Vector.Zaxis().cross(line.direction)
+            zaxis.unitize()
+            planes.append(Plane(zaxis * distance + line.midpoint, zaxis))
+        planes.append(end_plane)
+
+        # XY baseplane through first point
+        baseplane = Plane.worldXY()
+        baseplane = Plane(polyline[0], baseplane.normal)
+
+        # Perform offset by plane intersection
+        points = []
+        for i in range(len(planes) - 1):
+            a = planes[i]
+            b = planes[i + 1]
+            c = baseplane
+            result = intersection_plane_plane_plane(a, b, c)
+            if not result:
+                raise Exception("No intersection at offset_polyline_xy. Index: ", i)
+            points.append(result)
+
+        return Polyline(points)
 
     @property
     def axes(self):
@@ -370,11 +410,66 @@ class FloorSkeleton:
         
         return Polyline(points)
 
-    def loft_polylines(self, polyline0, polyline1):
+    def _remove_duplicate_points(self, points, tolerance=1e-6):
+        """Remove consecutive duplicate points from a list of points."""
+        if not points:
+            return points
+        cleaned = [points[0]]
+        for pt in points[1:]:
+            if cleaned[-1].distance_to_point(pt) > tolerance:
+                cleaned.append(pt)
+        return cleaned
+    
+    def loft_polylines(self, polyline0, polyline1, cap=True, close=True):
+        """Loft two polylines into a mesh, optionally capping top and bottom with earclip triangulation.
+        
+        Args:
+            polyline0: First polyline (bottom)
+            polyline1: Second polyline (top)
+            cap: If True, add triangulated caps at top and bottom using earclip
+            close: If True, close the polylines by connecting last point to first
+        """
+        # Clean up duplicate points first
+        pts0 = self._remove_duplicate_points(list(polyline0.points))
+        pts1 = self._remove_duplicate_points(list(polyline1.points))
+        
+        # Optionally close the polylines
+        if close:
+            # Only close if not already closed
+            if pts0[0].distance_to_point(pts0[-1]) > 1e-6:
+                pts0.append(pts0[0])
+            if pts1[0].distance_to_point(pts1[-1]) > 1e-6:
+                pts1.append(pts1[0])
+        
+        polyline0 = Polyline(pts0)
+        polyline1 = Polyline(pts1)
+        
         vertices = polyline0.points + polyline1.points
         faces = []
-        for i in range(len(polyline0)-1):
-            faces.append([i, i+1, i+len(polyline0)+1, i+len(polyline0)])
+        n0 = len(polyline0)
+        
+        # Side faces between polylines
+        for i in range(n0-1):
+            faces.append([i, i+1, i+n0+1, i+n0])
+        
+        # Cap faces using earclip triangulation
+        if cap:
+            # Use original points without the closing point for polygon
+            cap_pts0 = polyline0.points[:-1] if close else polyline0.points
+            cap_pts1 = polyline1.points[:-1] if close else polyline1.points
+            
+            # Bottom cap (polyline0) - triangulate using earclip
+            bottom_triangles = earclip_polygon(Polygon(cap_pts0))
+            for tri in bottom_triangles:
+                # Reverse winding for bottom cap (face outward)
+                faces.append([tri[2], tri[1], tri[0]])
+            
+            # Top cap (polyline1) - triangulate using earclip
+            top_triangles = earclip_polygon(Polygon(cap_pts1))
+            for tri in top_triangles:
+                # Offset indices by n0 for top polyline vertices
+                faces.append([tri[0] + n0, tri[1] + n0, tri[2] + n0])
+        
         return Mesh.from_vertices_and_faces(vertices, faces)
     
     def loft_polylines_to_lines(self, polyline0, polyline1):
@@ -392,6 +487,7 @@ class FloorSkeleton:
                 points.append(Point(*floats))
         return Polyline(points)
 
+    @classmethod
     def plane_rectangle(self, plane, scale = 100):
         frame = Frame.from_plane(plane)
 
@@ -400,154 +496,391 @@ class FloorSkeleton:
         p2 = frame.point + frame.xaxis * scale + frame.yaxis * scale
         p3 = frame.point - frame.xaxis * scale + frame.yaxis * scale
         polygon = Polygon([p0,p1,p2,p3])
-        return polygon
 
-    def cut_polyline_plane(self, polyline, plane):
+        line = Line(plane.point, plane.point+plane.normal*scale)
+
+        return polygon, line
+
+    def cut_polyline_plane(self, polyline, plane, flip=False):
+        """Cut polyline by plane. If flip=True, cut from opposite direction."""
 
         points = []
+        normal = plane.normal if not flip else -plane.normal
 
         for i in range(len(polyline)-1):
             line = Line(polyline[i], polyline[i+1])
 
             vector = plane.point - polyline[i]
-            if (plane.normal.dot(vector) < 0):
+            if (normal.dot(vector) < 0):
                 points.append(polyline[i])
 
             
             floats = intersection_segment_plane(line, plane)
             if floats:
                 points.append(Point(*floats))
-
+        
+        # Check if last point should be included (was missing before)
+        vector = plane.point - polyline[-1]
+        if (normal.dot(vector) < 0):
+            points.append(polyline[-1])
+            
         return Polyline(points)
         
-
     @property
-    def projected_parabolas(self):
-        # These parabolas will be projected to beam long faces
-        # Parabolas will be cut second direction beam long faces
+    def target_planes(self):
+        # Target planes for each rib quarter (4 planes per quarter)
+        # These are the planes onto which parabolas are projected
 
-        projected_parabolas = []
-        projected_parabolas_offset = []
+        if self._target_planes is not None:
+            return self._target_planes
 
+        self._target_planes = []
 
         for i in range(len(self.boundary_parabolas)):
             if i == 0:
+                self._target_planes.append([])  # Empty list for index 0
                 continue
 
-            # 3 Axis boundary planes
-            axis_boundary_planes = []
-            for j in range(3, len(self.axes[i])-1):
-                axis_boundary_planes.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)))
-
-            # 4 Axis planes
-            axis_planes = []
-            for j in range(3):
-                axis_planes.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)))
-            axis_planes.append(Plane(self.axes[i][-1].start,  -Vector.Zaxis().cross(self.axes[i][-1].direction)))
-
-            # 8 Surface planes, stored 2n pairs
-            surface_planes_a = []
-            surface_planes_b = []
-            step_planes_a = []
-            step_planes_b = []
-            for j in range(len(self.axes[i])):
-                surface_planes_a.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)).offset(self.t*0.5))
-                surface_planes_b.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)).offset(-self.t*0.5))
-                step_planes_a.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)).offset(self.t*1.0))
-                step_planes_b.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)).offset(-self.t*1.0))
-
-            # Projection vectors, for the three inner triangles
-            # Usage_ xform = Projection.from_plane_and_direction(target_plane, projection_direction0)
-            projection_direction0 = Vector.Zaxis().cross(self.axes[i][0].direction)
-            projection_direction1 = Vector.Zaxis().cross(self.axes[i][1].direction) + Vector.Zaxis().cross(self.axes[i][2].direction)
-            projection_direction3 = Vector.Zaxis().cross(self.axes[i][3].direction)
-
-            # Projected parabolas
             target_plane00 = Plane(self.axes[i][0].start,  Vector.Zaxis().cross(self.axes[i][0].direction))
             target_plane10 = Plane(self.axes[i][1].start,  Vector.Zaxis().cross(self.axes[i][1].direction))
             target_plane20 = Plane(self.axes[i][2].start,  Vector.Zaxis().cross(self.axes[i][2].direction))
             target_plane30 = Plane(self.axes[i][3].start,  Vector.Zaxis().cross(self.axes[i][3].direction))
-            target_planes = [target_plane00, target_plane10, target_plane20, target_plane30]
-            
+            self._target_planes.append([target_plane00, target_plane10, target_plane20, target_plane30])
+
+        return self._target_planes
+
+    @property
+    def axis_boundary_planes(self):
+        # 3 Axis boundary planes per quarter
+
+        if self._axis_boundary_planes is not None:
+            return self._axis_boundary_planes
+
+        self._axis_boundary_planes = []
+
+        for i in range(len(self.boundary_parabolas)):
+            if i == 0:
+                self._axis_boundary_planes.append([])  # Empty list for index 0
+                continue
+
+            planes = []
+            for j in range(3, len(self.axes[i])-1):
+                planes.append(Plane(self.axes[i][j].midpoint,  Vector.Zaxis().cross(self.axes[i][j].direction)))
+            self._axis_boundary_planes.append(planes)
+
+        return self._axis_boundary_planes
+
+    @property
+    def axis_planes(self):
+        # 4 Axis planes per quarter
+
+        if self._axis_planes is not None:
+            return self._axis_planes
+
+        self._axis_planes = []
+
+        for i in range(len(self.boundary_parabolas)):
+            if i == 0:
+                self._axis_planes.append([])  # Empty list for index 0
+                continue
+
+            planes = []
+            for j in range(3):
+                planes.append(Plane(self.axes[i][j].start,  Vector.Zaxis().cross(self.axes[i][j].direction)))
+            planes.append(Plane(self.axes[i][-1].start,  -Vector.Zaxis().cross(self.axes[i][-1].direction)))
+            self._axis_planes.append(planes)
+
+        return self._axis_planes
+
+    @property
+    def rib_parabolas(self):
+        # These parabolas will be projected to beam long faces
+        # Parabolas will be cut second direction beam long faces
+
+        if self._projected_parabolas is not None:
+            return self._projected_parabolas
+
+        self._projected_parabolas = []
+
+        for i in range(len(self.boundary_parabolas)):
+            if i == 0:
+                self._projected_parabolas.append([])  # Empty list for index 0
+                continue
+
+            # Projection vectors, for the three inner triangles
+            projection_direction0 = Vector.Zaxis().cross(self.axes[i][0].direction)
+            projection_direction3 = Vector.Zaxis().cross(self.axes[i][3].direction)
+
+            # Get target planes for this quarter
+            current_target_planes = self.target_planes[i]
+            target_plane10 = current_target_planes[1]
+            target_plane20 = current_target_planes[2]
+
             target_plane11 = target_plane10.offset(-self.t*0.5)
             target_plane21 = target_plane20.offset(self.t*0.5)
 
             xform10 = Projection.from_plane_and_direction(target_plane11, projection_direction0)
             xform20 = Projection.from_plane_and_direction(target_plane21, projection_direction3)
-            xform11 = Projection.from_plane(target_plane10)
-            xform21 = Projection.from_plane(target_plane20)
+
+
+
+            boundary_parabola1 = self.boundary_parabolas[i][0].transformed(xform10)
+            boundary_parabola2 = self.boundary_parabolas[i][1].transformed(xform20)
 
             # Axis parabolas
             boundary_parabola0 = self.boundary_parabolas[i][0]
-            boundary_parabola1 = self.boundary_parabolas[i][0].transformed(xform10)
-            boundary_parabola2 = self.boundary_parabolas[i][1].transformed(xform20)
+            # boundary_parabola1 = self.boundary_parabolas[i][0].transformed(xform10)
+            # boundary_parabola2 = self.boundary_parabolas[i][1].transformed(xform20)
             
-            boundary_parabola1.translate(target_plane11.normal * self.t*0.5)
-            boundary_parabola2.translate(target_plane21.normal * -self.t*0.5)
+            # boundary_parabola1.translate(target_plane11.normal * self.t*0.5)
+            # boundary_parabola2.translate(target_plane21.normal * -self.t*0.5)
             boundary_parabola3 = self.boundary_parabolas[i][1]
             boundary_parabola2.points.reverse()
             boundary_parabola3.points.reverse()
 
             current_projected_parabolas = [boundary_parabola0, boundary_parabola1, boundary_parabola2, boundary_parabola3]
-            projected_parabolas += current_projected_parabolas
+            self._projected_parabolas.append(current_projected_parabolas)
+
+        return self._projected_parabolas
+
+    @property
+    def cut_planes(self):
+
+        if self._cutplanes is not None:
+            return self._cutplanes
+
+        # Cut the polylines using planes axis_boundary_planes
+        self._cutplanes = []
+        for q in range(len(self.axis_boundary_planes)):
+            if q == 0:
+                self._cutplanes.append([])  # Empty list for index 0
+                continue
+
+            l = []
+            for plane in self.axis_boundary_planes[q]:
+                l.append(plane.offset(self.t*0.5))
+            self._cutplanes.append(l)
+
+        for q in range(len(self.axis_boundary_planes)):
+            if q == 0:
+                continue
+
+            parabola0 = self.rib_parabolas[q][0]
+            parabola1 = self.rib_parabolas[q][1]
+            parabola2 = self.rib_parabolas[q][2]
+            parabola3 = self.rib_parabolas[q][3]
+
+            parabola0_offset = self.offset_polyline(self.rib_parabolas[q][0], self.t)
+            parabola1_offset = self.offset_polyline(self.rib_parabolas[q][1], self.t)
+            parabola2_offset = self.offset_polyline(self.rib_parabolas[q][2], self.t)
+            parabola3_offset = self.offset_polyline(self.rib_parabolas[q][3], self.t)
+
+            p0 = (parabola0[1]+parabola0[1])*0.5
+            p1 = (parabola1[1]+parabola2[1])*0.5
+            p2 = (parabola3[1]+parabola3[1])*0.5
 
 
-            # Beams - translation to two sides
-            beams = []
 
-            for i in range(len(current_projected_parabolas)):
-                projected_parabola_0 = current_projected_parabolas[i].translated(target_planes[i].normal * self.t*0.5)
-                projected_parabola_1 = current_projected_parabolas[i].translated(target_planes[i].normal * -self.t*0.5)
-                self.ribs_polylines.append(projected_parabola_0)
-                self.ribs_polylines.append(projected_parabola_1)
-                # mesh = self.loft_polylines(projected_parabola_0, projected_parabola_1)
-                # self.temp.append(mesh)
-            
-            idx = len(self.ribs_polylines) - 1 - 7
-            # self.temp.append(self.loft_polylines(self.ribs_polylines[idx+0], self.ribs_polylines[idx+3]))
-            # self.temp.append(self.loft_polylines(self.ribs_polylines[idx+2], self.ribs_polylines[idx+5]))
-            # self.temp.append(self.loft_polylines(self.ribs_polylines[idx+4], self.ribs_polylines[idx+6]))
+            xaxis0 = parabola1[1] - parabola0[1]
+            xaxis1 = parabola2[1] - parabola1[1]
+            xaxis2 = parabola3[1] - parabola2[1]
 
-            # Loft offseted surface then cut by planes
-            offset_axes = []
+            yaxis0 = parabola0_offset[1] - parabola0[1]
+            yaxis1 = parabola1_offset[1] - parabola1[1]
+            yaxis2 = parabola3_offset[1] - parabola3[1]
+
+            # zaxis0 = (parabola0[2] - parabola0[1])
+            # zaxis1 = (parabola1[2] - parabola1[1]) + (parabola2[2] - parabola2[1])
+            # zaxis2 = (parabola3[2] - parabola3[1])
+
+            zaxis0 = xaxis0.cross(yaxis0)
+            zaxis1 = xaxis1.cross(yaxis1)
+            zaxis2 = xaxis2.cross(yaxis2)
+
+      
+
+            plane0 = Plane(p0, zaxis0)
+            plane1 = Plane(p1, zaxis1)
+            plane2 = Plane(p2, zaxis2)
+
+            self._cutplanes[q].append(plane0.offset(25))
+            self._cutplanes[q].append(plane1.offset(25))
+            self._cutplanes[q].append(plane2.offset(25))
+
+        return self._cutplanes
+
+    @property
+    def lofted_lines_from_parabolas(self):
+
+        lofted_lines = []
+
+        for q in range(len(self.boundary_parabolas)):
+            if q == 0:
+                continue
+            lofted_lines_0 = self.loft_polylines_to_lines(self.rib_parabolas[q][0], self.rib_parabolas[q][1])
+            lofted_lines_1 = self.loft_polylines_to_lines(self.rib_parabolas[q][1], self.rib_parabolas[q][2])
+            lofted_lines_2 = self.loft_polylines_to_lines(self.rib_parabolas[q][2], self.rib_parabolas[q][3])
+            lofted_lines.append(lofted_lines_0)
+            lofted_lines.append(lofted_lines_1)
+            lofted_lines.append(lofted_lines_2)
+        
+        return lofted_lines
+
+    @property
+    def offset_axes(self):
+        # Offset axes for surface lofting - cached per quarter
+
+        if self._offset_axes is not None:
+            return self._offset_axes
+
+        self._offset_axes = []
+
+        for q in range(len(self.boundary_parabolas)):
+            if q == 0:
+                self._offset_axes.append([])
+                continue
+
+            # Offset polylines 0 and 3
+            offset_0_bottom = self.offset_polyline(self.rib_parabolas[q][0], self.t)
+            offset_0_top = self.offset_polyline(self.rib_parabolas[q][0], self.t*2)
+            offset_3_bottom = self.offset_polyline(self.rib_parabolas[q][3], self.t)
+            offset_3_top = self.offset_polyline(self.rib_parabolas[q][3], self.t*2)
+
+            # Get projection parameters
+            current_target_planes = self.target_planes[q]
+            target_plane10 = current_target_planes[1]
+            target_plane20 = current_target_planes[2]
+
+            projection_direction0 = Vector.Zaxis().cross(self.axes[q][0].direction)
+            projection_direction3 = Vector.Zaxis().cross(self.axes[q][3].direction)
+
+            xform10 = Projection.from_plane_and_direction(target_plane10, projection_direction0)
+            xform20 = Projection.from_plane_and_direction(target_plane20, projection_direction3)
+
+            # Project polylines 1 and 2 from 0 and 3
+            offset_1_bottom = offset_0_bottom.transformed(xform10)
+            offset_1_top = offset_0_top.transformed(xform10)
+            offset_2_bottom = offset_3_bottom.transformed(xform20)
+            offset_2_top = offset_3_top.transformed(xform20)
+
+            quarter_offset_axes = [
+                [offset_0_bottom, offset_0_top],
+                [offset_1_bottom, offset_1_top],
+                [offset_2_bottom, offset_2_top],
+                [offset_3_bottom, offset_3_top]
+            ]
+            self._offset_axes.append(quarter_offset_axes)
+
+        return self._offset_axes
+
+    @property
+    def lofted_lines(self):
+        # Lofted lines between offset axes - cached per quarter
+        # Returns list of [lofted_lines_bottom, lofted_lines_top] per quarter
+
+        if self._lofted_lines is not None:
+            return self._lofted_lines
+
+        self._lofted_lines = []
+
+        for q in range(len(self.boundary_parabolas)):
+            if q == 0:
+                self._lofted_lines.append([[], []])
+                continue
+
+            offset_axes = self.offset_axes[q]
             lofted_lines_bottom = []
             lofted_lines_top = []
 
-            for i in range(len(current_projected_parabolas)):
-                offset_0 = self.offset_polyline(current_projected_parabolas[i], self.t)
-                offset_1 = self.offset_polyline(current_projected_parabolas[i], self.t*2)
-                offset_axes.append([offset_0, offset_1])
-
-
-            for i in range(len(current_projected_parabolas)-1):
+            for i in range(len(self.rib_parabolas[q])-1):
                 lofted_lines_0 = self.loft_polylines_to_lines(offset_axes[i][0], offset_axes[i+1][0])
                 lofted_lines_1 = self.loft_polylines_to_lines(offset_axes[i][1], offset_axes[i+1][1])
-                self.surfaces_lines.append(lofted_lines_0)
-                self.surfaces_lines.append(lofted_lines_1)
                 lofted_lines_bottom.append(lofted_lines_0)
                 lofted_lines_top.append(lofted_lines_1)
-                self.temp.extend(lofted_lines_0)
-                self.temp.extend(lofted_lines_1)
 
+            self._lofted_lines.append([lofted_lines_bottom, lofted_lines_top])
 
+        return self._lofted_lines
 
-            # T-section - bottom translation to two sides, top projection from one side
-            tsections = []
+    @property
+    def element_geometry_beams(self):
+        # Beams - translation to two sides
+
+        beams = []
+
+        for q in range(len(self.boundary_parabolas)):
+            if q == 0:
+                continue
+
+            for i in range(len(self.rib_parabolas[q])):
+                projected_parabola_0 = self.rib_parabolas[q][i].translated(self.target_planes[q][i].normal * self.t*0.5)
+                projected_parabola_1 = self.rib_parabolas[q][i].translated(self.target_planes[q][i].normal * -self.t*0.5)
+                self.ribs_polylines.append(projected_parabola_0)
+                self.ribs_polylines.append(projected_parabola_1)
+                beams.append([projected_parabola_0, projected_parabola_1])
+
+        return beams
+
+    def element_geometry_tsections(self, cut_boundary=False, cut_rib=False):
+        """T-section geometry - bottom translation to two sides, top projection from one side.
+        
+        Args:
+            cut_boundary: Cut at boundary end (indices 0, 1, 2)
+            cut_rib: Cut at rib end (indices 3, 4, 5)
+        """
+
+        tsections = []
+
+        for q in range(len(self.boundary_parabolas)):
+            if q == 0:
+                continue
+
+            lofted_lines_bottom = self.lofted_lines[q][0]
+            current_cut_planes = self.cut_planes[q]
 
             offsets = [[1], [-1, 1], [-1, 1], [-1]]
             offsets_ids = [[0], [0, 1], [1, 2], [2]]
-            for i in range(len(current_projected_parabolas)):
+
+            for i in range(len(self.rib_parabolas[q])):
                 for j in range(len(offsets[i])):
 
-                    projected_parabola_0 = current_projected_parabolas[i].translated(target_planes[i].normal * self.t*0.5 * offsets[i][j])
-                    projected_parabola_1 = current_projected_parabolas[i].translated(target_planes[i].normal * self.t*1.5 * offsets[i][j])
+                    # Create planes first, then project rib_parabolas onto them
+                    plane0 = Plane(self.axis_planes[q][i].point + self.axis_planes[q][i].normal * self.t*0.5 * offsets[i][j], self.axis_planes[q][i].normal)
+                    plane1 = Plane(self.axis_planes[q][i].point + self.axis_planes[q][i].normal * self.t*1.5 * offsets[i][j], self.axis_planes[q][i].normal)
 
-
-                    plane0 = Plane(axis_planes[i].point + axis_planes[i].normal * self.t*0.5 * offsets[i][j], axis_planes[i].normal)
-                    plane1 = Plane(axis_planes[i].point + axis_planes[i].normal * self.t*1.5 * offsets[i][j], axis_planes[i].normal)
+                    # Project rib_parabola points onto plane0 and plane1 (along plane normal)
+                    projected_points_0 = []
+                    projected_points_1 = []
+                    for pt in self.rib_parabolas[q][i].points:
+                        projected_points_0.append(plane0.closest_point(pt))
+                        projected_points_1.append(plane1.closest_point(pt))
+                    projected_parabola_0 = Polyline(projected_points_0)
+                    projected_parabola_1 = Polyline(projected_points_1)
 
                     cut_parabola0 = self.cut_lines_by_plane(lofted_lines_bottom[offsets_ids[i][j]], plane0)
                     cut_parabola1 = self.cut_lines_by_plane(lofted_lines_bottom[offsets_ids[i][j]], plane1)
+
+                    # Cut planes
+                    cut_plane_boundary = current_cut_planes[offsets_ids[i][j]]  # indices 0, 1, 2
+                    cut_plane_rib = current_cut_planes[offsets_ids[i][j] + 3]   # indices 3, 4, 5
+                    
+                    # Cut at boundary end (flip=False)
+                    if cut_boundary:
+                        projected_parabola_0 = self.cut_polyline_plane(projected_parabola_0, cut_plane_boundary, flip=False)
+                        projected_parabola_1 = self.cut_polyline_plane(projected_parabola_1, cut_plane_boundary, flip=False)
+                        cut_parabola0 = self.cut_polyline_plane(cut_parabola0, cut_plane_boundary, flip=False)
+                        cut_parabola1 = self.cut_polyline_plane(cut_parabola1, cut_plane_boundary, flip=False)
+                    
+                    # Cut at rib end (flip=True for opposite direction)
+                    if cut_rib:
+                        projected_parabola_0 = self.cut_polyline_plane(projected_parabola_0, cut_plane_rib, flip=False)
+                        projected_parabola_1 = self.cut_polyline_plane(projected_parabola_1, cut_plane_rib, flip=False)
+                        cut_parabola0 = self.cut_polyline_plane(cut_parabola0, cut_plane_rib, flip=False)
+                        cut_parabola1 = self.cut_polyline_plane(cut_parabola1, cut_plane_rib, flip=False)
+
+                    merged_polyline0 = Polyline(projected_parabola_0.points + list(reversed(cut_parabola0.points)) )
+                    merged_polyline1 = Polyline(projected_parabola_1.points + list(reversed(cut_parabola1.points)))
+                    self.temp.append(self.loft_polylines(merged_polyline0, merged_polyline1, True))
 
                     self.ribs_tsections.append(projected_parabola_0)
                     self.ribs_tsections.append(projected_parabola_1)
@@ -555,15 +888,47 @@ class FloorSkeleton:
                     self.ribs_tsections.append(cut_parabola1)
 
 
-            # Surface * projection from one side
+                    tsections.append([projected_parabola_0, projected_parabola_1, cut_parabola0, cut_parabola1])
+
+        return tsections
+
+    @property
+    def element_geometry_surface(self):
+        """Surface geometry - projection from one side with cutting at boundary and rib ends."""
+
+        surfaces = []
+
+        for q in range(len(self.boundary_parabolas)):
+            if q == 0:
+                continue
+
+            lofted_lines_bottom = self.lofted_lines[q][0]
+            lofted_lines_top = self.lofted_lines[q][1]
+            current_cut_planes = self.cut_planes[q]
+
+            offsets = [[1], [-1, 1], [-1, 1], [-1]]
+            offsets_ids = [[0], [0, 1], [1, 2], [2]]
+
             surface_edges = []
-            for i in range(len(current_projected_parabolas)):
+            for i in range(len(self.rib_parabolas[q])):
                 for j in range(len(offsets[i])):
 
-                    plane0 = Plane(axis_planes[i].point + axis_planes[i].normal * self.t*0.5 * offsets[i][j], axis_planes[i].normal)
+                    plane0 = Plane(self.axis_planes[q][i].point + self.axis_planes[q][i].normal * self.t*0.5 * offsets[i][j], self.axis_planes[q][i].normal)
 
                     cut_parabola0 = self.cut_lines_by_plane(lofted_lines_bottom[offsets_ids[i][j]], plane0)
                     cut_parabola1 = self.cut_lines_by_plane(lofted_lines_top[offsets_ids[i][j]], plane0)
+
+                    # Cut planes
+                    cut_plane_boundary = current_cut_planes[offsets_ids[i][j]]  # indices 0, 1, 2
+                    cut_plane_rib = current_cut_planes[offsets_ids[i][j] + 3]   # indices 3, 4, 5
+
+                    # Cut at boundary end
+                    cut_parabola0 = self.cut_polyline_plane(cut_parabola0, cut_plane_boundary, flip=False)
+                    cut_parabola1 = self.cut_polyline_plane(cut_parabola1, cut_plane_boundary, flip=False)
+
+                    # Cut at rib end
+                    cut_parabola0 = self.cut_polyline_plane(cut_parabola0, cut_plane_rib, flip=False)
+                    cut_parabola1 = self.cut_polyline_plane(cut_parabola1, cut_plane_rib, flip=False)
 
                     self.surfaces_polylines.append(cut_parabola0)
                     self.surfaces_polylines.append(cut_parabola1)
@@ -573,25 +938,105 @@ class FloorSkeleton:
             surface_pairs = [surface_edges[i:i+4] for i in range(0, len(surface_edges), 4)]
             for idx, pair in enumerate(surface_pairs):
 
-                polyline_bottom_left = self.cut_polyline_plane(pair[0], axis_boundary_planes[idx].offset(self.t*0.5))
-                polyline_bottom_right = self.cut_polyline_plane(pair[1], axis_boundary_planes[idx].offset(self.t*0.5))
-                polyline_top_left = self.cut_polyline_plane(pair[2], axis_boundary_planes[idx].offset(self.t*0.5))
-                polyline_top_right = self.cut_polyline_plane(pair[3], axis_boundary_planes[idx].offset(self.t*0.5))
-                print(polyline_bottom_left)
+                polyline_bottom_left = pair[0]
+                polyline_bottom_right = pair[1]
+                polyline_top_left = pair[2]
+                polyline_top_right = pair[3]
 
-                polyline0 = Polyline(polyline_bottom_left.points[1:] + list(reversed(polyline_bottom_right.points[1:])))
-                polyline1 = Polyline(polyline_top_left.points[1:] + list(reversed(polyline_top_right.points[1:])))
+                polyline0 = Polyline(polyline_bottom_left.points + list(reversed(polyline_bottom_right.points)))
+                polyline1 = Polyline(polyline_top_left.points + list(reversed(polyline_top_right.points)))
 
                 self.temp.append(self.loft_polylines(polyline0, polyline1))
+                surfaces.append([polyline0, polyline1])
+
+        return surfaces
+
+    @property
+    def element_boundary_beams(self):
+
+        if self._boundary_beams is None:
+            self._boundary_beams = []
+
+            for i in range(len(self.fs)):
+
+                beams = []
+
+
+
+                polyline0 = Polyline([self.pt[self.fs[i][1]],self.pt[self.fs[i][2]],self.pt[self.fs[i][3]], self.pt[self.fs[i][4]]]) if i != 0 else Polyline([self.pt[self.fs[i][0]],self.pt[self.fs[i][1]],self.pt[self.fs[i][2]],self.pt[self.fs[i][3]]])
+                polyline1 = self.offset_polyline_xy(polyline0, self.t)
+
+                distance = self.z-self.r
+                for j in range(len(polyline0)-1):
+                    side0 = Polyline([polyline0[j], polyline0[j+1], Vector(0,0,-distance)+polyline0[j+1], Vector(0,0,-distance)+polyline0[j], polyline0[j]])
+                    side1 = Polyline([polyline1[j], polyline1[j+1], Vector(0,0,-distance)+polyline1[j+1], Vector(0,0,-distance)+polyline1[j], polyline1[j]])
+                    # self._boundary_beams.append(side0)
+                    # self._boundary_beams.append(side1)
+                    mesh = self.loft_polylines(side0, side1)
+                    self._boundary_beams.append(mesh)
+
+
+                # polygon = Polygon(polyline1.points+list(reversed(polyline0.points)))
+                
+            
+        return self._boundary_beams
+
+
+    # @property
+    # def fs(self):
+    #     if self._fs is None:
+    #         self._fs = [
+    #             # Oculus face
+    #             [0,1,2,3],
+    #             # Quarter 1 faces
+    #             [4,5,0,3,11],
+    #             # Quarter 2 faces
+    #             [6,7,1,0,5],
+    #             # Quarter 3 faces
+    #             [8,9,2,1,7],
+    #             # Quarter 4 faces
+    #             [10,11,3,2,9]
+    #         ]
+    #     return self._fs
+
+            # Cut planes
+
+
+        #     for q in self.axes:
+
+        #         if q == 0:
+        #             continue
+
                 
 
-            # Cut all the bottom profiles the 3 boundary beams
-            # Meaning the two inner beams are cut by one and the same plane
 
 
+        #         cut_planes = [
+        #             Plane(q[0].midpoint, Vector.Zaxis().cross(q[0].direction)),
+        #             Plane(q[1].midpoint, Vector.Zaxis().cross(q[1].direction)),
+        #             Plane(q[2].midpoint, Vector.Zaxis().cross(q[2].direction)),
+        #             Plane(q[3].midpoint, Vector.Zaxis().cross(q[3].direction))
+        #         ]
 
-        print(len(projected_parabolas))
-        return projected_parabolas
+        #         for i in range(3, len(q)-1):
+
+        #             direction = Vector.Zaxis().cross(q[i].direction).unitized()*self.t*0.5
+        #             xform0 = Translation.from_vector(direction)
+        #             xform1 = Translation.from_vector(-direction)
+
+        #             polyline0 = Polyline([q[i].start, q[i].end]).transformed(xform0)
+        #             polyline1 = Polyline([q[i].start, q[i].end]).transformed(xform1)
+
+        #             polyline0 = self.cut_polyline_plane(polyline0, cut_planes[i-3], flip=False)
+        #             polyline0 = self.cut_polyline_plane(polyline0, cut_planes[i+1-3], flip=False)
+        #             # polyline1 = self.cut_polyline_plane(polyline1, cut_planes[i-3], flip=False)
+        #             # polyline1 = self.cut_polyline_plane(polyline1, cut_planes[i+1-3], flip=True)
+
+        #             points = polyline0.points + list(reversed(polyline1.points))   
+                
+        #             self._boundary_beams.append(Polygon(points))
+            
+        # return self._boundary_beams
 
     @property
     def floor_surfaces_polylines(self):
@@ -629,57 +1074,90 @@ viewer.renderer.rendermode = "lighted"  # "lighted", "wireframe", "shaded", "gho
 
 geometry = viewer.scene.add_group("geometry")
 
-geometry.add(floor_skeleton.mt)
+# geometry.add(floor_skeleton.mt)
 # viewer.scene.add(floor_skeleton.ms)
 
-for lines in floor_skeleton.axes:
-    for line in lines:
-        if isinstance(line, Line):
-            geometry.add(line, color=(255, 0, 0))
-        else:
-            geometry.add(Polyline(line), color=(0, 255, 0))
+# for lines in floor_skeleton.axes:
+#     for line in lines:
+#         if isinstance(line, Line):
+#             geometry.add(line, color=(255, 0, 0))
+#         else:
+#             geometry.add(Polyline(line), color=(0, 255, 0))
 
 
-for parabola in floor_skeleton.boundary_parabolas:
-    for polyline in parabola:
-        geometry.add(polyline, color=(0, 0, 255))
+# for parabola in floor_skeleton.boundary_parabolas:
+#     for polyline in parabola:
+#         geometry.add(polyline, color=(0, 0, 255))
 
-floor_skeleton.projected_parabolas
+# Call the three element geometry methods
+floor_skeleton.element_geometry_beams
+floor_skeleton.element_geometry_tsections(cut_boundary=True, cut_rib=True)  # Options: cut_boundary, cut_rib
+floor_skeleton.element_geometry_surface
+
 
 axes = viewer.scene.add_group("axes")
-surfaces_lines = viewer.scene.add_group("surfaces_lines")
+boundary_parabolas = viewer.scene.add_group("boundary_parabolas")
+rib_parabolas = viewer.scene.add_group("rib_parabolas")
 temp = viewer.scene.add_group("temp")
 rib_polylines = viewer.scene.add_group("rib_polylines")
 ribs_tsections = viewer.scene.add_group("ribs_tsections")
 surfaces_polylines = viewer.scene.add_group("surfaces_polylines")
+viewer_cutplanes = viewer.scene.add_group("cutplanes")
+viewer_lofted_lines = viewer.scene.add_group("lofted_lines")
+
+viewer_boundary_beams = viewer.scene.add_group("boundary_beams")
+
+
+
+
+# for parabola in floor_skeleton.boundary_parabolas:
+#     for polyline in parabola:
+#         boundary_parabolas.add(polyline)
+
+for parabola_lists in floor_skeleton.rib_parabolas:
+    for parabola in parabola_lists:
+        rib_parabolas.add(parabola, color=(0,255,0))
 
 for lines in floor_skeleton.axes:
     for line in lines:
-        axes.add(line)
+        axes.add(line, color=(0,255,255))
 
 
 
-for lines in floor_skeleton.surfaces_lines:
-    for line in lines:
-        surfaces_lines.add(line)
+# for lines in floor_skeleton.surfaces_lines:
+#     for line in lines:
+#         surfaces_lines.add(line)
 
 for mesh in floor_skeleton.temp:
-    temp.add(mesh)
+    temp.add(mesh, hide_coplanaredges=True)
 
-for polyline in floor_skeleton.ribs_polylines:
-    rib_polylines.add(polyline)
-    for point in polyline.points:
-        rib_polylines.add(point, color=(0, 0, 0))
+for beam in floor_skeleton.element_boundary_beams:
+    viewer_boundary_beams.add(beam, hide_coplanaredges=True)
+# for polyline in floor_skeleton.ribs_polylines:
+#     rib_polylines.add(polyline)
+#     for point in polyline.points:
+#         rib_polylines.add(point, color=(0, 0, 0))
 
-for polyline in floor_skeleton.ribs_tsections:
-    ribs_tsections.add(polyline, color=(255, 0, 0))
-    for point in polyline.points:
-        ribs_tsections.add(point, color=(255, 0, 0))
+# for polyline in floor_skeleton.ribs_tsections:
+#     ribs_tsections.add(polyline, color=(255, 0, 0))
+#     for point in polyline.points:
+#         ribs_tsections.add(point, color=(255, 0, 0))
 
-for polyline in floor_skeleton.surfaces_polylines:
-    surfaces_polylines.add(polyline)
-    for point in polyline.points:
-        surfaces_polylines.add(point, color=(0, 0, 0))
+# for polyline in floor_skeleton.surfaces_polylines:
+#     surfaces_polylines.add(polyline)
+#     for point in polyline.points:
+#         surfaces_polylines.add(point, color=(0, 0, 0))
+
+# for cutplanes in floor_skeleton.cut_planes:
+#     for cutplane in cutplanes:
+#         rectangle, line = FloorSkeleton.plane_rectangle(cutplane)
+#         viewer_cutplanes.add(rectangle)
+#         viewer_cutplanes.add(line)
+
+# for lofted_lines in floor_skeleton.lofted_lines_from_parabolas:
+#     for line in lofted_lines:
+#         viewer_lofted_lines.add(line)
+    
 
 # viewer.scene.add(floor.mb)
 
