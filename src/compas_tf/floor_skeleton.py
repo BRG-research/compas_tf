@@ -26,12 +26,13 @@ class FloorSkeleton:
     
     """
 
-    def __init__(self, xy = 3000, z = 600, r = 453, o = 1000, t = 40, t_panels = 27):
+    def __init__(self, xy = 3000, z = 600, r = 453, o = 1000, t = 40, t_panels = 27, bm = 230):
         self.xy = xy # Half size of the floor
         self.z = z # Total height of the floor
         self.r = r # Rise of the parabola
         self.s = z-r # Static height above the the parabola
         self.o = o # Half size of the central oculus from the top to bottom points
+        self.bm = bm # the middle of the beam
         self._pt = None # Top points describind the whole floor
         self._ft = None # Top points describind the whole floor
         self._pb = None # Bottom points describind the whole floor
@@ -703,6 +704,40 @@ class FloorSkeleton:
             self._cutplanes[q].append(plane1)
             self._cutplanes[q].append(plane2)
 
+            # Create lines from the loft and cut them with the plane 
+            plane_top = Plane([0,0,-self.bm], Vector.Zaxis())
+            plane_bottom = Plane([0,0,-self.bm*2], Vector.Zaxis())
+            top_points = []
+            bottom_points = []
+            for i in range(4):
+                line = Line(points_for_planes[i], points_for_planes_offset[i])
+                result = intersection_line_plane(line, plane_top)
+                if result:
+                    top_points.append(Point(*result))
+                result = intersection_line_plane(line, plane_bottom)
+                if result:
+                    bottom_points.append(Point(*result))
+            extension = 300
+            corner = self.pt[self.fs[q][0]]
+            
+            polyline_top = Polyline(top_points).extended([extension,extension])
+            polyline_bottom = Polyline(bottom_points).extended([extension,extension])
+            direction = -polyline_top.lines[0].direction*extension+polyline_bottom.lines[-1].direction*extension
+            corner = direction + corner
+            polyline_top.append(Vector(0,0,-self.bm)+corner)
+            polyline_bottom.append(Vector(0,0,-self.bm*2)+corner)
+            polyline_top.append(polyline_top[0])
+            polyline_bottom.append(polyline_bottom[0])
+
+            self.temp.append(polyline_top)
+            self.temp.append(polyline_bottom)
+            self.temp.append(self.loft_polylines(polyline_top, polyline_bottom))
+
+                
+
+
+            
+
         return self._cutplanes
 
     @property
@@ -860,8 +895,8 @@ class FloorSkeleton:
                 line1 = self.cut_polyline_plane(line1, top_cutplane, flip=True)
                 top_parabola0 = line0.transformed(Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis()))
                 top_parabola1 = line1.transformed(Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis()))
-                mid_parabola0 = line0.transformed(Projection.from_plane_and_direction(Plane([0,0,-250], [0,0,1]), Vector.Zaxis()))
-                mid_parabola1 = line1.transformed(Projection.from_plane_and_direction(Plane([0,0,-250], [0,0,1]), Vector.Zaxis()))
+                mid_parabola0 = line0.transformed(Projection.from_plane_and_direction(Plane([0,0,-self.bm], [0,0,1]), Vector.Zaxis()))
+                mid_parabola1 = line1.transformed(Projection.from_plane_and_direction(Plane([0,0,-self.bm], [0,0,1]), Vector.Zaxis()))
                 mid_parabola0 = self.cut_polyline_plane(mid_parabola0, cut_plane_rib, flip=True)
                 mid_parabola1 = self.cut_polyline_plane(mid_parabola1, cut_plane_rib, flip=True)
                 
@@ -871,15 +906,6 @@ class FloorSkeleton:
                 self.temp.append(self.loft_polylines(joined_parabola0, joined_parabola1))
     
 
-                # self.ribs_polylines.append(projected_parabola_0)
-                # self.ribs_polylines.append(projected_parabola_1)
-
-                # self.ribs_polylines.append(cut_parabola0)
-                # self.ribs_polylines.append(cut_parabola1)
-                # self.ribs_polylines.append(top_parabola0)
-                # self.ribs_polylines.append(top_parabola1)
-                # self.ribs_polylines.append(mid_parabola0)
-                # self.ribs_polylines.append(mid_parabola1)
                 self.ribs_polylines.append(joined_parabola0)
                 self.ribs_polylines.append(joined_parabola1)
                 beams.append([projected_parabola_0, projected_parabola_1])
