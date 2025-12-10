@@ -15,6 +15,7 @@ from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 from compas_model.models import Model
 from compas.itertools import pairwise
 
+
 class FloorSkeleton:
     """
     [ ] - Create points representing the low poly geometry of the floor.
@@ -26,13 +27,14 @@ class FloorSkeleton:
     
     """
 
-    def __init__(self, xy = 3000, z = 600, r = 453, o = 1000, t = 40, t_panels = 27, bm = 230):
+    def __init__(self, xy = 3000, z = 600, r = 453, o = 1000, t = 40, t_panels = 27, bm = 230, bb = 250):
         self.xy = xy # Half size of the floor
         self.z = z # Total height of the floor
         self.r = r # Rise of the parabola
         self.s = z-r # Static height above the the parabola
         self.o = o # Half size of the central oculus from the top to bottom points
         self.bm = bm # the middle of the beam
+        self.bb = bb # the width of the boundary beams
         self._pt = None # Top points describind the whole floor
         self._ft = None # Top points describind the whole floor
         self._pb = None # Bottom points describind the whole floor
@@ -49,9 +51,11 @@ class FloorSkeleton:
         self._axis_boundary_planes = None
         self._axis_planes = None
         self._cutplanes = None
+        self._end_planes = None
         self._offset_axes = None
         self._lofted_lines = None
         self._boundary_beams = None
+        self._column_centers = None  # Cache for column center points
 
         self.ribs_polylines = []
         self.ribs_tsections = []
@@ -466,6 +470,66 @@ class FloorSkeleton:
         
         return Mesh.from_vertices_and_faces(vertices, faces)
     
+    def loft_multiple_polylines(self, polylines, cap=True, close=True):
+        """Loft multiple polylines into a single mesh, capping first and last.
+        
+        Args:
+            polylines: List of polylines to loft sequentially
+            cap: If True, add triangulated caps at first and last polyline
+            close: If True, close the polylines by connecting last point to first
+        """
+        if len(polylines) < 2:
+            return None
+        
+        # Clean and optionally close all polylines
+        cleaned_polylines = []
+        for polyline in polylines:
+            pts = self._remove_duplicate_points(list(polyline.points))
+            if close and pts[0].distance_to_point(pts[-1]) > 1e-6:
+                pts.append(pts[0])
+            cleaned_polylines.append(Polyline(pts))
+        
+        # Build vertices from all polylines
+        vertices = []
+        offsets = []  # Track starting index of each polyline
+        for polyline in cleaned_polylines:
+            offsets.append(len(vertices))
+            vertices.extend(polyline.points)
+        
+        faces = []
+        
+        # Side faces between consecutive polylines
+        for p in range(len(cleaned_polylines) - 1):
+            n0 = len(cleaned_polylines[p])
+            offset0 = offsets[p]
+            offset1 = offsets[p + 1]
+            for i in range(n0 - 1):
+                faces.append([
+                    offset0 + i,
+                    offset0 + i + 1,
+                    offset1 + i + 1,
+                    offset1 + i
+                ])
+        
+        # Cap faces using earclip triangulation
+        if cap:
+            # First cap (bottom)
+            first_polyline = cleaned_polylines[0]
+            cap_pts0 = first_polyline.points[:-1] if close else first_polyline.points
+            bottom_triangles = earclip_polygon(Polygon(cap_pts0))
+            for tri in bottom_triangles:
+                faces.append([tri[2], tri[1], tri[0]])  # Reverse winding
+            
+            # Last cap (top)
+            last_polyline = cleaned_polylines[-1]
+            last_offset = offsets[-1]
+            cap_pts1 = last_polyline.points[:-1] if close else last_polyline.points
+            top_triangles = earclip_polygon(Polygon(cap_pts1))
+            for tri in top_triangles:
+                faces.append([tri[0] + last_offset, tri[1] + last_offset, tri[2] + last_offset])
+        
+        return Mesh.from_vertices_and_faces(vertices, faces)
+    
     def loft_polylines_to_lines(self, polyline0, polyline1):
         lines = []
         for i in range(len(polyline0)):
@@ -637,9 +701,52 @@ class FloorSkeleton:
 
         return self._projected_parabolas
 
+    def _compute_corner_geometry(self, q):
+        """Compute corner geometry data for cut planes and column heads.
+        
+        Returns:
+            tuple: (points_for_planes, points_for_planes_offset, planes)
+        """
+        # Find intersection of first and last axes
+        intersection = intersection_line_line(self.axes[q][0], self.axes[q][-1])[0]
+        
+        # Build 4 planes along the axes
+        scale = 460
+        angle_inclination = 180
+        points = []
+        planes = []
+        for i in range(4):
+            direction = self.axes[q][i].direction * scale + intersection
+            point = Point(*direction)
+            points.append(point)
+            plane = Plane(point, self.axes[q][i].direction.cross(Vector.Zaxis()))
+            offset_dir = self.t * -0.5 if i > 1 else self.t * 0.5
+            plane = plane.offset(offset_dir)
+            planes.append(plane)
+
+        # Compute 4 key points for cut planes
+        middle_line = Line(points[1], points[2])
+        point1 = Point(*intersection_line_plane(middle_line, planes[1]))
+        point2 = Point(*intersection_line_plane(middle_line, planes[2]))
+        point0 = planes[0].closest_point(point1)
+        point3 = planes[3].closest_point(point2)
+
+        points_for_planes = [point0, point1, point2, point3]
+        
+        # Compute offset points along axis directions
+        points_for_planes_offset = []
+        for i in range(4):
+            temp_pt = self.axes[q][i].direction * angle_inclination + points_for_planes[i]
+            points_for_planes_offset.append(temp_pt)
+        points_for_planes_offset[0] = planes[0].closest_point(points_for_planes_offset[1])
+        points_for_planes_offset[3] = planes[3].closest_point(points_for_planes_offset[2])
+        for i in range(4):
+            points_for_planes_offset[i] = -Vector.Zaxis() * self.z + points_for_planes_offset[i]
+
+        return points_for_planes, points_for_planes_offset, planes
+
     @property
     def cut_planes(self):
-
         if self._cutplanes is not None:
             return self._cutplanes
 
@@ -652,93 +759,188 @@ class FloorSkeleton:
 
             l = []
             for plane in self.axis_boundary_planes[q]:
-                l.append(plane.offset(self.t*0.5))
+                l.append(plane.offset(self.t * 0.5))
             self._cutplanes.append(l)
 
         for q in range(len(self.axis_boundary_planes)):
             if q == 0:
                 continue
 
-            # Find intersection of first and last axes
-            intersection = intersection_line_line(self.axes[q][0], self.axes[q][-1])[0]
-            
-            # Build 4 planes along the axes
-            scale = 460
-            angle_inclination = 180
-            points = []
-            planes = []
-            for i in range(4):
-                direction = self.axes[q][i].direction * scale + intersection
-                point = Point(*direction)
-                points.append(point)
-                plane = Plane(point, self.axes[q][i].direction.cross(Vector.Zaxis()))
-                offset_dir = self.t * -0.5 if i > 1 else self.t * 0.5
-                plane = plane.offset(offset_dir)
-                planes.append(plane)
-
-            # Compute 4 key points for cut planes
-            middle_line = Line(points[1], points[2])
-            point1 = Point(*intersection_line_plane(middle_line, planes[1]))
-            point2 = Point(*intersection_line_plane(middle_line, planes[2]))
-            point0 = planes[0].closest_point(point1)
-            point3 = planes[3].closest_point(point2)
-
-            points_for_planes = [point0, point1, point2, point3]
-            
-            # Compute offset points along axis directions
-            points_for_planes_offset = []
-            for i in range(4):
-                temp_pt = self.axes[q][i].direction * angle_inclination + points_for_planes[i]
-                points_for_planes_offset.append(temp_pt)
-            points_for_planes_offset[0] = planes[0].closest_point(points_for_planes_offset[1])
-            points_for_planes_offset[3] = planes[3].closest_point(points_for_planes_offset[2])
-            for i in range(4):
-                points_for_planes_offset[i] = -Vector.Zaxis() * self.z + points_for_planes_offset[i]
+            points_for_planes, points_for_planes_offset, planes = self._compute_corner_geometry(q)
 
             # Create 3 cut planes from the 4 points
-            plane0 = Plane((points_for_planes[0]+points_for_planes[1])*0.5, -(points_for_planes[1] - points_for_planes[0]).cross(points_for_planes_offset[0] - points_for_planes[0]))
-            plane1 = Plane((points_for_planes[1]+points_for_planes[2])*0.5, -(points_for_planes[2] - points_for_planes[1]).cross(points_for_planes_offset[1] - points_for_planes[1]))
-            plane2 = Plane((points_for_planes[2]+points_for_planes[3])*0.5, -(points_for_planes[3] - points_for_planes[2]).cross(points_for_planes_offset[2] - points_for_planes[2]))
+            plane0 = Plane((points_for_planes[0] + points_for_planes[1]) * 0.5, -(points_for_planes[1] - points_for_planes[0]).cross(points_for_planes_offset[0] - points_for_planes[0]))
+            plane1 = Plane((points_for_planes[1] + points_for_planes[2]) * 0.5, -(points_for_planes[2] - points_for_planes[1]).cross(points_for_planes_offset[1] - points_for_planes[1]))
+            plane2 = Plane((points_for_planes[2] + points_for_planes[3]) * 0.5, -(points_for_planes[3] - points_for_planes[2]).cross(points_for_planes_offset[2] - points_for_planes[2]))
 
             self._cutplanes[q].append(plane0)
             self._cutplanes[q].append(plane1)
             self._cutplanes[q].append(plane2)
 
-            # Create lines from the loft and cut them with the plane 
-            plane_top = Plane([0,0,-self.bm], Vector.Zaxis())
-            plane_bottom = Plane([0,0,-self.bm*2], Vector.Zaxis())
-            top_points = []
-            bottom_points = []
-            for i in range(4):
-                line = Line(points_for_planes[i], points_for_planes_offset[i])
-                result = intersection_line_plane(line, plane_top)
-                if result:
-                    top_points.append(Point(*result))
-                result = intersection_line_plane(line, plane_bottom)
-                if result:
-                    bottom_points.append(Point(*result))
-            extension = 300
-            corner = self.pt[self.fs[q][0]]
-            
-            polyline_top = Polyline(top_points).extended([extension,extension])
-            polyline_bottom = Polyline(bottom_points).extended([extension,extension])
-            direction = -polyline_top.lines[0].direction*extension+polyline_bottom.lines[-1].direction*extension
-            corner = direction + corner
-            polyline_top.append(Vector(0,0,-self.bm)+corner)
-            polyline_bottom.append(Vector(0,0,-self.bm*2)+corner)
-            polyline_top.append(polyline_top[0])
-            polyline_bottom.append(polyline_bottom[0])
+        return self._cutplanes
 
-            self.temp.append(polyline_top)
-            self.temp.append(polyline_bottom)
-            self.temp.append(self.loft_polylines(polyline_top, polyline_bottom))
+    @property
+    def end_planes(self):
+        """End planes for each rib, used for cutting beams and column heads.
+        
+        Returns:
+            list: Nested list [q][i] where q is quarter index and i is rib index (0-3)
+        """
+        if self._end_planes is not None:
+            return self._end_planes
+        
+        self._end_planes = [[]]  # Empty list for index 0
+        
+        for q in range(1, len(self.axis_boundary_planes)):
+            quarter_planes = []
+            for i in range(4):
+                normal = Point(self.rib_parabolas[q][i][0][0], self.rib_parabolas[q][i][0][1], 0) - Point(self.rib_parabolas[q][i][-1][0], self.rib_parabolas[q][i][-1][1], 0)
+                plane = Plane(Point(self.rib_parabolas[q][i][0][0], self.rib_parabolas[q][i][0][1], 0), normal)
+                end_plane = plane.offset(-200)
+                quarter_planes.append(end_plane)
+            self._end_planes.append(quarter_planes)
+        
+        return self._end_planes
+
+    @property
+    def column_heads(self):
+        """Generate column head geometry for each corner."""
+        if not hasattr(self, '_column_heads') or self._column_heads is None:
+            self._column_heads = []
+            self._column_centers = []  # Store center points for columns
+            
+            for q in range(len(self.axis_boundary_planes)):
+                if q == 0:
+                    continue
+
+                points_for_planes, points_for_planes_offset, planes = self._compute_corner_geometry(q)
+
+                # Create lines from the loft and cut them with the plane 
+                plane_top = Plane([0, 0, -self.bm], Vector.Zaxis())
+                plane_bottom = Plane([0, 0, -self.bm * 2], Vector.Zaxis())
+                top_points = []
+                bottom_points = []
+                for i in range(4):
+                    line = Line(points_for_planes[i], points_for_planes_offset[i])
+                    result = intersection_line_plane(line, plane_top)
+                    if result:
+                        top_points.append(Point(*result))
+                    result = intersection_line_plane(line, plane_bottom)
+                    if result:
+                        bottom_points.append(Point(*result))
+                corner = self.pt[self.fs[q][0]]
+
+                
+                polyline_top = Polyline(top_points).extended([self.bb, self.bb])
+                gap_blocks_polyline_front = Polyline(polyline_top.points)
+                polyline_bottom = Polyline(bottom_points).extended([self.bb, self.bb])
+                direction = -polyline_top.lines[0].direction * self.bb + polyline_bottom.lines[-1].direction * self.bb
+                corner = direction + corner
+                polyline_top.append(Vector(0, 0, -self.bm) + corner)
+                polyline_bottom.append(Vector(0, 0, -self.bm * 2) + corner)
+                polyline_top.points = polyline_top.points[-1:] + polyline_top.points[:-1]
+                polyline_bottom.points = polyline_bottom.points[-1:] + polyline_bottom.points[:-1]
+                polyline_top.append(polyline_top[0])
+                polyline_bottom.append(polyline_bottom[0])
+                polyline_taper = polyline_bottom.translated(Vector(0, 0, -(self.z - self.bm * 2)))
+                xaxis = polyline_taper.lines[0].direction * self.bb
+                yaxis = polyline_taper.lines[-1].direction * self.bb
+                center = polyline_taper[0]
+                # Cache actual center of square (not corner) for element_columns
+                square_center = center + xaxis * 0.5 - yaxis * 0.5
+                self._column_centers.append(square_center)
+                polyline_taper = Polyline([
+                    center,
+                    center + xaxis,
+                    center + xaxis - yaxis * 0.99,
+                    center + xaxis * 0.99 - yaxis,
+                    center - yaxis,
+                    center,
+                ])
+                
+                column_head_mesh = self.loft_multiple_polylines([polyline_top, polyline_bottom, polyline_taper])
+                self._column_heads.append(column_head_mesh)
+
+                # Top part of column to take the tension
+               
+                stop_plane0 = Plane(self.pt[self.fs[q][0]], Vector.Zaxis().cross(self.pt[self.fs[q][1]] - self.pt[self.fs[q][0]]))
+                stop_plane1 = Plane(self.pt[self.fs[q][0]], Vector.Zaxis().cross(self.pt[self.fs[q][-1]] - self.pt[self.fs[q][0]]))
+                planes = [
+                    stop_plane0,
+                    self.end_planes[q][0],
+                    self.end_planes[q][1],
+                    self.end_planes[q][2],
+                    self.end_planes[q][3],
+                    stop_plane1,
+                    ]
+                ipoints =  self.intersect_consecutive_planes_with_xy(planes)
+
+                top_block_polyline0 = Polyline(ipoints)
+                gap_blocks_polyline = Polyline(ipoints)
+                top_block_polyline0.extend((self.bb, self.bb))
+                top_block_polyline0.insert(0, Point(center[0], center[1], 0))
+                top_block_polyline0.append(top_block_polyline0[0])
+                top_block_polyline1 = top_block_polyline0.translated(Vector(0, 0, -self.bm))
+
+                # Diagonals blocks
+                stop_plane0 = Plane(self.pt[self.fs[q][0]], Vector.Zaxis().cross(self.pt[self.fs[q][1]] - self.pt[self.fs[q][0]]))
+                stop_plane1 = Plane(self.pt[self.fs[q][0]], Vector.Zaxis().cross(self.pt[self.fs[q][-1]] - self.pt[self.fs[q][0]]))
+
+
+
+                ids = [[0,2], [3, 5], [4,7]]
+                for i in range(3):
+
+                    a = ids[i][0]
+                    b = ids[i][1]
+
+                    cutplane0 = Polygon(list(reversed(self.ribs_polylines[q-1][a].points[:-1]))).plane
+                    cutplane1 = Polygon(self.ribs_polylines[q-1][b].points[:-1]).plane
+
+                    points = []
+
+                    polyline = self.cut_polyline_plane(gap_blocks_polyline, cutplane0)
+                    polyline = self.cut_polyline_plane(polyline, cutplane1)
+
+                    for p in polyline:
+                        points.append(Point(p[0],p[1],0))
+                        # self.temp.append(p)
+
+
+                    polyline = self.cut_polyline_plane(gap_blocks_polyline_front, cutplane0)
+                    polyline = self.cut_polyline_plane(polyline, cutplane1)
+
+                    for p in list(reversed(polyline)):
+                        points.append(Point(p[0],p[1],0))
+                        # self.temp.append(p)
+                    
+                    polygon0 = Polygon(points)
+                    polygon1 = polygon0.translated(Vector(0, 0, -self.bm))
+                    mesh = self.loft_polylines(Polyline(polygon0.points), Polyline(polygon1.points))
+                    self.temp.append(mesh)
+
+                    # self.temp.append(self.plane_rectangle(cutplane0)[0])
+                    # self.temp.append(self.plane_rectangle(cutplane1)[0])
+                    # self.temp.append(self.plane_rectangle(cutplane0)[1])
+                    # self.temp.append(self.plane_rectangle(cutplane1)[1])
+                
+                    
+
+
+
+
+
 
                 
 
+                # print(inection_points)
+                self.temp.append(top_block_polyline0)
+                self.temp.append(top_block_polyline1)
+                self.temp.append(self.loft_polylines(top_block_polyline0, top_block_polyline1))
 
-            
 
-        return self._cutplanes
+        
+        return self._column_heads
 
     @property
     def lofted_lines_from_parabolas(self):
@@ -756,6 +958,34 @@ class FloorSkeleton:
             lofted_lines.append(lofted_lines_2)
         
         return lofted_lines
+
+    def intersect_consecutive_planes_with_xy(self, planes, reference_plane=None):
+        """Find intersection points of consecutive plane pairs with a reference plane.
+        
+        Parameters
+        ----------
+        planes : list[:class:`compas.geometry.Plane`]
+            List of planes to intersect pairwise.
+        reference_plane : :class:`compas.geometry.Plane`, optional
+            Plane to intersect the resulting lines with. Defaults to world XY.
+        
+        Returns
+        -------
+        list[:class:`compas.geometry.Point`]
+            Intersection points.
+        """
+        if reference_plane is None:
+            reference_plane = Plane.worldXY()
+        
+        intersection_points = []
+        for i in range(len(planes) - 1):
+            result = intersection_plane_plane(planes[i], planes[i + 1])
+            if result:
+                line = Line(result[0], result[1])
+                pt = intersection_line_plane(line, reference_plane)
+                if pt:
+                    intersection_points.append(pt)
+        return intersection_points
 
     @property
     def offset_axes(self):
@@ -846,6 +1076,8 @@ class FloorSkeleton:
 
             offsets_ids = [0, 1, 1, 2]
 
+            list_rib_polylines = []
+
 
             for i in range(len(self.rib_parabolas[q])):
 
@@ -865,10 +1097,7 @@ class FloorSkeleton:
                     offset0 = 0.5
                     offset1 = -0.5
 
-                normal = Point(self.rib_parabolas[q][i][0][0], self.rib_parabolas[q][i][0][1], 0) - Point(self.rib_parabolas[q][i][-1][0], self.rib_parabolas[q][i][-1][1], 0)
-                plane = Plane(Point(self.rib_parabolas[q][i][0][0], self.rib_parabolas[q][i][0][1], 0), normal)
-                # top_cutplane = plane.offset(378*-1.0) if i == 0 or i == 3 else plane.offset(450*-1.0)
-                top_cutplane = plane.offset(-200)
+                end_plane = self.end_planes[q][i]
                 
 
                 projected_parabola_0 = self.rib_parabolas[q][i].translated(self.target_planes[q][i].normal * self.t*offset0)
@@ -891,8 +1120,9 @@ class FloorSkeleton:
                 
                 line0.extend([extension,0])
                 line1.extend([extension,0])
-                line0 = self.cut_polyline_plane(line0, top_cutplane, flip=True)
-                line1 = self.cut_polyline_plane(line1, top_cutplane, flip=True)
+                line0 = self.cut_polyline_plane(line0, end_plane, flip=True)
+                line1 = self.cut_polyline_plane(line1, end_plane, flip=True)
+
                 top_parabola0 = line0.transformed(Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis()))
                 top_parabola1 = line1.transformed(Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis()))
                 mid_parabola0 = line0.transformed(Projection.from_plane_and_direction(Plane([0,0,-self.bm], [0,0,1]), Vector.Zaxis()))
@@ -900,18 +1130,24 @@ class FloorSkeleton:
                 mid_parabola0 = self.cut_polyline_plane(mid_parabola0, cut_plane_rib, flip=True)
                 mid_parabola1 = self.cut_polyline_plane(mid_parabola1, cut_plane_rib, flip=True)
                 
-                joined_parabola0 = Polyline(cut_parabola0.points + list(reversed(top_parabola0.points)) + mid_parabola0.points + [cut_parabola0.points[0]])
-                joined_parabola1 = Polyline(cut_parabola1.points + list(reversed(top_parabola1.points)) + mid_parabola1.points + [cut_parabola1.points[0]])
+                joined_parabola0 = Polyline(list(reversed(top_parabola0.points)) + mid_parabola0.points + cut_parabola0.points)
+                joined_parabola1 = Polyline(list(reversed(top_parabola1.points)) + mid_parabola1.points + cut_parabola1.points)
+                joined_parabola0.append(joined_parabola0.points[0])
+                joined_parabola1.append(joined_parabola1.points[0])
+
+
 
                 self.temp.append(self.loft_polylines(joined_parabola0, joined_parabola1))
     
 
-                self.ribs_polylines.append(joined_parabola0)
-                self.ribs_polylines.append(joined_parabola1)
+                list_rib_polylines.append(joined_parabola0)
+                list_rib_polylines.append(joined_parabola1)
                 beams.append([projected_parabola_0, projected_parabola_1])
 
-        return beams
+            self.ribs_polylines.append(list_rib_polylines)
 
+
+        return beams
 
     def element_geometry_tsections(self, cut_boundary=False, cut_rib=False):
         """T-section geometry - bottom translation to two sides, top projection from one side.
@@ -1051,33 +1287,82 @@ class FloorSkeleton:
 
             for i in range(len(self.fs)):
 
-                beams = []
+                if i == 0:
 
-
-
-                polyline0 = Polyline([self.pt[self.fs[i][1]],self.pt[self.fs[i][2]],self.pt[self.fs[i][3]], self.pt[self.fs[i][4]]]) if i != 0 else Polyline([self.pt[self.fs[i][0]],self.pt[self.fs[i][1]],self.pt[self.fs[i][2]],self.pt[self.fs[i][3]]])
-                polyline1 = self.offset_polyline_xy(polyline0, self.t)
-
-                distance = self.z-self.r
-                for j in range(len(polyline0)-1):
-                    side0 = Polyline([polyline0[j], polyline0[j+1], Vector(0,0,-distance)+polyline0[j+1], Vector(0,0,-distance)+polyline0[j], polyline0[j]])
-                    side1 = Polyline([polyline1[j], polyline1[j+1], Vector(0,0,-distance)+polyline1[j+1], Vector(0,0,-distance)+polyline1[j], polyline1[j]])
-                    # self._boundary_beams.append(side0)
-                    # self._boundary_beams.append(side1)
+                    side0 = Polyline([self.pt[self.fs[i][0]],self.pt[self.fs[i][1]],self.pt[self.fs[i][2]],self.pt[self.fs[i][3]], self.pt[self.fs[i][0]]])
+                    side1 = side0.translated([0,0,-(self.z-self.r)])
                     mesh = self.loft_polylines(side0, side1)
                     self._boundary_beams.append(mesh)
 
+                else:
 
-                # polygon = Polygon(polyline1.points+list(reversed(polyline0.points)))
-                
-            
+                    polyline0 = Polyline([self.pt[self.fs[i][1]],self.pt[self.fs[i][2]],self.pt[self.fs[i][3]], self.pt[self.fs[i][4]]])
+                    polyline1 = self.offset_polyline_xy(polyline0, self.t)
+
+                    distance = self.z-self.r
+                    for j in range(len(polyline0)-1):
+                        side0 = Polyline([polyline0[j], polyline0[j+1], Vector(0,0,-distance)+polyline0[j+1], Vector(0,0,-distance)+polyline0[j], polyline0[j]])
+                        side1 = Polyline([polyline1[j], polyline1[j+1], Vector(0,0,-distance)+polyline1[j+1], Vector(0,0,-distance)+polyline1[j], polyline1[j]])
+                        mesh = self.loft_polylines(side0, side1)
+                        self._boundary_beams.append(mesh)
+
         return self._boundary_beams
 
+    @property
+    def element_edge_beams(self):
+        idx = [[0, 1], [1, 2], [2, 3], [3, 0]]
+        idy = [[1, 6], [1, 6], [1, 6], [1, 6]]
+
+        groups = []
+        for i in range(4):
+            a0 = idx[i][0]
+            b0 = idy[i][0]
+            a1 = idx[i][1]
+            b1 = idy[i][1]
+
+            polyline0 = self.ribs_polylines[a0][b0].copy().points[1:-1] 
+            polyline1 = self.ribs_polylines[a1][b1].copy().points[1:-1] 
+            
+            # Remove short transition segments
+            line = Line(polyline0[-1], polyline1[0])
+
+            merged0 = Polyline(polyline0 + list(reversed(polyline1)))
+
+            merged0.points.append(merged0.points[0])
+            polygon = Polygon(merged0.points)
+            merged1 = merged0.translated(polygon.normal*self.bb)
+            self.temp.append(self.loft_polylines(merged0, merged1))
+
+            self.temp.append(line)
+
+            groups.append([merged0, merged1])
+
+        return groups
 
     @property
-    def column_heads(self):
-        # Column heads are the intersection of the projected parabolas
-        pass
+    def element_columns(self):
+        """Generate 4 column box meshes at corners, starting from column head base."""
+        if not hasattr(self, '_columns') or self._columns is None:
+            self._columns = []
+            column_height = 3000  # Height of columns below column head
+            
+            # Ensure column_heads is computed first to get _column_centers
+            _ = self.column_heads
+            
+            for center in self._column_centers:
+                # Box center: use x,y from column_head center, offset down by column_height/2
+                box_center = Point(center.x, center.y, center.z - column_height / 2)
+                
+                # Create box: bb x bb x column_height
+                frame = Frame(box_center, Vector.Xaxis(), Vector.Yaxis())
+                box = Box(self.bb, self.bb, column_height, frame)
+                
+                self._columns.append(box.to_mesh())
+        
+        return self._columns
+    
+
+
 
 
 
@@ -1120,6 +1405,7 @@ floor_skeleton.element_geometry_tsections(cut_boundary=True, cut_rib=True)  # Op
 floor_skeleton.element_geometry_surface
 
 
+
 axes = viewer.scene.add_group("axes")
 boundary_parabolas = viewer.scene.add_group("boundary_parabolas")
 rib_parabolas = viewer.scene.add_group("rib_parabolas")
@@ -1131,7 +1417,10 @@ viewer_cutplanes = viewer.scene.add_group("cutplanes")
 viewer_lofted_lines = viewer.scene.add_group("lofted_lines")
 
 viewer_boundary_beams = viewer.scene.add_group("boundary_beams")
+viewer_column_heads = viewer.scene.add_group("column_heads")
+edge_beams = viewer.scene.add_group("edge_beams")
 
+columns = viewer.scene.add_group("columns")
 
 
 
@@ -1153,11 +1442,22 @@ viewer_boundary_beams = viewer.scene.add_group("boundary_beams")
 #     for line in lines:
 #         surfaces_lines.add(line)
 
-for mesh in floor_skeleton.temp:
-    temp.add(mesh, hide_coplanaredges=True)
+
 
 for beam in floor_skeleton.element_boundary_beams:
     viewer_boundary_beams.add(beam, hide_coplanaredges=True)
+
+for column_head in floor_skeleton.column_heads:
+    viewer_column_heads.add(column_head, hide_coplanaredges=True)
+
+
+for items in floor_skeleton.element_edge_beams:
+    for item in items:
+        print(len(item))
+        edge_beams.add(item, hide_coplanaredges=True)
+
+for column in floor_skeleton.element_columns:
+    columns.add(column, hide_coplanaredges=True)
 
 # for polyline in floor_skeleton.ribs_polylines:
 #     rib_polylines.add(polyline)
@@ -1186,5 +1486,10 @@ for beam in floor_skeleton.element_boundary_beams:
     
 
 # viewer.scene.add(floor.mb)
+
+for item in floor_skeleton.temp:
+    temp.add(item, hide_coplanaredges=True)
+
+
 
 viewer.show()
