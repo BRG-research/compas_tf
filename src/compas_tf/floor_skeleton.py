@@ -27,13 +27,12 @@ class FloorSkeleton:
     
     """
 
-    def __init__(self, xy = 3000, z = 600, r = 453, o = 1000, t = 40, t_panels = 27, bm = 230, bb = 250):
+    def __init__(self, xy = 3000, z = 650, r = 453, o = 1000, t = 40, t_panels = 40, bb = 250):
         self.xy = xy # Half size of the floor
         self.z = z # Total height of the floor
         self.r = r # Rise of the parabola
         self.s = z-r # Static height above the the parabola
         self.o = o # Half size of the central oculus from the top to bottom points
-        self.bm = bm # the middle of the beam
         self.bb = bb # the width of the boundary beams
         self._pt = None # Top points describind the whole floor
         self._ft = None # Top points describind the whole floor
@@ -43,6 +42,7 @@ class FloorSkeleton:
         self._mt = None # Low poly representation of the top mesh for each triangle and quad
         self._ms = None # Low poly representation of the top mesh for each slab outline
         self._axes = None # Axes of the floor
+        self.bm = 0 # Half of the column head, this is later derived from the parbola points
         self._bp = None # Two parabolas at the boundary
         self.t = t # Thickness of the beam elements
         self.t_panels = t_panels # Thickness of the panel elements
@@ -355,7 +355,6 @@ class FloorSkeleton:
                     cp0, cpt0 = axes[i][j].closest_point(line.start, True)
                     cp1, cpt1 = axes[i][j].closest_point(line.end, True)
 
-                    # print(cpt0, cpt1)
                     if cpt0 > cpt1:
                         line = Line(line.end, line.start)
 
@@ -404,6 +403,7 @@ class FloorSkeleton:
                         pt = (1 - t)**2 * p0 + 2*(1 - t)*t * p1 + t**2 * p2
                         points.append(pt)
 
+                    self.bm = abs(points[-2][2])*0.5  -3.5
                     boundary_parabolas[i][-1] = Polyline(points)
 
             self._bp = boundary_parabolas
@@ -697,17 +697,14 @@ class FloorSkeleton:
 
             # Axis parabolas
             boundary_parabola0 = self.boundary_parabolas[i][0]
-            # boundary_parabola1 = self.boundary_parabolas[i][0].transformed(xform10)
-            # boundary_parabola2 = self.boundary_parabolas[i][1].transformed(xform20)
-            
-            # boundary_parabola1.translate(target_plane11.normal * self.t*0.5)
-            # boundary_parabola2.translate(target_plane21.normal * -self.t*0.5)
             boundary_parabola3 = self.boundary_parabolas[i][1]
             boundary_parabola2.points.reverse()
             boundary_parabola3.points.reverse()
 
             current_projected_parabolas = [boundary_parabola0, boundary_parabola1, boundary_parabola2, boundary_parabola3]
             self._projected_parabolas.append(current_projected_parabolas)
+
+
 
         return self._projected_parabolas
 
@@ -1109,6 +1106,8 @@ class FloorSkeleton:
                     cut_parabola0 = self.cut_polyline_plane(cut_parabola0, cut_plane_boundary, flip=False)
                     cut_parabola1 = self.cut_polyline_plane(cut_parabola1, cut_plane_boundary, flip=False)
 
+
+
                     # Project polylines to xy planes
                     line0 = Polyline([cut_parabola0[0], cut_parabola0[-1]])
                     line1 = Polyline([cut_parabola1[0], cut_parabola1[-1]])
@@ -1130,6 +1129,8 @@ class FloorSkeleton:
                     joined_parabola1 = Polyline(list(reversed(top_parabola1.points)) + mid_parabola1.points + cut_parabola1.points)
                     joined_parabola0.append(joined_parabola0.points[0])
                     joined_parabola1.append(joined_parabola1.points[0])
+
+                    
 
                     rib_mesh = self.loft_polylines(joined_parabola0, joined_parabola1)
                     quarter_meshes.append(rib_mesh)
@@ -1359,59 +1360,8 @@ class FloorSkeleton:
                         side3 = self.cut_polyline_plane(side3, plane1offset)
                         side2 = Polyline([side2[0], side2[1], [side2[1][0], side2[1][1], -(self.z-self.r)], [side2[0][0], side2[0][1], -(self.z-self.r)], side2[0]])
                         side3 = Polyline([side3[0], side3[1], [side3[1][0], side3[1][1], -(self.z-self.r)], [side3[0][0], side3[0][1], -(self.z-self.r)], side3[0]])
-                        mesh = self.loft_polylines(side2, side3, False, False)
-                        self._boundary_beams.append(mesh)
-
-
-                        # a = ids[j][0]
-                        # b = ids[j][1]
-
-                        # cutplane0 = Polygon(list(reversed(self.ribs_polylines[i-1][a].points[:-1]))).plane
-                        # cutplane1 = Polygon(self.ribs_polylines[i-1][b].points[:-1]).plane
-
-                        # side2 = self.cut_polyline_plane(side2, cutplane0)
-                        # side2 = self.cut_polyline_plane(side2, cutplane1)
-
-                        # side3 = self.cut_polyline_plane(side3, cutplane0)
-                        # side3 = self.cut_polyline_plane(side3, cutplane1)
-
-                        # mesh = self.loft_polylines(side2, side3, False, False)
-                        # self._boundary_beams.append(mesh)
-
-                         
-
-                # # Diagonals blocks (gap blocks)
-                # corner_gap_blocks = []
-                # ids = [[0,2], [3, 5], [4,7]]
-                # for i in range(3):
-
-                #     a = ids[i][0]
-                #     b = ids[i][1]
-
-                #     cutplane0 = Polygon(list(reversed(self.ribs_polylines[q-1][a].points[:-1]))).plane
-                #     cutplane1 = Polygon(self.ribs_polylines[q-1][b].points[:-1]).plane
-
-                #     points = []
-
-                #     polyline = self.cut_polyline_plane(gap_blocks_polyline, cutplane0)
-                #     polyline = self.cut_polyline_plane(polyline, cutplane1)
-
-                #     for p in polyline:
-                #         points.append(Point(p[0],p[1],0))
-
-                #     polyline = self.cut_polyline_plane(gap_blocks_polyline_front, cutplane0)
-                #     polyline = self.cut_polyline_plane(polyline, cutplane1)
-
-                #     for p in list(reversed(polyline)):
-                #         points.append(Point(p[0],p[1],0))
-                    
-                #     polygon0 = Polygon(points)
-                #     polygon1 = polygon0.translated(Vector(0, 0, -self.bm))
-                #     gap_block_mesh = self.loft_polylines(Polyline(polygon0.points), Polyline(polygon1.points))
-                #     corner_gap_blocks.append(gap_block_mesh)
-
-                # self._column_head_gap_blocks.append(corner_gap_blocks)
-                    
+                        mesh = self.loft_polylines(side2, side3)
+                        self._boundary_beams.append(mesh)                   
 
         return self._boundary_beams
 
