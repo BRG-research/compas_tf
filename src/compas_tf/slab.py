@@ -50,16 +50,13 @@ class FloorSkeleton:
         self._rib_meshes = None  # List per quarter: [[mesh, mesh, ...], ...]
         self._tsection_meshes = None  # List per quarter: [[mesh, mesh, ...], ...]
         self._surface_meshes = None  # List per quarter: [[mesh, mesh, ...], ...]
-        self._column_head_top_blocks = None  # Top block meshes per corner
-        self._column_head_gap_blocks = None  # Gap block meshes per corner: [[mesh, mesh, mesh], ...]
+        self._column_head_top_blocks = None
+        self._column_head_gap_blocks = None
 
-        self.temp = []
-
-        self.model = Model() # Model with discrete elements
+        self.model = Model()
 
     @property
     def pt(self):
-
         if self._pt is None:
             self._pt = [
                 # Oculus points
@@ -136,7 +133,6 @@ class FloorSkeleton:
 
     @property
     def pb(self):
-
         if self._pb is None:
             self._pb = [
                 # Oculus points
@@ -179,10 +175,8 @@ class FloorSkeleton:
 
     @property
     def axes(self):
-
         if self._axes is None:
-           
-            # Central axis to position recangle beams
+            # Central axis to position rectangle beams
             # Beams are mapped to mesh edges
             # Beams have planes at the longest faces
 
@@ -257,7 +251,6 @@ class FloorSkeleton:
                     extended_axes[i].append(line)
             
             self._axes = extended_axes
-            # self._axes = axes
 
         return self._axes
 
@@ -643,12 +636,10 @@ class FloorSkeleton:
 
                 self._column_head_gap_blocks.append(corner_gap_blocks)
 
-        
         return self._column_heads
 
     @property
     def lofted_lines_from_parabolas(self):
-
         lofted_lines = []
 
         for q in range(len(self.boundary_parabolas)):
@@ -975,8 +966,7 @@ class FloorSkeleton:
         # Ensure dependencies are computed first
         _ = self.surface_meshes  # populates surface_edge_polylines
         _ = self.tsection_meshes  # populates tsection_edge_polylines
-        
-        ids = [[0,2], [3, 5], [4,7]]
+
         if self._boundary_beams is None:
             self._boundary_beams = []
 
@@ -1004,38 +994,22 @@ class FloorSkeleton:
 
                         # t-section
                         top_left, bottom_left, top_right, bottom_right = self.surface_edge_polylines[i][j]
- 
-                        
-                        plane0offset = Plane(top_left[-2], -Vector(0,0,1).cross(top_left.lines[0].direction)).offset(self.t)
-                        plane1offset = Plane(bottom_left[-2], Vector(0,0,1).cross(bottom_left.lines[0].direction)).offset(self.t)
-                        # self.temp.append(PlaneIntersect.plane_rectangle(plane0offset,200)[0])
-                        # self.temp.append(PlaneIntersect.plane_rectangle(plane1offset,200)[0])
-                        # self.temp.append(PlaneIntersect.plane_rectangle(plane0offset,200)[1])
-                        # self.temp.append(PlaneIntersect.plane_rectangle(plane1offset,200)[1])
+                        plane0offset = Plane(top_left[-2], -Vector(0, 0, 1).cross(top_left.lines[0].direction)).offset(self.t)
+                        plane1offset = Plane(bottom_left[-2], Vector(0, 0, 1).cross(bottom_left.lines[0].direction)).offset(self.t)
 
+                        side2 = Polyline([polyline1[j], polyline1[j + 1]])
+                        side3 = Polyline([polyline2[j], polyline2[j + 1]])
+                        p0 = (polyline1[j] + polyline1[j + 1]) * 0.5
+                        p1 = (polyline2[j] + polyline2[j + 1]) * 0.5
+                        plane0 = Plane(p0, Vector(0, 0, 1).cross(polyline1[j + 1] - polyline1[j]))
+                        plane1 = Plane(p1, -Vector(0, 0, 1).cross(polyline2[j + 1] - polyline2[j]))
 
-                        side2 = Polyline([polyline1[j], polyline1[j+1]])
-                        side3 = Polyline([polyline2[j], polyline2[j+1]])
-                        p0 = (polyline1[j]+polyline1[j+1])*0.5
-                        p1 = (polyline2[j]+polyline2[j+1])*0.5
-                        plane0 = Plane(p0, Vector(0,0,1).cross(polyline1[j+1]-polyline1[j]))
-                        plane1 = Plane(p1, -Vector(0,0,1).cross(polyline2[j+1]-polyline2[j]))
-                        # self.temp.append(PlaneIntersect.plane_rectangle(plane0)[0])
-                        # self.temp.append(PlaneIntersect.plane_rectangle(plane1)[0])
-                        # self.temp.append(PlaneIntersect.plane_rectangle(plane0)[1])
-                        # self.temp.append(PlaneIntersect.plane_rectangle(plane1)[1])
                         top_left = PolylineCut.cut_by_plane(top_left, plane0)
                         top_left = PolylineCut.cut_by_plane(top_left, plane1)
                         bottom_left = PolylineCut.cut_by_plane(bottom_left, plane0)
                         bottom_left = PolylineCut.cut_by_plane(bottom_left, plane1)
                         side2 = Polyline([top_left[0], bottom_left[0]])
                         side3 = Polyline([top_left[1], bottom_left[1]])
-                        # side2 = Polyline([top_left[0], bottom_left[0], [bottom_left[0][0], bottom_left[0][1], -(self.z-self.r)], [top_left[0][0], top_left[0][1], -(self.z-self.r)], top_left[0]])
-                        # side3 = Polyline([top_left[1], bottom_left[1], [bottom_left[1][0], bottom_left[1][1], -(self.z-self.r)], [top_left[1][0], top_left[1][1], -(self.z-self.r)], top_left[1]])
-                        # self.temp.append(top_left)
-                        # self.temp.append(bottom_left)
-                        # self.temp.append(side2)
-                        # self.temp.append(side3)
 
                         side2 = PolylineCut.cut_by_plane(side2, plane0offset)
                         side2 = PolylineCut.cut_by_plane(side2, plane1offset)
@@ -1077,8 +1051,6 @@ class FloorSkeleton:
                 self._edge_beam_meshes.append(edge_beam_mesh)
 
         return self._edge_beam_meshes
-
-
 
 
 
@@ -1151,22 +1123,16 @@ for corner_gap_blocks in floor_skeleton._column_head_gap_blocks:
         column_heads_gap_blocks.add(gap_block, hide_coplanaredges=True)
 
 # Add quarter slabs with ribs, T-sections, surfaces
-for q in range(1, 5):  # Quarters 1-4
+for q in range(1, 5):
     ribs_group, tsections_group, surfaces_group = quarter_groups[q]
-    
-    # Rib meshes
+
     for rib_mesh in floor_skeleton.rib_meshes[q]:
         ribs_group.add(rib_mesh, hide_coplanaredges=True)
-    
-    # T-section meshes
+
     for tsection_mesh in floor_skeleton.tsection_meshes[q]:
         tsections_group.add(tsection_mesh, hide_coplanaredges=True)
-    
-    # Surface meshes
+
     for surface_mesh in floor_skeleton.surface_meshes[q]:
         surfaces_group.add(surface_mesh, hide_coplanaredges=True)
-
-for item in floor_skeleton.temp:
-    viewer.scene.add(item)
 
 viewer.show()
