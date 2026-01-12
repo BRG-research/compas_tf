@@ -1,7 +1,6 @@
 # from typing import Optional
 from typing import Union
 
-from compas.data import Data
 from compas.datastructures import Mesh
 from compas.geometry import Brep
 from compas_model.modifiers import Modifier
@@ -20,7 +19,6 @@ class SolidDifferenceModifier(Modifier):
     @property
     def __data__(self) -> dict:
         return {"frame": self.frame}
-
 
     def apply(
         self,
@@ -41,13 +39,13 @@ class SolidDifferenceModifier(Modifier):
 
         """
 
-        from compas_cgal.booleans import boolean_difference_mesh_mesh
         from compas.geometry import Polyhedron
+        from compas_cgal.booleans import boolean_difference_mesh_mesh
 
         SOURCE = source.modelgeometry.to_vertices_and_faces(triangulated=True)
         TARGET = targetgeometry.to_vertices_and_faces(triangulated=True)
 
-        V, F = boolean_difference_mesh_mesh(TARGET,SOURCE)
+        V, F = boolean_difference_mesh_mesh(TARGET, SOURCE)
         shape = Polyhedron(V.tolist(), F.tolist())
         shape = shape.to_mesh()
 

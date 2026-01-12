@@ -1,11 +1,10 @@
 from typing import Optional
 
 from compas.geometry import Frame
-from compas.geometry import Point
 from compas.geometry import Plane
+from compas.geometry import Point
 from compas.geometry import Transformation
 from compas_model.elements.element import Element
-
 
 
 class SliceElement(Element):
@@ -69,4 +68,3 @@ class SliceElement(Element):
 
         """
         return self.frame.point
-

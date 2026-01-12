@@ -1,7 +1,6 @@
 # from typing import Optional
 from typing import Union
 
-from compas.data import Data
 from compas.datastructures import Mesh
 from compas.geometry import Brep
 from compas_model.modifiers import Modifier
@@ -20,7 +19,6 @@ class SliceModifier(Modifier):
     @property
     def __data__(self) -> dict:
         return {"frame": self.frame}
-
 
     def apply(
         self,
@@ -41,8 +39,6 @@ class SliceModifier(Modifier):
 
         """
 
-
         positive, negative = targetgeometry.slice(source.modelgeometry)
-
 
         return negative

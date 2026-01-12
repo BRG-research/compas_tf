@@ -1,11 +1,10 @@
 from typing import Optional
 
+from compas.datastructures import Mesh
 from compas.geometry import Frame
 from compas.geometry import Point
-from compas.datastructures import Mesh
 from compas.geometry import Transformation
 from compas_model.elements.element import Element
-
 
 
 class Solid(Element):
@@ -63,4 +62,3 @@ class Solid(Element):
 
         """
         return self.mesh.centroid
-

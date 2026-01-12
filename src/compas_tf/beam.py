@@ -4,8 +4,8 @@ from compas.datastructures import Mesh
 from compas.geometry import Box
 from compas.geometry import Frame
 from compas.geometry import Line
-from compas.geometry import Point
 from compas.geometry import Plane
+from compas.geometry import Point
 from compas.geometry import Transformation
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
@@ -76,15 +76,13 @@ class BeamElement(Element):
         super().__init__(transformation=transformation, features=features, name=name)
         self._box = Box.from_width_height_depth(width, length, depth)
 
-        self._box.frame = Frame(point=[0,0, self._box.zsize / 2], xaxis=[1, 0, 0], yaxis=[0, 1, 0])
+        self._box.frame = Frame(point=[0, 0, self._box.zsize / 2], xaxis=[1, 0, 0], yaxis=[0, 1, 0])
 
     @property
-    def length_plane0() -> Plane:
-        plane = Plane.worldYZ().offset(self.width*0.5)
+    def length_plane0(self) -> Plane:
+        plane = Plane.worldYZ().offset(self.width * 0.5)
         plane.transform(self.transformation)
         return plane
-
-        
 
     @property
     def box(self) -> Box:
@@ -206,14 +204,11 @@ class BeamElement(Element):
     # Custom implementations
     # =============================================================================
     def get_long_lines(self):
-
-        line0 = Line(self.box.corner(0), self.box.corner(4)) # Bottom
-        line1 = Line(self.box.corner(1), self.box.corner(5)) # Top
-        line2 = Line(self.box.corner(2), self.box.corner(6)) # Top
-        line3 = Line(self.box.corner(3), self.box.corner(7)) # Bottom
+        line0 = Line(self.box.corner(0), self.box.corner(4))  # Bottom
+        line1 = Line(self.box.corner(1), self.box.corner(5))  # Top
+        line2 = Line(self.box.corner(2), self.box.corner(6))  # Top
+        line3 = Line(self.box.corner(3), self.box.corner(7))  # Bottom
         lines = [line2, line1, line3, line0]
         for line in lines:
             line.transform(self.transformation)
         return lines
-
-    

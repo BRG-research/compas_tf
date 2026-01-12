@@ -7,13 +7,19 @@ Classes:
 - PlaneIntersect: Plane intersection operations
 """
 
-from compas.geometry import (
-    Point, Vector, Line, Polygon, Polyline, Frame, Plane,
-    intersection_line_plane, intersection_plane_plane_plane,
-    intersection_plane_plane, intersection_segment_plane,
-)
-from compas.geometry import earclip_polygon
 from compas.datastructures import Mesh
+from compas.geometry import Frame
+from compas.geometry import Line
+from compas.geometry import Plane
+from compas.geometry import Point
+from compas.geometry import Polygon
+from compas.geometry import Polyline
+from compas.geometry import Vector
+from compas.geometry import earclip_polygon
+from compas.geometry import intersection_line_plane
+from compas.geometry import intersection_plane_plane
+from compas.geometry import intersection_plane_plane_plane
+from compas.geometry import intersection_segment_plane
 
 
 def _remove_duplicate_points(points, tolerance=1e-6):
