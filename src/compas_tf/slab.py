@@ -1,32 +1,13 @@
-from compas.geometry import Point, Vector, Line, Polygon, Polyline, Rotation, Scale, Frame, Plane, Transformation, Box, Projection, Translation
+from compas.geometry import Point, Vector, Line, Polygon, Polyline, Plane, Projection
 from compas.datastructures import Mesh
-from compas.geometry import intersection_line_line, intersection_line_plane, intersection_plane_plane_plane, midpoint_point_point, intersection_plane_plane, intersection_segment_segment, intersection_segment_plane
-from compas.geometry import earclip_polygon
-import math
+from compas.geometry import intersection_line_line, intersection_line_plane, midpoint_point_point, intersection_segment_segment
 from compas_viewer import Viewer
 from compas_viewer.config import Config
-from numpy import radians
-from compas_tf.beam import BeamElement
-from compas_tf.plate import PlateElement
-from compas_tf.slicer import SliceElement
-from compas_tf.solid import Solid
-from compas_tf.slicemodifier import SliceModifier
-from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 from compas_model.models import Model
-from compas.itertools import pairwise
 from compas_tf.geometry import PolylineOffset, PolylineCut, PolylineLoft, PlaneIntersect
 
 
 class FloorSkeleton:
-    """
-    [ ] - Create points representing the low poly geometry of the floor.
-    [ ] - Create mesh
-    [ ] - Create Beam elements and and map them to edges
-    [ ] - From face representation extract beam long planes
-    [ ] - Create parabolas for cuts
-    [ ] - From parabolas make extrusion lines that later will cross by mesh face beam plaes
-    
-    """
 
     def __init__(self, xy = 3000, z = 650, r = 453, o = 1000, t = 40, t_panels = 40, bb = 250):
         self.xy = xy # Half size of the floor
