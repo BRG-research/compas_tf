@@ -151,8 +151,8 @@ class FloorBuilder:
             proj_dir3 = Vector.Zaxis().cross(axes[-1].direction)
 
             target_planes = self.target_planes
-            xform10 = Projection.from_plane_and_direction(target_planes[1].offset(-self.thick * 0.5), proj_dir0)
-            xform20 = Projection.from_plane_and_direction(target_planes[2].offset(self.thick * 0.5), proj_dir3)
+            xform10 = Projection.from_plane_and_direction(target_planes[1], proj_dir0)
+            xform20 = Projection.from_plane_and_direction(target_planes[2], proj_dir3)
 
             parabola0 = self.boundary_parabolas[0]
             parabola1 = parabola0.transformed(xform10)
@@ -163,12 +163,11 @@ class FloorBuilder:
 
             self._rib_parabolas = [parabola0, parabola1, parabola2, parabola3]
         return self._rib_parabolas
-
+    
     @property
-    def cut_planes(self):
-        """Cut planes for trimming geometry. Also computes corner_points."""
-        if self._cut_planes is None:
-
+    def column_head_points(self):
+        """Corner profile points (pts, pts_offset) for column head."""
+        if self._corner_pts is None:
             # Find corner intersection and create 4 points/planes along axes
             points, axis_planes = [], []
             for i in range(4):
@@ -192,8 +191,15 @@ class FloorBuilder:
             pts_offset[3] = axis_planes[3].closest_point(pts_offset[2])
             pts_offset = [-Vector.Zaxis() * self.height + p for p in pts_offset]
 
+        return pts, pts_offset
+
+    @property
+    def cut_planes(self):
+        """Cut planes for trimming geometry. Also computes corner_points."""
+        if self._cut_planes is None:
+
             # Cache corner points for column_head
-            self._corner_pts = (pts, pts_offset)
+            pts, pts_offset = self.column_head_points
 
             # Build cut planes: 3 boundary offsets + 3 corner planes
             boundary_planes = [Plane(self.axes[j].midpoint, Vector.Zaxis().cross(self.axes[j].direction)) for j in range(3, len(self.axes) - 1)]
@@ -205,22 +211,17 @@ class FloorBuilder:
         return self._cut_planes
 
     @property
-    def corner_points(self):
-        """Corner profile points (pts, pts_offset) for column head."""
-        if self._corner_pts is None:
-            self.cut_planes  # triggers computation
-        return self._corner_pts
-
-    @property
     def end_planes(self):
         """End planes for each rib (needed for column head)."""
         if self._end_planes is None:
-
+            rib_parabolas = self.rib_parabolas
             planes = []
             for i in range(4):
-                p0 = Point(self.rib_parabolas[i][0][0], self.rib_parabolas[i][0][1], 0)
-                p1 = Point(self.rib_parabolas[i][-1][0], self.rib_parabolas[i][-1][1], 0)
+                id = i if i < 3 else -1
+                p0 = Point(self.axes[id].start[0], self.axes[id].start[1], 0)
+                p1 = Point(self.axes[id].end[0], self.axes[id].end[1], 0)
+                if i == 3:
+                    p0, p1 = p1, p0
                 planes.append(Plane(p0, p0 - p1).offset(-200))
             self._end_planes = planes
-
         return self._end_planes

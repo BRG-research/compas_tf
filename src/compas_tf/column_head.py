@@ -89,7 +89,7 @@ class ColumnHeadElement(Element):
 
         Returns: (head_element, top_element)
         """
-        pts, pts_offset = builder.corner_points
+        pts, pts_offset = builder.column_head_points
         corner = builder.corner_point
         end_planes = builder.end_planes
         head_h = builder.head_h

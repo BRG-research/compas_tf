@@ -199,8 +199,8 @@ class FloorSkeleton:
         proj_dir3 = Vector.Zaxis().cross(axes[3].direction)
 
         target_planes = self.target_planes
-        xform10 = Projection.from_plane_and_direction(target_planes[1].offset(-self.thick * 0.5), proj_dir0)
-        xform20 = Projection.from_plane_and_direction(target_planes[2].offset(self.thick * 0.5), proj_dir3)
+        xform10 = Projection.from_plane_and_direction(target_planes[1], proj_dir0)
+        xform20 = Projection.from_plane_and_direction(target_planes[2], proj_dir3)
 
         parabola0 = self.boundary_parabolas[0]
         parabola1 = parabola0.transformed(xform10)
@@ -276,11 +276,13 @@ class FloorSkeleton:
         if self._end_planes is not None:
             return self._end_planes
 
-        rib_parabolas = self.rib_parabolas
         planes = []
         for i in range(4):
-            p0 = Point(rib_parabolas[i][0][0], rib_parabolas[i][0][1], 0)
-            p1 = Point(rib_parabolas[i][-1][0], rib_parabolas[i][-1][1], 0)
+            id = i if i < 3 else -1
+            p0 = Point(self.axes[id].start[0], self.axes[id].start[1], 0)
+            p1 = Point(self.axes[id].end[0], self.axes[id].end[1], 0)
+            if i == 3:
+                p0, p1 = p1, p0
             planes.append(Plane(p0, p0 - p1).offset(-200))
 
         self._end_planes = planes
@@ -394,7 +396,7 @@ class FloorSkeleton:
             return self._q1_rib_meshes, self._q1_rib_polys
 
         offsets_ids = [0, 1, 1, 2]
-        offset_pairs = [(0.5, -0.5), (0.0, 1.0), (0.0, -1.0), (0.5, -0.5)]
+        offset_pairs = [(0.5, -0.5), (0.5, -0.5), (0.5, -0.5), (0.5, -0.5)]
         rib_parabolas = self.rib_parabolas
         target_planes = self.target_planes
         end_planes = self.end_planes

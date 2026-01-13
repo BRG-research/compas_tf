@@ -47,7 +47,7 @@ from compas_tf.geometry import PlaneIntersect
 
 # 1. Create builder (standalone, no FloorSkeleton dependency)
 builder = FloorBuilder()
-pts, pts_offset = builder.corner_points
+pts, pts_offset = builder.column_head_points
 # 2. Build column head elements
 head_element, top_element = ColumnHeadElement.build(builder)
 model.add_element(head_element)
