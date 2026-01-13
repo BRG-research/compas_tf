@@ -1,0 +1,226 @@
+from compas.geometry import Line
+from compas.geometry import Plane
+from compas.geometry import Point
+from compas.geometry import Polygon
+from compas.geometry import Polyline
+from compas.geometry import Projection
+from compas.geometry import Vector
+from compas.geometry import intersection_line_line
+from compas.geometry import intersection_line_plane
+from compas.geometry import intersection_segment_segment
+
+from compas_tf.geometry import BezierCurve
+from compas_tf.geometry import PolylineOffset
+
+
+class FloorBuilder:
+    """Provides geometry parameters for building column heads and edge beams."""
+
+    def __init__(self, size=3000, height=650, rise=453, oculus=1000, thick=40, beam_w=200, column_head_scale=460, column_head_inclination=180):
+        self.size = size
+        self.height = height
+        self.rise = rise
+        self.static_h = height - rise
+        self.oculus = oculus
+        self.beam_w = beam_w
+        self.thick = thick
+        self.head_h = 0
+
+        self._oculus_pts = None
+        self._q1_poly = None
+        self._axes = None
+        self._bound_parabolas = None
+        self._rib_parabolas = None
+        self._target_planes = None
+        self._cut_planes = None
+        self._corner_pts = None
+        self._end_planes = None
+        self._column_head_scale = column_head_scale
+        self._column_head_inclination = column_head_inclination
+
+    @property
+    def oculus_points(self):
+        if self._oculus_pts is None:
+            self._oculus_pts = [
+                Point(0, -self.oculus, 0),
+                Point(self.oculus, 0, 0),
+                Point(0, self.oculus, 0),
+                Point(-self.oculus, 0, 0),
+            ]
+        return self._oculus_pts
+
+    @property
+    def quarter_polygon(self):
+        if self._q1_poly is None:
+            self._q1_poly = Polygon([
+                Point(-self.size, -self.size, 0),
+                Point(0, -self.size, 0),
+                self.oculus_points[0],
+                self.oculus_points[3],
+                Point(-self.size, 0, 0),
+            ])
+        return self._q1_poly
+
+    @property
+    def corner_point(self):
+        return self.quarter_polygon.points[0]
+
+    @property
+    def boundary_points(self):
+        """Points along quarter boundary: edge -> oculus -> oculus -> edge."""
+        q1 = self.quarter_polygon
+        return [q1[i] for i in [1, 2, 3, 4]]
+
+    @property
+    def axes(self):
+        if self._axes is None:
+            polygon = self.quarter_polygon
+            offset_polygon_full = PolylineOffset.offset_polygon(polygon, self.thick)
+            offset_polygon_half = PolylineOffset.offset_polygon(polygon, self.thick * 0.5)
+            axes_lines = list(offset_polygon_half.lines)
+
+            corner = offset_polygon_half.points[0]
+            axes_lines.insert(1, Line(corner, offset_polygon_full.points[2]))
+            axes_lines.insert(2, Line(corner, offset_polygon_full.points[3]))
+
+            extended_axes = []
+            for j in range(len(axes_lines)):
+                p0, p1 = axes_lines[j].start, axes_lines[j].end
+                direction = (p1 - p0).unitized()
+                line = Line(direction * self.thick * 4 + p1, -direction * self.thick * 4 + p0)
+
+                intersection_points = []
+                for k in range(len(polygon)):
+                    seg = Line(polygon[k], polygon[(k + 1) % len(polygon)])
+                    pt = intersection_segment_segment(line, seg)
+                    if pt[0] is not None:
+                        intersection_points.append(pt[0])
+
+                line = Line(intersection_points[0], intersection_points[1])
+                _, cpt0 = axes_lines[j].closest_point(line.start, True)
+                _, cpt1 = axes_lines[j].closest_point(line.end, True)
+                if cpt0 > cpt1:
+                    line = Line(line.end, line.start)
+                extended_axes.append(line)
+
+            # Reorder: [0,1,2,3] = boundary ribs, [4,5,6] = oculus connections
+            self._axes = [extended_axes[i] for i in [0, 1, 2, 6, 3, 4, 5]]
+        return self._axes
+
+    @property
+    def boundary_parabolas(self):
+        """Two boundary parabolas for Q1 (axes[0] and axes[3])."""
+        if self._bound_parabolas is None:
+            divisions = 7
+            q1_parabolas = []
+            axes = self.axes
+
+            for j in [0, 3]:
+                if j == 0:
+                    p0 = Vector(0, 0, -self.height) + axes[j].start
+                    p1 = Vector(0, 0, -self.static_h) + axes[j].midpoint
+                    p2 = Vector(0, 0, -self.static_h) + axes[j].end
+                else:
+                    p0 = Vector(0, 0, -self.static_h) + axes[j].start
+                    p1 = Vector(0, 0, -self.static_h) + axes[j].midpoint
+                    p2 = Vector(0, 0, -self.height) + axes[j].end
+
+                bezier = BezierCurve.quadratic_points(p0, p1, p2, divisions)
+                self.head_h = abs(bezier[-2][2]) * 0.5 - 3.5
+                q1_parabolas.append(bezier)
+
+            self._bound_parabolas = q1_parabolas
+        return self._bound_parabolas
+
+    @property
+    def target_planes(self):
+        """Planes perpendicular to axes[0:4], at axis start points."""
+        if self._target_planes is None:
+            axes = self.axes
+            self._target_planes = [Plane(axes[i].start, Vector.Zaxis().cross(axes[i].direction)) for i in range(4)]
+            self._target_planes[-1] = Plane(self._target_planes[-1].point, -self._target_planes[-1].normal)  # invert last plane normal
+        return self._target_planes
+
+    @property
+    def rib_parabolas(self):
+        """Four rib parabolas for Q1."""
+        if self._rib_parabolas is None:
+            axes = self.axes
+            proj_dir0 = Vector.Zaxis().cross(axes[0].direction)
+            proj_dir3 = Vector.Zaxis().cross(axes[3].direction)
+
+            target_planes = self.target_planes
+            xform10 = Projection.from_plane_and_direction(target_planes[1].offset(-self.thick * 0.5), proj_dir0)
+            xform20 = Projection.from_plane_and_direction(target_planes[2].offset(self.thick * 0.5), proj_dir3)
+
+            parabola0 = self.boundary_parabolas[0]
+            parabola1 = parabola0.transformed(xform10)
+            parabola3 = self.boundary_parabolas[1]
+            parabola2 = parabola3.transformed(xform20)
+            parabola2.points.reverse()
+            parabola3.points.reverse()
+
+            self._rib_parabolas = [parabola0, parabola1, parabola2, parabola3]
+        return self._rib_parabolas
+
+    @property
+    def cut_planes(self):
+        """Cut planes for trimming geometry. Also computes corner_points."""
+        if self._cut_planes is None:
+            axes = self.axes
+
+            # Find corner intersection and create 4 points/planes along axes
+            intersection = intersection_line_line(axes[0], axes[3])[0]
+            points, axis_planes = [], []
+            for i in range(4):
+                point = Point(*(axes[i].direction * self._column_head_scale + intersection))
+                points.append(point)
+                plane = Plane(point, axes[i].direction.cross(Vector.Zaxis()))
+                axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
+
+            # Find corner profile points via middle_line intersections
+            middle_line = Line(points[1], points[2])
+            pts = [
+                axis_planes[0].closest_point(Point(*intersection_line_plane(middle_line, axis_planes[1]))),
+                Point(*intersection_line_plane(middle_line, axis_planes[1])),
+                Point(*intersection_line_plane(middle_line, axis_planes[2])),
+                axis_planes[3].closest_point(Point(*intersection_line_plane(middle_line, axis_planes[2]))),
+            ]
+
+            # Offset points: move along axis direction, then down by height
+            pts_offset = [axes[i].direction * self._column_head_inclination + pts[i] for i in range(4)]
+            pts_offset[0] = axis_planes[0].closest_point(pts_offset[1])
+            pts_offset[3] = axis_planes[3].closest_point(pts_offset[2])
+            pts_offset = [-Vector.Zaxis() * self.height + p for p in pts_offset]
+
+            # Cache corner points for column_head
+            self._corner_pts = (pts, pts_offset)
+
+            # Build cut planes: 3 boundary offsets + 3 corner planes
+            boundary_planes = [Plane(axes[j].midpoint, Vector.Zaxis().cross(axes[j].direction)) for j in range(4, len(axes))]
+            offset_planes = [plane.offset(self.thick * 0.5) for plane in boundary_planes]
+            normals = [-(pts[i + 1] - pts[i]).cross(pts_offset[i] - pts[i]) for i in range(3)]
+            corner_planes = [Plane((pts[i] + pts[i + 1]) * 0.5, normals[i]) for i in range(3)]
+            self._cut_planes = offset_planes + corner_planes
+
+        return self._cut_planes
+
+    @property
+    def corner_points(self):
+        """Corner profile points (pts, pts_offset) for column head."""
+        if self._corner_pts is None:
+            self.cut_planes  # triggers computation
+        return self._corner_pts
+
+    @property
+    def end_planes(self):
+        """End planes for each rib (needed for column head)."""
+        if self._end_planes is None:
+            rib_parabolas = self.rib_parabolas
+            planes = []
+            for i in range(4):
+                p0 = Point(rib_parabolas[i][0][0], rib_parabolas[i][0][1], 0)
+                p1 = Point(rib_parabolas[i][-1][0], rib_parabolas[i][-1][1], 0)
+                planes.append(Plane(p0, p0 - p1).offset(-200))
+            self._end_planes = planes
+        return self._end_planes

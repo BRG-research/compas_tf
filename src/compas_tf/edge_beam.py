@@ -2,10 +2,19 @@ from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
+from compas.geometry import Plane
 from compas.geometry import Point
+from compas.geometry import Polygon
+from compas.geometry import Polyline
+from compas.geometry import Projection
+from compas.geometry import Reflection
 from compas.geometry import Transformation
+from compas.geometry import Vector
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
+
+from compas_tf.geometry import PolylineCut
+from compas_tf.geometry import PolylineLoft
 
 
 class EdgeBeamFeature(Feature):
@@ -13,24 +22,7 @@ class EdgeBeamFeature(Feature):
 
 
 class EdgeBeamElement(Element):
-    """Class representing an edge beam element.
-
-    Parameters
-    ----------
-    mesh : :class:`compas.datastructures.Mesh`
-        The mesh geometry of the edge beam.
-    transformation : :class:`compas.geometry.Transformation`, optional
-        The transformation of the edge beam.
-    features : list[:class:`EdgeBeamFeature`], optional
-        The features of the edge beam.
-    name : str, optional
-        The name of the edge beam.
-
-    Attributes
-    ----------
-    mesh : :class:`compas.datastructures.Mesh`
-        The mesh geometry.
-    """
+    """Edge beam at floor perimeter connecting adjacent quarters."""
 
     @property
     def __data__(self) -> dict:
@@ -74,3 +66,49 @@ class EdgeBeamElement(Element):
 
     def compute_point(self) -> Point:
         return Point(*self.modelgeometry.centroid())
+
+    @staticmethod
+    def build(builder):
+        """Build single edge beam. Rotate the result yourself for other edges."""
+        # Get builder data
+        parabola = builder.boundary_parabolas[0]
+        axis = builder.axes[0]
+        cut_boundary = builder.cut_planes[0]
+        cut_corner = builder.cut_planes[3]
+        thick = builder.thick
+        head_h = builder.head_h
+        beam_w = builder.beam_w
+
+        # Offset parabola
+        normal = Vector.Zaxis().cross(axis.direction)
+        proj = parabola.translated(normal * thick * -0.5)
+
+        # Cut by planes
+        cut = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj, cut_corner), cut_boundary)
+
+        # Extend and cut by end plane
+        p0 = Point(parabola[0][0], parabola[0][1], 0)
+        p1 = Point(parabola[-1][0], parabola[-1][1], 0)
+        end_plane = Plane(p0, p0 - p1).offset(-200)
+        line = PolylineCut.cut_by_plane(Polyline([cut[0], cut[-1]]).extended([378, 0]), end_plane, flip=True)
+
+        # Build step profile: top (z=0) + mid (z=-head_h) + curve
+        xy_proj = Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis())
+        mid_proj = Projection.from_plane_and_direction(Plane([0, 0, -head_h], [0, 0, 1]), Vector.Zaxis())
+
+        top = line.transformed(xy_proj)
+        mid = PolylineCut.cut_by_plane(line.transformed(mid_proj), cut_corner, flip=True)
+
+        poly = Polyline(list(reversed(top.points)) + mid.points + cut.points)
+        poly.append(poly.points[0])
+
+        # Merge with reflected copy
+        pts0 = poly.points[1:-1]
+        reflection = Reflection.from_plane(Plane.worldYZ())
+        pts1 = Polyline(poly.transformed(reflection).points[1:-1])
+        merged = Polyline(list(pts0) + list(reversed(pts1.points)))
+
+        polygon = Polygon(merged.points)
+        mesh = PolylineLoft.to_mesh(merged, merged.translated(polygon.normal * beam_w))
+
+        return EdgeBeamElement(mesh=mesh, name="edge_beam")
