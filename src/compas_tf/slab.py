@@ -155,8 +155,7 @@ class FloorSkeleton:
                     line = Line(line.end, line.start)
                 extended_axes.append(line)
 
-            # Reorder: [0,1,2,3] = boundary ribs, [4,5,6] = oculus connections
-            self._axes = [extended_axes[i] for i in [0, 1, 2, 6, 3, 4, 5]]
+            self._axes = extended_axes
             self.steps["03_axes"] = self._axes
         return self._axes
 
@@ -171,7 +170,7 @@ class FloorSkeleton:
             q1_parabolas = []
             axes = self.axes
 
-            for j in [0, 3]:
+            for j in [0, len(axes) - 1]:
                 if j == 0:
                     p0 = Vector(0, 0, -self.height) + axes[j].start
                     p1 = Vector(0, 0, -self.static_h) + axes[j].midpoint
@@ -226,7 +225,6 @@ class FloorSkeleton:
 
         axes = self.axes
         planes = [Plane(axes[i].midpoint, Vector.Zaxis().cross(axes[i].direction)) for i in range(4)]
-        planes[-1] = Plane(planes[-1].point, -planes[-1].normal)  # invert last plane normal
         self._target_planes = planes
         self.steps["06_target_planes"] = planes
         return self._target_planes
@@ -238,7 +236,7 @@ class FloorSkeleton:
             return self._bound_planes
 
         axes = self.axes
-        planes = [Plane(axes[j].midpoint, Vector.Zaxis().cross(axes[j].direction)) for j in range(4, len(axes))]
+        planes = [Plane(axes[j].midpoint, Vector.Zaxis().cross(axes[j].direction)) for j in range(3, len(axes) - 1)]
         self._bound_planes = planes
         self.steps["07_axis_boundary_planes"] = planes
         return self._bound_planes
@@ -251,7 +249,7 @@ class FloorSkeleton:
 
         axes = self.axes
         planes = [Plane(axes[j].start, Vector.Zaxis().cross(axes[j].direction)) for j in range(3)]
-        planes.append(Plane(axes[3].start, -Vector.Zaxis().cross(axes[3].direction)))
+        planes.append(Plane(axes[-1].start, -Vector.Zaxis().cross(axes[-1].direction)))
         self._axis_planes = planes
         self.steps["08_axis_planes"] = planes
         return self._axis_planes
@@ -348,7 +346,7 @@ class FloorSkeleton:
     def _compute_corner_geometry(self):
         """Compute corner geometry for cut planes and column heads (quarter 1)."""
         axes = self.axes
-        intersection = intersection_line_line(axes[0], axes[3])[0]
+        intersection = intersection_line_line(axes[0], axes[-1])[0]
 
         scale, angle_inclination = 460, 180
         points, planes = [], []

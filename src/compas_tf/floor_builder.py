@@ -103,19 +103,18 @@ class FloorBuilder:
                     line = Line(line.end, line.start)
                 extended_axes.append(line)
 
-            # Reorder: [0,1,2,3] = boundary ribs, [4,5,6] = oculus connections
-            self._axes = [extended_axes[i] for i in [0, 1, 2, 6, 3, 4, 5]]
+            self._axes = extended_axes
         return self._axes
 
     @property
     def boundary_parabolas(self):
-        """Two boundary parabolas for Q1 (axes[0] and axes[3])."""
+        """Two boundary parabolas for Q1 (first and last axes)."""
         if self._bound_parabolas is None:
             divisions = 7
             q1_parabolas = []
             axes = self.axes
 
-            for j in [0, 3]:
+            for j in [0, len(axes) - 1]:
                 if j == 0:
                     p0 = Vector(0, 0, -self.height) + axes[j].start
                     p1 = Vector(0, 0, -self.static_h) + axes[j].midpoint
@@ -138,7 +137,6 @@ class FloorBuilder:
         if self._target_planes is None:
             axes = self.axes
             self._target_planes = [Plane(axes[i].start, Vector.Zaxis().cross(axes[i].direction)) for i in range(4)]
-            self._target_planes[-1] = Plane(self._target_planes[-1].point, -self._target_planes[-1].normal)  # invert last plane normal
         return self._target_planes
 
     @property
@@ -147,7 +145,7 @@ class FloorBuilder:
         if self._rib_parabolas is None:
             axes = self.axes
             proj_dir0 = Vector.Zaxis().cross(axes[0].direction)
-            proj_dir3 = Vector.Zaxis().cross(axes[3].direction)
+            proj_dir3 = Vector.Zaxis().cross(axes[-1].direction)
 
             target_planes = self.target_planes
             xform10 = Projection.from_plane_and_direction(target_planes[1].offset(-self.thick * 0.5), proj_dir0)
@@ -170,7 +168,7 @@ class FloorBuilder:
             axes = self.axes
 
             # Find corner intersection and create 4 points/planes along axes
-            intersection = intersection_line_line(axes[0], axes[3])[0]
+            intersection = intersection_line_line(axes[0], axes[-1])[0]
             points, axis_planes = [], []
             for i in range(4):
                 point = Point(*(axes[i].direction * self._column_head_scale + intersection))
@@ -197,7 +195,7 @@ class FloorBuilder:
             self._corner_pts = (pts, pts_offset)
 
             # Build cut planes: 3 boundary offsets + 3 corner planes
-            boundary_planes = [Plane(axes[j].midpoint, Vector.Zaxis().cross(axes[j].direction)) for j in range(4, len(axes))]
+            boundary_planes = [Plane(axes[j].midpoint, Vector.Zaxis().cross(axes[j].direction)) for j in range(3, len(axes) - 1)]
             offset_planes = [plane.offset(self.thick * 0.5) for plane in boundary_planes]
             normals = [-(pts[i + 1] - pts[i]).cross(pts_offset[i] - pts[i]) for i in range(3)]
             corner_planes = [Plane((pts[i] + pts[i + 1]) * 0.5, normals[i]) for i in range(3)]
