@@ -294,6 +294,37 @@ class PolylineCut:
         return Polyline(points)
 
 
+class BezierCurve:
+    """Bezier curve generation utilities."""
+
+    @staticmethod
+    def quadratic_points(p0, p1, p2, divisions=7):
+        """Generate points along a quadratic Bezier curve (parabola).
+
+        Parameters
+        ----------
+        p0 : :class:`compas.geometry.Point`
+            Start point.
+        p1 : :class:`compas.geometry.Point`
+            Control point.
+        p2 : :class:`compas.geometry.Point`
+            End point.
+        divisions : int
+            Number of points to generate along the curve.
+
+        Returns
+        -------
+        :class:`compas.geometry.Polyline`
+            Polyline of points along the Bezier curve.
+        """
+        points = []
+        for k in range(divisions):
+            t = k / (divisions - 1)
+            pt = (1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t**2 * p2
+            points.append(pt)
+        return Polyline(points)
+
+
 class PolylineLoft:
     """Lofting polylines into meshes."""
 

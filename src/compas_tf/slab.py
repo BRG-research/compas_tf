@@ -1,3 +1,4 @@
+from compas import json_dump  # noqa: F401
 from compas.datastructures import Mesh
 from compas.geometry import Line
 from compas.geometry import Plane
@@ -9,11 +10,10 @@ from compas.geometry import Vector
 from compas.geometry import intersection_line_line
 from compas.geometry import intersection_line_plane
 from compas.geometry import intersection_segment_segment
-from compas.geometry import midpoint_point_point
-from compas_model.models import Model
 from compas_viewer import Viewer
 from compas_viewer.config import Config
 
+from compas_tf.geometry import BezierCurve
 from compas_tf.geometry import PlaneIntersect
 from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineLoft
@@ -21,7 +21,7 @@ from compas_tf.geometry import PolylineOffset
 
 
 class FloorSkeleton:
-    def __init__(self, xy=3000, z=650, r=453, o=1000, t=40, t_panels=40, bb=250):
+    def __init__(self, xy=3000, z=650, r=453, o=1000, t=40, bb=250):
         self.xy = xy  # Half size of the floor
         self.z = z  # Total height of the floor
         self.r = r  # Rise of the parabola
@@ -29,17 +29,12 @@ class FloorSkeleton:
         self.o = o  # Half size of the central oculus from the top to bottom points
         self.bb = bb  # the width of the boundary beams
         self._pt = None  # Top points describind the whole floor
-        self._ft = None  # Top points describind the whole floor
-        self._pb = None  # Bottom points describind the whole floor
-        self._fb = None  # Bottom points describind the whole floor
         self._fs = None  # Bottom points describind the whole floor
-        self._mt = None  # Low poly representation of the top mesh for each triangle and quad
         self._ms = None  # Low poly representation of the top mesh for each slab outline
         self._axes = None  # Axes of the floor
         self.bm = 0  # Half of the column head, this is later derived from the parbola points
         self._bp = None  # Two parabolas at the boundary
         self.t = t  # Thickness of the beam elements
-        self.t_panels = t_panels  # Thickness of the panel elements
         self._projected_parabolas = None  # Parabolas for each rib quarter (4 lists)
         self._target_planes = None
         self._axis_boundary_planes = None
@@ -49,14 +44,9 @@ class FloorSkeleton:
         self._offset_axes = None
         self._lofted_lines = None
         self._boundary_beams = None
-        self._column_centers = None  # Cache for column center points
 
         self.ribs_polylines = []
-        self.ribs_tsections = []
-        self.surfaces_polylines = []
-        self.surfaces_lines = []
         self.surface_edge_polylines = []  # [quarter][surface_idx] = [top_left, bottom_left]
-        self.tsection_edge_polylines = []  # [quarter][tsection_idx] = [outer_top, outer_bottom, inner_top, inner_bottom]
 
         # Mesh storage attributes
         self._rib_meshes = None  # List per quarter: [[mesh, mesh, ...], ...]
@@ -64,8 +54,6 @@ class FloorSkeleton:
         self._surface_meshes = None  # List per quarter: [[mesh, mesh, ...], ...]
         self._column_head_top_blocks = None
         self._column_head_gap_blocks = None
-
-        self.model = Model()
 
     @property
     def pt(self):
@@ -90,31 +78,6 @@ class FloorSkeleton:
         return self._pt
 
     @property
-    def ft(self):
-        if self._ft is None:
-            self._ft = [
-                # Oculus face
-                [0, 1, 2, 3],
-                # Quarter 1 faces
-                [4, 5, 0],
-                [4, 0, 3],
-                [4, 3, 11],
-                # Quarter 2 faces
-                [6, 7, 1],
-                [6, 1, 0],
-                [6, 0, 5],
-                # Quarter 3 faces
-                [8, 9, 2],
-                [8, 2, 1],
-                [8, 1, 7],
-                # Quarter 4 faces
-                [10, 11, 3],
-                [10, 3, 2],
-                [10, 2, 9],
-            ]
-        return self._ft
-
-    @property
     def fs(self):
         if self._fs is None:
             self._fs = [
@@ -132,55 +95,10 @@ class FloorSkeleton:
         return self._fs
 
     @property
-    def mt(self):
-        if self._mt is None:
-            self._mt = Mesh.from_vertices_and_faces(self.pt, self.ft)
-        return self._mt
-
-    @property
     def ms(self):
         if self._ms is None:
             self._ms = Mesh.from_vertices_and_faces(self.pt, self.fs)
         return self._ms
-
-    @property
-    def pb(self):
-        if self._pb is None:
-            self._pb = [
-                # Oculus points
-                Point(0, -self.o, -self.s, name="pb_0"),
-                Point(self.o, 0, -self.s, name="pb_1"),
-                Point(0, self.o, -self.s, name="pb_2"),
-                Point(-self.o, 0, -self.s, name="pb_3"),
-                # Perimeter points
-                Point(-self.xy, -self.xy, -self.z, name="pb_4"),
-                Point(0, -self.xy, -self.s, name="pb_5"),
-                Point(self.xy, -self.xy, -self.z, name="pb_6"),
-                Point(self.xy, 0, -self.s, name="pb_7"),
-                Point(self.xy, self.xy, -self.z, name="pb_8"),
-                Point(0, self.xy, -self.s, name="pb_9"),
-                Point(-self.xy, self.xy, -self.z, name="pb_10"),
-                Point(-self.xy, 0, -self.s, name="pb_11"),
-                # Mid points Quarter 1-2-3-4
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[4], self.pt[5])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[4], self.pt[0])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[4], self.pt[3])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[4], self.pt[11])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[6], self.pt[7])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[6], self.pt[1])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[6], self.pt[0])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[6], self.pt[5])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[8], self.pt[9])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[8], self.pt[2])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[8], self.pt[1])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[8], self.pt[7])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[10], self.pt[11])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[10], self.pt[3])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[10], self.pt[2])),
-                Vector(0, 0, -self.s) + Point(*midpoint_point_point(self.pt[10], self.pt[9])),
-            ]
-
-        return self._pb
 
     @property
     def axes(self):
@@ -287,15 +205,9 @@ class FloorSkeleton:
                         p2 = Vector(0, 0, -self.z) + self.axes[i][j].end
                         boundary_parabolas[i].append(Polyline([p0, p1, p2]))
 
-                    # Bezier curve: quadratic Bézier (parabola) formula
-                    points = []
-                    for k in range(divisions):  # e.g. divisions = 7  ->  7 points, 6 segments
-                        t = k / (divisions - 1)  # t in [0, 1]
-                        pt = (1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t**2 * p2
-                        points.append(pt)
-
-                    self.bm = abs(points[-2][2]) * 0.5 - 3.5
-                    boundary_parabolas[i][-1] = Polyline(points)
+                    bezier_polyline = BezierCurve.quadratic_points(p0, p1, p2, divisions)
+                    self.bm = abs(bezier_polyline[-2][2]) * 0.5 - 3.5
+                    boundary_parabolas[i][-1] = bezier_polyline
 
             self._bp = boundary_parabolas
 
@@ -525,7 +437,6 @@ class FloorSkeleton:
         """
         if not hasattr(self, "_column_heads") or self._column_heads is None:
             self._column_heads = []
-            self._column_centers = []  # Store center points for columns
             self._column_head_top_blocks = []
             self._column_head_gap_blocks = []
 
@@ -565,9 +476,6 @@ class FloorSkeleton:
                 xaxis = polyline_taper.lines[0].direction * self.bb
                 yaxis = polyline_taper.lines[-1].direction * self.bb
                 center = polyline_taper[0]
-                # Cache actual center of square (not corner) for element_columns
-                square_center = center + xaxis * 0.5 - yaxis * 0.5
-                self._column_centers.append(square_center)
                 polyline_taper = Polyline(
                     [
                         center,
@@ -639,22 +547,6 @@ class FloorSkeleton:
                 self._column_head_gap_blocks.append(corner_gap_blocks)
 
         return self._column_heads
-
-    @property
-    def lofted_lines_from_parabolas(self):
-        lofted_lines = []
-
-        for q in range(len(self.boundary_parabolas)):
-            if q == 0:
-                continue
-            lofted_lines_0 = PolylineLoft.to_lines(self.rib_parabolas[q][0], self.rib_parabolas[q][1])
-            lofted_lines_1 = PolylineLoft.to_lines(self.rib_parabolas[q][1], self.rib_parabolas[q][2])
-            lofted_lines_2 = PolylineLoft.to_lines(self.rib_parabolas[q][2], self.rib_parabolas[q][3])
-            lofted_lines.append(lofted_lines_0)
-            lofted_lines.append(lofted_lines_1)
-            lofted_lines.append(lofted_lines_2)
-
-        return lofted_lines
 
     @property
     def offset_axes(self):
@@ -818,7 +710,6 @@ class FloorSkeleton:
         """
         if self._tsection_meshes is None:
             self._tsection_meshes = [[]]  # Empty list for index 0
-            self.tsection_edge_polylines = [[]]  # Empty list for index 0
 
             for q in range(len(self.boundary_parabolas)):
                 if q == 0:
@@ -830,7 +721,6 @@ class FloorSkeleton:
                 offsets = [[1], [-1, 1], [-1, 1], [-1]]
                 offsets_ids = [[0], [0, 1], [1, 2], [2]]
                 quarter_meshes = []
-                quarter_tsection_polylines = []
 
                 for i in range(len(self.rib_parabolas[q])):
                     for j in range(len(offsets[i])):
@@ -871,14 +761,7 @@ class FloorSkeleton:
                         tsection_mesh = PolylineLoft.to_mesh(merged_polyline0, merged_polyline1, True)
                         quarter_meshes.append(tsection_mesh)
 
-                        self.ribs_tsections.append(projected_parabola_0)
-                        self.ribs_tsections.append(projected_parabola_1)
-                        self.ribs_tsections.append(cut_parabola0)
-                        self.ribs_tsections.append(cut_parabola1)
-                        quarter_tsection_polylines.append([projected_parabola_0, cut_parabola0, projected_parabola_1, cut_parabola1])
-
                 self._tsection_meshes.append(quarter_meshes)
-                self.tsection_edge_polylines.append(quarter_tsection_polylines)
 
         return self._tsection_meshes
 
@@ -924,9 +807,6 @@ class FloorSkeleton:
                         cut_parabola0 = PolylineCut.cut_by_plane(cut_parabola0, cut_plane_rib, flip=False)
                         cut_parabola1 = PolylineCut.cut_by_plane(cut_parabola1, cut_plane_rib, flip=False)
 
-                        self.surfaces_polylines.append(cut_parabola0)
-                        self.surfaces_polylines.append(cut_parabola1)
-
                         surface_edges.extend([cut_parabola0, cut_parabola1])
 
                 surface_pairs = [surface_edges[i : i + 4] for i in range(0, len(surface_edges), 4)]
@@ -954,7 +834,6 @@ class FloorSkeleton:
     def element_boundary_beams(self):
         # Ensure dependencies are computed first
         _ = self.surface_meshes  # populates surface_edge_polylines
-        _ = self.tsection_meshes  # populates tsection_edge_polylines
 
         if self._boundary_beams is None:
             self._boundary_beams = []
@@ -1037,7 +916,6 @@ class FloorSkeleton:
                 self._edge_beam_meshes.append(edge_beam_mesh)
 
         return self._edge_beam_meshes
-
 
 floor_skeleton = FloorSkeleton()
 

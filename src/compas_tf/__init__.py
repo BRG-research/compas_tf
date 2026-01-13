@@ -10,10 +10,16 @@ from compas_tf.geometry import (
     PolylineLoft,
     PlaneIntersect,
 )
+from compas_tf.edge_beam import EdgeBeamElement, EdgeBeamFeature
+from compas_tf.column_head import ColumnHeadElement, ColumnHeadFeature
 
 __all__ = [
     "PolylineOffset",
     "PolylineCut",
     "PolylineLoft",
     "PlaneIntersect",
+    "EdgeBeamElement",
+    "EdgeBeamFeature",
+    "ColumnHeadElement",
+    "ColumnHeadFeature",
 ]
