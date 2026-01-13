@@ -141,3 +141,6 @@ scripts/
 
 # UV virtual environment
 uv_compas_tf
+
+# Claude temporary files
+tmpclaude-*
