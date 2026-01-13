@@ -1,6 +1,9 @@
 from compas.geometry import Box
 from compas.geometry import Line
 from compas.geometry import Frame
+from compas.geometry import Point
+from compas.geometry import Vector
+from compas.geometry import Plane
 from compas.geometry import Transformation
 from compas.geometry import Translation
 from compas_model.elements.column import ColumnElement
@@ -81,11 +84,38 @@ for i in range(len(pts)):
 
 for axis in builder.axes:
     viewer.scene.add(axis, color=(0, 255, 0), size=5)
-    
+
+points, axis_planes = [], []
+for i in range(4):
+    point = Point(*(builder.axes[i].direction * builder._column_head_scale + builder.corner_axis_point))
+    viewer.scene.add(Line(point, builder.corner_axis_point))
+    points.append(point)
+    plane = Plane(point, builder.axes[i].direction.cross(Vector.Zaxis()))
+    plane = plane.offset(builder.thick * (-0.5 if i > 1 else 0.5))
+    viewer.scene.add(PlaneIntersect.plane_rectangle(plane)[0])
+    viewer.scene.add(PlaneIntersect.plane_rectangle(plane)[1])
+
+geometry = builder.rib_parabolas
+
+for parabola in geometry:
+    viewer.scene.add(parabola, color=(255, 0, 255), size=5)
+
+for end_plane in builder.end_planes:
+    viewer.scene.add(PlaneIntersect.plane_rectangle(end_plane)[0])
+    viewer.scene.add(PlaneIntersect.plane_rectangle(end_plane)[1])
+
+# points, axis_planes = [], []
+# for i in range(4):
+#     point = Point(*(self.axes[i].direction * self._column_head_scale + self.corner_axis_point))
+#     points.append(point)
+#     plane = Plane(point, self.axes[i].direction.cross(Vector.Zaxis()))
+#     axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
+
 
 
 for plane in builder.target_planes:
     viewer.scene.add(PlaneIntersect.plane_rectangle(plane)[0], color=(255, 0, 0), opacity=0.3)
+    viewer.scene.add(PlaneIntersect.plane_rectangle(plane)[1], color=(255, 0, 0), opacity=0.3)
 
 
 viewer.show()

@@ -107,22 +107,25 @@ class FloorBuilder:
         return self._axes
 
     @property
+    def corner_axis_point(self):
+        return intersection_line_line(self.axes[0], self.axes[-1])[0]
+
+    @property
     def boundary_parabolas(self):
         """Two boundary parabolas for Q1 (first and last axes)."""
         if self._bound_parabolas is None:
             divisions = 7
             q1_parabolas = []
-            axes = self.axes
 
-            for j in [0, len(axes) - 1]:
+            for j in [0, len(self.axes) - 1]:
                 if j == 0:
-                    p0 = Vector(0, 0, -self.height) + axes[j].start
-                    p1 = Vector(0, 0, -self.static_h) + axes[j].midpoint
-                    p2 = Vector(0, 0, -self.static_h) + axes[j].end
+                    p0 = Vector(0, 0, -self.height) + self.axes[j].start
+                    p1 = Vector(0, 0, -self.static_h) + self.axes[j].midpoint
+                    p2 = Vector(0, 0, -self.static_h) + self.axes[j].end
                 else:
-                    p0 = Vector(0, 0, -self.static_h) + axes[j].start
-                    p1 = Vector(0, 0, -self.static_h) + axes[j].midpoint
-                    p2 = Vector(0, 0, -self.height) + axes[j].end
+                    p0 = Vector(0, 0, -self.static_h) + self.axes[j].start
+                    p1 = Vector(0, 0, -self.static_h) + self.axes[j].midpoint
+                    p2 = Vector(0, 0, -self.height) + self.axes[j].end
 
                 bezier = BezierCurve.quadratic_points(p0, p1, p2, divisions)
                 self.head_h = abs(bezier[-2][2]) * 0.5 - 3.5
@@ -165,15 +168,13 @@ class FloorBuilder:
     def cut_planes(self):
         """Cut planes for trimming geometry. Also computes corner_points."""
         if self._cut_planes is None:
-            axes = self.axes
 
             # Find corner intersection and create 4 points/planes along axes
-            intersection = intersection_line_line(axes[0], axes[-1])[0]
             points, axis_planes = [], []
             for i in range(4):
-                point = Point(*(axes[i].direction * self._column_head_scale + intersection))
+                point = Point(*(self.axes[i].direction * self._column_head_scale + self.corner_axis_point))
                 points.append(point)
-                plane = Plane(point, axes[i].direction.cross(Vector.Zaxis()))
+                plane = Plane(point, self.axes[i].direction.cross(Vector.Zaxis()))
                 axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
 
             # Find corner profile points via middle_line intersections
@@ -186,7 +187,7 @@ class FloorBuilder:
             ]
 
             # Offset points: move along axis direction, then down by height
-            pts_offset = [axes[i].direction * self._column_head_inclination + pts[i] for i in range(4)]
+            pts_offset = [self.axes[i].direction * self._column_head_inclination + pts[i] for i in range(4)]
             pts_offset[0] = axis_planes[0].closest_point(pts_offset[1])
             pts_offset[3] = axis_planes[3].closest_point(pts_offset[2])
             pts_offset = [-Vector.Zaxis() * self.height + p for p in pts_offset]
@@ -195,7 +196,7 @@ class FloorBuilder:
             self._corner_pts = (pts, pts_offset)
 
             # Build cut planes: 3 boundary offsets + 3 corner planes
-            boundary_planes = [Plane(axes[j].midpoint, Vector.Zaxis().cross(axes[j].direction)) for j in range(3, len(axes) - 1)]
+            boundary_planes = [Plane(self.axes[j].midpoint, Vector.Zaxis().cross(self.axes[j].direction)) for j in range(3, len(self.axes) - 1)]
             offset_planes = [plane.offset(self.thick * 0.5) for plane in boundary_planes]
             normals = [-(pts[i + 1] - pts[i]).cross(pts_offset[i] - pts[i]) for i in range(3)]
             corner_planes = [Plane((pts[i] + pts[i + 1]) * 0.5, normals[i]) for i in range(3)]
@@ -214,11 +215,12 @@ class FloorBuilder:
     def end_planes(self):
         """End planes for each rib (needed for column head)."""
         if self._end_planes is None:
-            rib_parabolas = self.rib_parabolas
+
             planes = []
             for i in range(4):
-                p0 = Point(rib_parabolas[i][0][0], rib_parabolas[i][0][1], 0)
-                p1 = Point(rib_parabolas[i][-1][0], rib_parabolas[i][-1][1], 0)
+                p0 = Point(self.rib_parabolas[i][0][0], self.rib_parabolas[i][0][1], 0)
+                p1 = Point(self.rib_parabolas[i][-1][0], self.rib_parabolas[i][-1][1], 0)
                 planes.append(Plane(p0, p0 - p1).offset(-200))
             self._end_planes = planes
+
         return self._end_planes
