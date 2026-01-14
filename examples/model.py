@@ -2,10 +2,12 @@ from compas.geometry import Box
 from compas.geometry import Line
 from compas.geometry import Frame
 from compas.geometry import Point
+from compas.geometry import Polyline
 from compas.geometry import Vector
 from compas.geometry import Plane
 from compas.geometry import Transformation
 from compas.geometry import Translation
+from compas.geometry import intersection_polyline_plane
 from compas_model.elements.column import ColumnElement
 from compas_model.models import Model
 from compas_viewer.config import Config
@@ -16,10 +18,12 @@ from compas_tf.support import SupportElement
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.column_head import ColumnHeadElement
 from compas_tf.edge_beam import EdgeBeamElement
+from compas_tf.quarter_floor import QuarterFloorElement
+from compas_tf.oculus import OculusElement
 from compas_tf.geometry import PlaneIntersect
 
 # Create a box representing one grid frame unit
-frame_size = 200.0
+frame_size = 220.0
 grid_size = 6000.0
 height = 3000.0
 floor_thickness = 650.0
@@ -45,7 +49,7 @@ for corner_id in box.bottom:
     model.add_element(support)
 
 # 1. Create builder (standalone, no FloorSkeleton dependency)
-builder = FloorBuilder()
+builder = FloorBuilder(size=3000, height=650, rise=453, oculus=1000, thick=40, beam_w=frame_size, column_head_scale=460, column_head_inclination=180)
 pts, pts_offset = builder.column_head_points
 
 # 2. Build column head elements
@@ -80,6 +84,23 @@ for xform in xforms_beams:
     model.add_element(edge_beam)
 
 
+# 4. Build quarter floor elements and add to model
+quarter_result = QuarterFloorElement.build(builder)
+
+for element in quarter_result.rib_elements:
+    model.add_element(element)
+for element in quarter_result.tsection_elements:
+    model.add_element(element)
+for element in quarter_result.surface_elements:
+    model.add_element(element)
+for element in quarter_result.boundary_beam_elements:
+    model.add_element(element)
+
+
+# 5. Build oculus element
+oculus_element = OculusElement.build(builder)
+model.add_element(oculus_element)
+
 
 # Beams
 
@@ -97,47 +118,50 @@ groups = {
     ColumnElement: viewer.scene.add_group("column_group"),
     ColumnHeadElement: viewer.scene.add_group("column_head_group"),
     EdgeBeamElement: viewer.scene.add_group("edge_beam_group"),
+    QuarterFloorElement: viewer.scene.add_group("quarter_floor_group"),
+    OculusElement: viewer.scene.add_group("oculus_group"),
+}
+
+colors = {
+    SupportElement: (0.9, 0.9, 0.9),
+    ColumnElement: (0.9, 0.9, 0.9),
+    ColumnHeadElement: (0.4, 0.4, 0.4),
+    EdgeBeamElement: (0.9, 0.9, 0.9),
+    QuarterFloorElement: (0.6, 0.6, 0.6),
+    OculusElement: (0.9, 0.9, 0.9),
 }
 
 for element in model.elements():
-    groups[type(element)].add(element.modelgeometry, name=element.name, hide_coplanaredges=True)
+    groups[type(element)].add(element.modelgeometry, name=element.name, hide_coplanaredges=True, color=colors[type(element)])
 
-for i in range(len(pts)):
-    line = Line(pts[i], pts_offset[i])
-    viewer.scene.add(line, color=(0, 0, 255), size=5)
 
-for axis in builder.axes:
-    viewer.scene.add(axis, color=(0, 255, 0), size=5)
+polygon, line = PlaneIntersect.plane_rectangle(builder.cut_planes[0])
+# viewer.scene.add(polygon, name="cut_plane")
+# viewer.scene.add(line, name="cut_plane")    
+parabola = builder.rib_parabolas[0]
+parabola = builder.rib_parabolas[0]  # First boundary parabola
+cut_plane = builder.cut_planes[3]  # First cut plane
+result = intersection_polyline_plane(parabola,cut_plane, 1)
+viewer.scene.add(parabola, name="rib_parabola")
+viewer.scene.add(Point(*result[0]), name="rib_parabola")
 
-points, axis_planes = [], []
-for i in range(4):
-    point = Point(*(builder.axes[i].direction * builder._column_head_scale + builder.corner_axis_point))
-    viewer.scene.add(Line(point, builder.corner_axis_point))
-    points.append(point)
-    plane = Plane(point, builder.axes[i].direction.cross(Vector.Zaxis()))
-    plane = plane.offset(builder.thick * (-0.5 if i > 1 else 0.5))
-    viewer.scene.add(PlaneIntersect.plane_rectangle(plane)[0])
-    viewer.scene.add(PlaneIntersect.plane_rectangle(plane)[1])
+# for plane in builder.end_planes:
+#     polygon, line = PlaneIntersect.plane_rectangle(plane)
+#     viewer.scene.add(polygon, name="end_plane")
+#     viewer.scene.add(line, name="end_plane")
 
-geometry = builder.rib_parabolas
+# print(builder.top_end_planes)
+# for plane in builder.top_end_planes:
+#     polygon, line = PlaneIntersect.plane_rectangle(plane)
+#     viewer.scene.add(polygon, name="end_plane")
+#     viewer.scene.add(line, name="end_plane")
 
-for parabola in geometry:
-    viewer.scene.add(parabola, color=(255, 0, 255), size=5)
 
-for end_plane in builder.end_planes:
-    viewer.scene.add(PlaneIntersect.plane_rectangle(end_plane)[0])
-    viewer.scene.add(PlaneIntersect.plane_rectangle(end_plane)[1])
 
-# points, axis_planes = [], []
-# for i in range(4):
-#     point = Point(*(self.axes[i].direction * self._column_head_scale + self.corner_axis_point))
-#     points.append(point)
-#     plane = Plane(point, self.axes[i].direction.cross(Vector.Zaxis()))
-#     axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
 
-for plane in builder.target_planes:
-    viewer.scene.add(PlaneIntersect.plane_rectangle(plane)[0], color=(255, 0, 0), opacity=0.3)
-    viewer.scene.add(PlaneIntersect.plane_rectangle(plane)[1], color=(255, 0, 0), opacity=0.3)
-
+# polygon, line = PlaneIntersect.plane_rectangle(builder.end_diagonal_plane)
+# # polygon, line = PlaneIntersect.plane_rectangle(Plane(builder.end_planes[1].point, builder.cut_planes[1].normal).offset(-30))
+# viewer.scene.add(polygon, name="end_diagonal_plane")
+# viewer.scene.add(line, name="end_diagonal_plane")
 
 viewer.show()

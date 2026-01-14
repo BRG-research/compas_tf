@@ -11,6 +11,7 @@ from compas.geometry import Transformation
 from compas.geometry import Translation
 from compas.geometry import Vector
 from compas.geometry import intersection_line_plane
+from compas.geometry import intersection_polyline_plane
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
@@ -109,8 +110,15 @@ class ColumnHeadElement(Element):
         beam_w = builder.beam_w
         height = builder.height
 
+        # Column head the bottom height is the intersection between parabola and the cut plane
+        parabola = builder.rib_parabolas[0]  # First boundary parabola
+        cut_plane = builder.cut_planes[3]  # First cut plane
+        result = intersection_polyline_plane(parabola,cut_plane, 1)
+        head_bottom = result[0][2]
+
+
         plane_top = Plane([0, 0, -head_h], Vector.Zaxis())
-        plane_bottom = Plane([0, 0, -head_h * 2], Vector.Zaxis())
+        plane_bottom = Plane([0, 0, head_bottom], Vector.Zaxis())
 
         top_pts = [Point(*intersection_line_plane(Line(pts[i], pts_offset[i]), plane_top)) for i in range(4)]
         bottom_pts = [Point(*intersection_line_plane(Line(pts[i], pts_offset[i]), plane_bottom)) for i in range(4)]
@@ -121,12 +129,13 @@ class ColumnHeadElement(Element):
         direction = -polyline_top.lines[0].direction * beam_w + polyline_bottom.lines[-1].direction * beam_w
         corner = direction + corner
 
-        for poly, z_off in [(polyline_top, -head_h), (polyline_bottom, -head_h * 2)]:
+        for poly, z_off in [(polyline_top, -head_h), (polyline_bottom, head_bottom)]:
             poly.append(Vector(0, 0, z_off) + corner)
             poly.points = poly.points[-1:] + poly.points[:-1]
             poly.append(poly[0])
 
-        taper = polyline_bottom.translated(Vector(0, 0, -(height - head_h * 2)))
+        # Bottom rectangle
+        taper = polyline_bottom.translated(Vector(0, 0, -(height + head_bottom)))
         xaxis = taper.lines[0].direction * beam_w
         yaxis = taper.lines[-1].direction * beam_w
         center = taper[0]
@@ -139,19 +148,9 @@ class ColumnHeadElement(Element):
         # Top block
         #############################################################################################
 
-
-        bp = builder.boundary_points
-        stop0 = Plane(builder.corner_point, Vector.Zaxis().cross(bp[0] - builder.corner_point))
-        stop1 = Plane(builder.corner_point, Vector.Zaxis().cross(bp[3] - builder.corner_point))
-        ipoints = PlaneIntersect.intersect_consecutive_planes([stop0] + list(end_planes) + [stop1])
-        
-        top_poly0 = Polyline(ipoints)
-        top_poly0.extend((beam_w, beam_w))
-        top_poly0.insert(0, Point(center[0], center[1], 0))
-        top_poly0.append(top_poly0[0])
-        top_poly1 = top_poly0.translated(Vector(0, 0, -head_h))
-        top_mesh = PolylineLoft.to_mesh(top_poly0, top_poly1)
-
+        top = Polyline(builder.top_corner_block_points + [builder.top_corner_block_points[0]])
+        bottom = top.translated(Vector(0, 0, -head_h))
+        top_mesh = PolylineLoft.to_mesh(top, bottom, True)
         top_mesh.transform(xform)
 
         #############################################################################################

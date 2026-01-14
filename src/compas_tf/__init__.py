@@ -12,6 +12,8 @@ from compas_tf.geometry import (
 )
 from compas_tf.edge_beam import EdgeBeamElement, EdgeBeamFeature
 from compas_tf.column_head import ColumnHeadElement, ColumnHeadFeature
+from compas_tf.quarter_floor import QuarterFloorElement, QuarterFloorFeature, QuarterResult
+from compas_tf.oculus import OculusElement, OculusFeature
 
 __all__ = [
     "PolylineOffset",
@@ -22,4 +24,9 @@ __all__ = [
     "EdgeBeamFeature",
     "ColumnHeadElement",
     "ColumnHeadFeature",
+    "QuarterFloorElement",
+    "QuarterFloorFeature",
+    "QuarterResult",
+    "OculusElement",
+    "OculusFeature",
 ]

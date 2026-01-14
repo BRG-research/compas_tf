@@ -100,10 +100,7 @@ class EdgeBeamElement(Element):
         cut = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj, cut_corner), cut_boundary)
 
         # Extend and cut by end plane
-        p0 = Point(parabola[0][0], parabola[0][1], 0)
-        p1 = Point(parabola[-1][0], parabola[-1][1], 0)
-        end_plane = Plane(p0, p0 - p1).offset(-200)
-        line = PolylineCut.cut_by_plane(Polyline([cut[0], cut[-1]]).extended([378, 0]), end_plane, flip=True)
+        line = PolylineCut.cut_by_plane(Polyline([cut[0], cut[-1]]).extended([1000, 0]), builder.top_end_planes[0], flip=True)
 
         # Build step profile: top (z=0) + mid (z=-head_h) + curve
         xy_proj = Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis())
