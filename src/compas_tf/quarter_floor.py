@@ -18,11 +18,11 @@ from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineLoft
 
 
-class EdgeBeamFeature(Feature):
+class QuarterFloorFeature(Feature):
     pass
 
 
-class EdgeBeamElement(Element):
+class QuarterFloorElement(Element):
     """Edge beam at floor perimeter connecting adjacent quarters."""
 
     @property
@@ -38,7 +38,7 @@ class EdgeBeamElement(Element):
         self,
         mesh: Mesh = None,
         transformation: Optional[Transformation] = None,
-        features: Optional[list[EdgeBeamFeature]] = None,
+        features: Optional[list[QuarterFloorFeature]] = None,
         name: Optional[str] = None,
     ):
         super().__init__(transformation=transformation, features=features, name=name)
@@ -92,37 +92,5 @@ class EdgeBeamElement(Element):
         head_h = builder.head_h
         beam_w = builder.beam_w
 
-        # Offset parabola
-        normal = Vector.Zaxis().cross(axis.direction)
-        proj = parabola.translated(normal * thick * -0.5)
 
-        # Cut by planes
-        cut = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj, cut_corner), cut_boundary)
-
-        # Extend and cut by end plane
-        p0 = Point(parabola[0][0], parabola[0][1], 0)
-        p1 = Point(parabola[-1][0], parabola[-1][1], 0)
-        end_plane = Plane(p0, p0 - p1).offset(-200)
-        line = PolylineCut.cut_by_plane(Polyline([cut[0], cut[-1]]).extended([378, 0]), end_plane, flip=True)
-
-        # Build step profile: top (z=0) + mid (z=-head_h) + curve
-        xy_proj = Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis())
-        mid_proj = Projection.from_plane_and_direction(Plane([0, 0, -head_h], [0, 0, 1]), Vector.Zaxis())
-
-        top = line.transformed(xy_proj)
-        mid = PolylineCut.cut_by_plane(line.transformed(mid_proj), cut_corner, flip=True)
-
-        poly = Polyline(list(reversed(top.points)) + mid.points + cut.points)
-        poly.append(poly.points[0])
-
-        # Merge with reflected copy
-        pts0 = poly.points[1:-1]
-        reflection = Reflection.from_plane(Plane.worldYZ())
-        pts1 = Polyline(poly.transformed(reflection).points[1:-1])
-        merged = Polyline(list(pts0) + list(reversed(pts1.points)))
-
-        polygon = Polygon(merged.points)
-        mesh = PolylineLoft.to_mesh(merged, merged.translated(polygon.normal * beam_w))
-        mesh.transform(xform)
-
-        return EdgeBeamElement(mesh=mesh, name="edge_beam")
+        # return QuarterFloorElement(mesh=mesh, name="edge_beam")

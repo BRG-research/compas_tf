@@ -6,7 +6,9 @@ from compas.geometry import Line
 from compas.geometry import Plane
 from compas.geometry import Point
 from compas.geometry import Polyline
+from compas.geometry import Polygon
 from compas.geometry import Transformation
+from compas.geometry import Translation
 from compas.geometry import Vector
 from compas.geometry import intersection_line_plane
 from compas_model.elements.element import Element
@@ -89,6 +91,17 @@ class ColumnHeadElement(Element):
 
         Returns: (head_element, top_element)
         """
+
+        #############################################################################################
+        # Transformation to origin
+        #############################################################################################
+
+        xform = Translation.from_vector([builder.size+builder.beam_w/2, builder.size+builder.beam_w/2, 0])        
+
+        #############################################################################################
+        # Bottom block
+        #############################################################################################
+
         pts, pts_offset = builder.column_head_points
         corner = builder.corner_point
         end_planes = builder.end_planes
@@ -120,19 +133,40 @@ class ColumnHeadElement(Element):
         taper = Polyline([center, center + xaxis, center + xaxis - yaxis * 0.99, center + xaxis * 0.99 - yaxis, center - yaxis, center])
 
         head_mesh = PolylineLoft.multiple_to_mesh([polyline_top, polyline_bottom, taper])
+        head_mesh.transform(xform)
 
+        #############################################################################################
         # Top block
+        #############################################################################################
+
+
         bp = builder.boundary_points
         stop0 = Plane(builder.corner_point, Vector.Zaxis().cross(bp[0] - builder.corner_point))
         stop1 = Plane(builder.corner_point, Vector.Zaxis().cross(bp[3] - builder.corner_point))
         ipoints = PlaneIntersect.intersect_consecutive_planes([stop0] + list(end_planes) + [stop1])
-
+        
         top_poly0 = Polyline(ipoints)
         top_poly0.extend((beam_w, beam_w))
         top_poly0.insert(0, Point(center[0], center[1], 0))
         top_poly0.append(top_poly0[0])
         top_poly1 = top_poly0.translated(Vector(0, 0, -head_h))
         top_mesh = PolylineLoft.to_mesh(top_poly0, top_poly1)
+
+        top_mesh.transform(xform)
+
+        #############################################################################################
+        # Joints - Holes
+        #############################################################################################
+
+        radius = 20
+        polygon = Polygon.from_sides_and_radius_xy(12, radius)
+        holes = [
+            polygon.transformed(Translation.from_vector([-builder.beam_w/2+radius, -builder.beam_w/2+radius, 0 ])),
+            polygon.transformed(Translation.from_vector([-builder.beam_w/2+radius, builder.beam_w/2-radius, 0 ])),
+            polygon.transformed(Translation.from_vector([builder.beam_w/2-radius, builder.beam_w/2-radius, 0 ])),
+            polygon.transformed(Translation.from_vector([builder.beam_w/2-radius, -builder.beam_w/2+radius, 0 ]))
+        ]
+
 
         head_element = ColumnHeadElement(mesh=head_mesh, name="column_head")
         top_element = ColumnHeadElement(mesh=top_mesh, name="column_head_top")

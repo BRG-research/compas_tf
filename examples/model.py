@@ -11,14 +11,19 @@ from compas_model.models import Model
 from compas_viewer.config import Config
 from compas_viewer.viewer import Viewer
 
+# Column Heads and Edge Beams
 from compas_tf.support import SupportElement
+from compas_tf.floor_builder import FloorBuilder
+from compas_tf.column_head import ColumnHeadElement
+from compas_tf.edge_beam import EdgeBeamElement
+from compas_tf.geometry import PlaneIntersect
 
 # Create a box representing one grid frame unit
 frame_size = 200.0
 grid_size = 6000.0
 height = 3000.0
 floor_thickness = 650.0
-box = Box(frame_size+grid_size, frame_size+grid_size, height+floor_thickness)
+box = Box(frame_size+grid_size, frame_size+grid_size, height+floor_thickness, Frame([0,0,-(height+floor_thickness)*0.5]))
 
 # Model
 model = Model(name="Example Model")
@@ -39,23 +44,42 @@ for corner_id in box.bottom:
     support = ColumnElement(frame_size, frame_size, height-SupportElement.HEIGHT, xform)
     model.add_element(support)
 
-# Column Heads and Edge Beams
-from compas_tf.floor_builder import FloorBuilder
-from compas_tf.column_head import ColumnHeadElement
-from compas_tf.edge_beam import EdgeBeamElement
-from compas_tf.geometry import PlaneIntersect
-
 # 1. Create builder (standalone, no FloorSkeleton dependency)
 builder = FloorBuilder()
 pts, pts_offset = builder.column_head_points
+
 # 2. Build column head elements
-head_element, top_element = ColumnHeadElement.build(builder)
-model.add_element(head_element)
-model.add_element(top_element)
+offset = builder.size+builder.beam_w*0.5
+xforms_columnhead = [
+    Transformation.from_frame(Frame([-offset, -offset, 0],[1,0,0],[0,1,0])),
+    Transformation.from_frame(Frame([offset, -offset, 0],[0,1,0],[-1,0,0])),
+    Transformation.from_frame(Frame([offset, offset, 0],[-1,0,0],[0,-1,0])),
+    Transformation.from_frame(Frame([-offset, offset, 0],[0,-1,0],[1,0,0])),
+]
+
+for xform in xforms_columnhead:
+    head_element, top_element = ColumnHeadElement.build(builder)
+    head_element.transformation = xform
+    top_element.transformation = xform
+    model.add_element(head_element)
+    model.add_element(top_element)
+
 
 # 3. Build edge beam element (single - rotate yourself for others)
-edge_beam = EdgeBeamElement.build(builder)
-model.add_element(edge_beam)
+
+xforms_beams = [
+    Transformation.from_frame(Frame([0, -offset, 0],[1,0,0],[0,1,0])),
+    Transformation.from_frame(Frame([offset, 0, 0],[0,1,0],[-1,0,0])),
+    Transformation.from_frame(Frame([0, offset, 0],[-1,0,0],[0,-1,0])),
+    Transformation.from_frame(Frame([-offset, 0, 0],[0,-1,0],[1,0,0])),
+]
+
+for xform in xforms_beams:
+    edge_beam = EdgeBeamElement.build(builder)
+    edge_beam.transformation = xform
+    model.add_element(edge_beam)
+
+
 
 # Beams
 
@@ -110,8 +134,6 @@ for end_plane in builder.end_planes:
 #     points.append(point)
 #     plane = Plane(point, self.axes[i].direction.cross(Vector.Zaxis()))
 #     axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
-
-
 
 for plane in builder.target_planes:
     viewer.scene.add(PlaneIntersect.plane_rectangle(plane)[0], color=(255, 0, 0), opacity=0.3)
