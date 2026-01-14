@@ -1,3 +1,4 @@
+import os
 from compas.geometry import Box
 from compas.geometry import Line
 from compas.geometry import Frame
@@ -8,6 +9,7 @@ from compas.geometry import Plane
 from compas.geometry import Transformation
 from compas.geometry import Translation
 from compas.geometry import intersection_polyline_plane
+from compas.files import OBJ
 from compas_model.elements.column import ColumnElement
 from compas_model.models import Model
 from compas_viewer.config import Config
@@ -101,11 +103,6 @@ for element in quarter_result.boundary_beam_elements:
 oculus_element = OculusElement.build(builder)
 model.add_element(oculus_element)
 
-
-# Beams
-
-# Floor
-
 # View model
 
 config = Config()
@@ -131,8 +128,18 @@ colors = {
     OculusElement: (0.9, 0.9, 0.9),
 }
 
+# Collect all meshes for viewer and OBJ export
+all_meshes = []
 for element in model.elements():
-    groups[type(element)].add(element.modelgeometry, name=element.name, hide_coplanaredges=True, color=colors[type(element)])
+    mesh = element.modelgeometry
+    all_meshes.append(mesh)
+    groups[type(element)].add(mesh, name=element.name, hide_coplanaredges=True, color=colors[type(element)])
+
+# Export all viewer meshes to a single OBJ file
+obj_filepath = os.path.join(os.path.dirname(__file__), "model_export.obj")
+obj = OBJ(obj_filepath)
+obj.write(all_meshes)
+print(f"Exported {len(all_meshes)} mesh(es) to {obj_filepath}")
 
 
 polygon, line = PlaneIntersect.plane_rectangle(builder.cut_planes[0])
