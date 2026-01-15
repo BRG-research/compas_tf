@@ -1,4 +1,3 @@
-# from typing import Optional
 from typing import Union
 
 from compas.datastructures import Mesh
@@ -7,7 +6,7 @@ from compas_model.modifiers import Modifier
 
 
 class SolidDifferenceModifier(Modifier):
-    """Modifier for slicing a geometry with a frame.
+    """Modifier for boolean difference between two geometries.
 
     Parameters
     ----------
@@ -25,7 +24,7 @@ class SolidDifferenceModifier(Modifier):
         source,
         targetgeometry: Union[Brep, Mesh],
     ) -> Union[Brep, Mesh]:
-        """Apply the interaction to the target geometry.
+        """Apply the boolean difference to the target geometry.
 
         Parameters
         ----------
@@ -38,9 +37,6 @@ class SolidDifferenceModifier(Modifier):
             The modified target geometry.
 
         """
-
-        print("Applying SolidDifferenceModifier...")
-
         from compas.geometry import Polyhedron
         from compas_cgal.booleans import boolean_difference_mesh_mesh
 

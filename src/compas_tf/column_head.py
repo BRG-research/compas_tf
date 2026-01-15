@@ -274,15 +274,18 @@ class ColumnHeadElement(Element):
         for screw in screws[SCREWS_HEAD_COLUMN]:
             interactions.append((screw, head_element))
 
-        # for screw in screws[SCREWS_HEAD_TOP]:
-        #     interactions.append((screw, head_element))
-        #     interactions.append((screw, top_element))
+        for screw in screws[SCREWS_HEAD_TOP]:
+            interactions.append((screw, head_element))
+            interactions.append((screw, top_element))
+        
+        modifiers = []
+        
 
-        # interactions.append((screws[SCREW_HEAD_CONNECTOR], head_element))
-        # interactions.append((screws[SCREW_HEAD_CONNECTOR], connector))
+        modifiers.append((screws[SCREW_HEAD_CONNECTOR], head_element))
+        modifiers.append((screws[SCREW_HEAD_CONNECTOR], connector))
 
-        # for screw in screws[SCREWS_TOP_CONNECTOR]:
-        #     interactions.append((screw, top_element))
-        #     interactions.append((screw, connector))
+        for screw in screws[SCREWS_TOP_CONNECTOR]:
+            modifiers.append((screw, top_element))
+            modifiers.append((screw, connector))
 
-        return head_element, top_element, connections, interactions
+        return head_element, top_element, connections, interactions, modifiers

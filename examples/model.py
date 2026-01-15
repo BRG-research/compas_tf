@@ -68,7 +68,7 @@ xforms_columnhead = [
 ]
 
 for xform in xforms_columnhead:
-    head_element, top_element, connectors, interactions = ColumnHeadElement.build(builder)
+    head_element, top_element, connectors, modifiers, interactions = ColumnHeadElement.build(builder)
     head_element.transformation = xform
     top_element.transformation = xform
     model.add_element(head_element)
@@ -145,9 +145,9 @@ colors = {
     EdgeBeamElement: (0.9, 0.9, 0.9),
     QuarterFloorElement: (0.6, 0.6, 0.6),
     OculusElement: (0.9, 0.9, 0.9),
-    ScrewElement: (0.2, 0.2, 0.8),
-    ConnectorElement: (0.8, 0.2, 0.2),
-    SherpaXL120Element: (0.2, 0.8, 0.2),
+    ScrewElement: (0.8, 0.0, 0.2),
+    ConnectorElement: (0.8, 0.0, 0.2),
+    SherpaXL120Element: (0.8, 0.0, 0.2),
 }
 
 # Collect all meshes for viewer and OBJ export

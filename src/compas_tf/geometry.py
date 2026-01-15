@@ -23,13 +23,16 @@ from compas.geometry import intersection_segment_plane
 
 
 def _remove_duplicate_points(points, tolerance=1e-6):
-    """Remove consecutive duplicate points from a list of points."""
+    """Remove consecutive duplicate points and closing point if it matches first."""
     if not points:
         return points
     cleaned = [points[0]]
     for pt in points[1:]:
         if cleaned[-1].distance_to_point(pt) > tolerance:
             cleaned.append(pt)
+    # Remove closing point if it matches the first point
+    if len(cleaned) > 1 and cleaned[0].distance_to_point(cleaned[-1]) <= tolerance:
+        cleaned = cleaned[:-1]
     return cleaned
 
 
@@ -351,12 +354,6 @@ class PolylineLoft:
         pts0 = _remove_duplicate_points(list(polyline0.points))
         pts1 = _remove_duplicate_points(list(polyline1.points))
 
-        if close:
-            if pts0[0].distance_to_point(pts0[-1]) > 1e-6:
-                pts0.append(pts0[0])
-            if pts1[0].distance_to_point(pts1[-1]) > 1e-6:
-                pts1.append(pts1[0])
-
         polyline0 = Polyline(pts0)
         polyline1 = Polyline(pts1)
 
@@ -364,12 +361,14 @@ class PolylineLoft:
         faces = []
         n0 = len(polyline0)
 
-        for i in range(n0 - 1):
-            faces.append([i, i + 1, i + n0 + 1, i + n0])
+        num_faces = n0 if close else n0 - 1
+        for i in range(num_faces):
+            next_i = (i + 1) % n0
+            faces.append([i, next_i, next_i + n0, i + n0])
 
         if cap:
-            cap_pts0 = polyline0.points[:-1] if close else polyline0.points
-            cap_pts1 = polyline1.points[:-1] if close else polyline1.points
+            cap_pts0 = polyline0.points
+            cap_pts1 = polyline1.points
 
             bottom_triangles = earclip_polygon(Polygon(cap_pts0))
             for tri in bottom_triangles:
@@ -405,8 +404,6 @@ class PolylineLoft:
         cleaned_polylines = []
         for polyline in polylines:
             pts = _remove_duplicate_points(list(polyline.points))
-            if close and pts[0].distance_to_point(pts[-1]) > 1e-6:
-                pts.append(pts[0])
             cleaned_polylines.append(Polyline(pts))
 
         vertices = []
@@ -421,19 +418,21 @@ class PolylineLoft:
             n0 = len(cleaned_polylines[p])
             offset0 = offsets[p]
             offset1 = offsets[p + 1]
-            for i in range(n0 - 1):
-                faces.append([offset0 + i, offset0 + i + 1, offset1 + i + 1, offset1 + i])
+            num_faces = n0 if close else n0 - 1
+            for i in range(num_faces):
+                next_i = (i + 1) % n0
+                faces.append([offset0 + i, offset0 + next_i, offset1 + next_i, offset1 + i])
 
         if cap:
             first_polyline = cleaned_polylines[0]
-            cap_pts0 = first_polyline.points[:-1] if close else first_polyline.points
+            cap_pts0 = first_polyline.points
             bottom_triangles = earclip_polygon(Polygon(cap_pts0))
             for tri in bottom_triangles:
                 faces.append([tri[2], tri[1], tri[0]])
 
             last_polyline = cleaned_polylines[-1]
             last_offset = offsets[-1]
-            cap_pts1 = last_polyline.points[:-1] if close else last_polyline.points
+            cap_pts1 = last_polyline.points
             top_triangles = earclip_polygon(Polygon(cap_pts1))
             for tri in top_triangles:
                 faces.append([tri[0] + last_offset, tri[1] + last_offset, tri[2] + last_offset])
