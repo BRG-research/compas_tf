@@ -365,7 +365,7 @@ class PolylineLoft:
         n0 = len(polyline0)
 
         for i in range(n0 - 1):
-            faces.append([i, i + 1, i + n0 + 1, i + n0])
+            faces.append([i, i + n0, i + n0 + 1, i + 1])
 
         if cap:
             cap_pts0 = polyline0.points[:-1] if close else polyline0.points
@@ -422,7 +422,7 @@ class PolylineLoft:
             offset0 = offsets[p]
             offset1 = offsets[p + 1]
             for i in range(n0 - 1):
-                faces.append([offset0 + i, offset0 + i + 1, offset1 + i + 1, offset1 + i])
+                faces.append([offset0 + i, offset1 + i, offset1 + i + 1, offset0 + i + 1])
 
         if cap:
             first_polyline = cleaned_polylines[0]
