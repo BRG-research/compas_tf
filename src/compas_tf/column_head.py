@@ -144,7 +144,7 @@ class ColumnHeadElement(Element):
         center = taper[0]
         taper = Polyline([center, center + xaxis, center + xaxis - yaxis * 0.99, center + xaxis * 0.99 - yaxis, center - yaxis, center])
 
-        head_mesh = PolylineLoft.multiple_to_mesh([polyline_top, polyline_bottom, taper])
+        head_mesh = PolylineLoft.multiple_to_mesh([taper, polyline_bottom, polyline_top])
         head_mesh.transform(xform)
 
         #############################################################################################
@@ -153,7 +153,7 @@ class ColumnHeadElement(Element):
 
         top = Polyline(builder.top_corner_block_points + [builder.top_corner_block_points[0]])
         bottom = top.translated(Vector(0, 0, -head_h))
-        top_mesh = PolylineLoft.to_mesh(top, bottom, True)
+        top_mesh = PolylineLoft.to_mesh(bottom, top, True)
         top_mesh.transform(xform)
 
         #############################################################################################
@@ -265,8 +265,24 @@ class ColumnHeadElement(Element):
         for sherpa in sherpas:
             interactions.append((sherpa, top_element))
 
-        # Screw pairs
+        # Screw interactions by index ranges
+        SCREWS_HEAD_COLUMN = slice(0, 4)       # 4x screws column-head-bottom - column
+        SCREWS_HEAD_TOP = slice(4, 8)          # 4x screws column-head-bottom - column-head-top
+        SCREW_HEAD_CONNECTOR = 8               # 1x screw column-head-bottom - connector
+        SCREWS_TOP_CONNECTOR = slice(9, 11)    # 2x screws column-head-top - connector
 
+        for screw in screws[SCREWS_HEAD_COLUMN]:
+            interactions.append((screw, head_element))
 
+        # for screw in screws[SCREWS_HEAD_TOP]:
+        #     interactions.append((screw, head_element))
+        #     interactions.append((screw, top_element))
+
+        # interactions.append((screws[SCREW_HEAD_CONNECTOR], head_element))
+        # interactions.append((screws[SCREW_HEAD_CONNECTOR], connector))
+
+        # for screw in screws[SCREWS_TOP_CONNECTOR]:
+        #     interactions.append((screw, top_element))
+        #     interactions.append((screw, connector))
 
         return head_element, top_element, connections, interactions

@@ -78,10 +78,12 @@ class ScrewElement(Element):
 
         rectangle0 = Polygon.from_sides_and_radius_xy(4, diameter / 2)
         rectangle1 = Polygon.from_sides_and_radius_xy(4, diameter_head / 2)
+        xform_boolean_tolerance = Translation.from_vector([0, 0, -1])
         xform0 = Translation.from_vector([0, 0, diameter])
         xform1 = Translation.from_vector([0, 0, height])
 
-        polylines = [rectangle1, rectangle1.transformed(xform0), rectangle0.transformed(xform0), rectangle0.transformed(xform1)]
+        polylines = [rectangle1.transformed(xform_boolean_tolerance), rectangle1.transformed(xform0), rectangle0.transformed(xform0), rectangle0.transformed(xform1)]
+        polylines = [rectangle0.transformed(xform_boolean_tolerance), rectangle0.transformed(xform1)]
         self.mesh = PolylineLoft.multiple_to_mesh(polylines)
         self.axis = Line([0, 0, 0], [0, 0, height])
 
