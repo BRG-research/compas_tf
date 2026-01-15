@@ -5,49 +5,47 @@ from compas.geometry import Box
 from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Point
-from compas.geometry import Polygon
 from compas.geometry import Transformation
 from compas_model.elements import Element
 from compas_model.elements.element import Feature
 
-# from compas_model.interactions import BooleanModifier
-# from compas_model.interactions import Modifier
 
-
-class ConnectorFeature(Feature):
+class SherpaXL120Feature(Feature):
     pass
 
 
-class ConnectorElement(Element):
-    """Class representing a beam element with a square section, constructed from the WorldXY Frame.
-    The column is defined in its local frame, where the height corresponds to the Z-Axis, the depth to the Y-Axis, and the width to the X-Axis.
+class SherpaXL120Element(Element):
+    """Class representing a Sherpa XL 120 connector element.
+
+    The connector is defined in its local frame, where the height corresponds to the Z-Axis,
+    the depth to the Y-Axis, and the width to the X-Axis.
     By default, the local frame is set to WorldXY frame.
 
     Parameters
     ----------
     width : float
-        The width of the column.
+        The width of the connector.
     depth : float
-        The depth of the column.
+        The depth of the connector.
     height : float
-        The height of the column.
+        The height of the connector.
     transformation : Optional[:class:`compas.geometry.Transformation`]
-        Transformation applied to the column.
-    features : Optional[list[:class:`compas_model.features.ColumnFeature`]]
-        Features of the column.
+        Transformation applied to the connector.
+    features : Optional[list[:class:`SherpaXL120Feature`]]
+        Features of the connector.
     name : Optional[str]
         If no name is defined, the class name is given.
 
     Attributes
     ----------
     width : float
-        The width of the column.
+        The width of the connector.
     depth : float
-        The depth of the column.
+        The depth of the connector.
     height : float
-        The height of the column.
+        The height of the connector.
     center_line : :class:`compas.geometry.Line`
-        Line axis of the column.
+        Line axis of the connector.
     """
 
     @property
@@ -67,13 +65,12 @@ class ConnectorElement(Element):
         depth: float = 120.0,
         height: float = 410.0,
         transformation: Optional[Transformation] = None,
-        features: Optional[list[ConnectorFeature]] = None,
+        features: Optional[list[SherpaXL120Feature]] = None,
         name: Optional[str] = None,
     ):
         super().__init__(transformation=transformation, features=features, name=name)
         self._box = Box.from_width_height_depth(width, height, depth)
-        self._box.frame = Frame(point=[0, 0, 0], xaxis=[1, 0, 0], yaxis=[0, 1, 0])
-
+        self._box.frame = Frame(point=[width/2, 0, -height/2], xaxis=[1, 0, 0], yaxis=[0, 1, 0])
 
     @property
     def box(self) -> Box:
@@ -196,11 +193,3 @@ class ConnectorElement(Element):
 
         """
         return Point(*self.modelgeometry.centroid())
-
-    # =============================================================================
-    # Modifier methods (WIP)
-    # =============================================================================
-
-    # def _add_modifier_with_beam(self, target_element: "BeamElement", modifier_type: Type[Modifier] = None, **kwargs) -> Modifier:
-    #     # This method applies the boolean modifier for the pair of column and a beam.
-    #     return BooleanModifier(self.elementgeometry.transformed(self.modeltransformation))

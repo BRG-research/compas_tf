@@ -9,9 +9,6 @@ from compas.geometry import Transformation
 from compas_model.elements import Element
 from compas_model.elements.element import Feature
 
-# from compas_model.interactions import BooleanModifier
-# from compas_model.interactions import Modifier
-
 
 class ConnectorFeature(Feature):
     pass
@@ -194,11 +191,3 @@ class ConnectorElement(Element):
 
         """
         return Point(*self.modelgeometry.centroid())
-
-    # =============================================================================
-    # Modifier methods (WIP)
-    # =============================================================================
-
-    # def _add_modifier_with_beam(self, target_element: "BeamElement", modifier_type: Type[Modifier] = None, **kwargs) -> Modifier:
-    #     # This method applies the boolean modifier for the pair of column and a beam.
-    #     return BooleanModifier(self.elementgeometry.transformed(self.modeltransformation))

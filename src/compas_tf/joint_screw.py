@@ -2,18 +2,15 @@ from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
-from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Point
+from compas.geometry import Polygon
 from compas.geometry import Transformation
 from compas.geometry import Translation
 from compas_model.elements import Element
 from compas_model.elements.element import Feature
-from compas.geometry import Polygon
-from compas_tf.geometry import PolylineLoft
 
-# from compas_model.interactions import BooleanModifier
-# from compas_model.interactions import Modifier
+from compas_tf.geometry import PolylineLoft
 
 
 class ScrewFeature(Feature):
@@ -21,43 +18,45 @@ class ScrewFeature(Feature):
 
 
 class ScrewElement(Element):
-    """Class representing a beam element with a square section, constructed from the WorldXY Frame.
-    The column is defined in its local frame, where the height corresponds to the Z-Axis, the depth to the Y-Axis, and the width to the X-Axis.
-    By default, the local frame is set to WorldXY frame.
+    """Class representing a screw connector element.
+
+    The screw has a wider head at the base that tapers to a smaller diameter shaft.
 
     Parameters
     ----------
-    width : float
-        The width of the column.
-    depth : float
-        The depth of the column.
+    diameter : float
+        The diameter of the screw shaft.
+    diameter_head : float
+        The diameter of the screw head.
     height : float
-        The height of the column.
+        The total height of the screw.
     transformation : Optional[:class:`compas.geometry.Transformation`]
-        Transformation applied to the column.
-    features : Optional[list[:class:`compas_model.features.ColumnFeature`]]
-        Features of the column.
+        Transformation applied to the screw.
+    features : Optional[list[:class:`ScrewFeature`]]
+        Features of the screw.
     name : Optional[str]
         If no name is defined, the class name is given.
 
     Attributes
     ----------
-    width : float
-        The width of the column.
-    depth : float
-        The depth of the column.
+    diameter : float
+        The diameter of the screw shaft.
+    diameter_head : float
+        The diameter of the screw head.
     height : float
-        The height of the column.
-    center_line : :class:`compas.geometry.Line`
-        Line axis of the column.
+        The total height of the screw.
+    mesh : :class:`compas.datastructures.Mesh`
+        The mesh geometry of the screw.
+    axis : :class:`compas.geometry.Line`
+        The center axis of the screw.
     """
 
     @property
     def __data__(self) -> dict:
         return {
-            "width": self.box.xsize,
-            "depth": self.box.ysize,
-            "height": self.box.zsize,
+            "diameter": self.diameter,
+            "diameter_head": self.diameter_head,
+            "height": self.height,
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
@@ -65,14 +64,18 @@ class ScrewElement(Element):
 
     def __init__(
         self,
-        diameter: float = 80.0,
-        diameter_head: float = 250.0,
+        diameter: float = 8.0,
+        diameter_head: float = 25.0,
         height: float = 320.0,
         transformation: Optional[Transformation] = None,
         features: Optional[list[ScrewFeature]] = None,
         name: Optional[str] = None,
     ):
         super().__init__(transformation=transformation, features=features, name=name)
+        self.diameter = diameter
+        self.diameter_head = diameter_head
+        self.height = height
+
         rectangle0 = Polygon.from_sides_and_radius_xy(4, diameter / 2)
         rectangle1 = Polygon.from_sides_and_radius_xy(4, diameter_head / 2)
         xform0 = Translation.from_vector([0, 0, diameter])

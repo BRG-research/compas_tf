@@ -14,7 +14,8 @@ class SupportFeature(Feature):
 
 
 class SupportElement(Element):
-    """Class representing a column-base element constructed from a obj file.
+    """Class representing a column-base element constructed from an OBJ file.
+
     Connection type: Sherpa Power Base 150402_PB_L-140-C.
     Details: https://www.sherpa-connector.com/de/produkte/power-base/power-base-c/3391_306_shop_SHERPA-Power-Base-L-140-C.aspx?LNG=de
     Head plate: Ø 106 mm x 12 mm
@@ -23,26 +24,21 @@ class SupportElement(Element):
 
     Parameters
     ----------
-    mesh : :class:`compas.datastructures.Mesh`
-        The base mesh of the column base.
     transformation : :class:`compas.geometry.Transformation`, optional
-        The transformation of the plate.
-    features : list[:class:`PlateFeature`], optional
-        The features of the plate.
+        The transformation of the support element.
+    features : list[:class:`SupportFeature`], optional
+        The features of the support element.
     name : str, optional
-        The name of the plate.
+        The name of the support element.
 
     Attributes
     ----------
-    polygon : :class:`compas.geometry.Polygon`
-        The base polygon of the plate.
-    bottom : :class:`compas.geometry.Polygon`
-        The base polygon of the plate.
-    top : :class:`compas.geometry.Polygon`
-        The top polygon of the plate.
-    thickness : float
-        The total offset thickness above and blow the polygon
-
+    mesh : :class:`compas.datastructures.Mesh`
+        The mesh geometry loaded from the OBJ file.
+    top_polygon : :class:`compas.geometry.Polygon`
+        The top polygon of the support (circular, Ø 106 mm).
+    bottom_polygon : :class:`compas.geometry.Polygon`
+        The bottom polygon of the support (square, 140 x 140 mm).
     """
 
     DATA_DIR = Path(__file__).parent.parent.parent / "data"
@@ -108,34 +104,3 @@ class SupportElement(Element):
 
     def compute_point(self) -> Point:
         return Point(*self.modelgeometry.centroid())
-    
-    def bottom_polygon(self) -> Polygon:
-        """The top polygon of the column base.
-
-        Returns
-        -------
-        :class:`compas.geometry.Polygon`
-        """
-        aabb = self.compute_aabb()
-        bv = aabb.bottom
-        aabb_polygon = Polygon(aabb.corner(bv[0]), aabb.corner(bv[1]), aabb.corner(bv[2]), aabb.corner(bv[3]))
-        xform = Transformation.from_frame(aabb_polygon.frame)
-        bottom_polygon = Polygon.from_rectangle(140, 140)
-        bottom_polygon.transform(xform)
-        return bottom_polygon
-    
-    def top_polygon(self) -> Polygon:
-        """The top polygon of the column base.
-
-        Returns
-        -------
-        :class:`compas.geometry.Polygon`
-        """
-        aabb = self.compute_aabb()
-        bv = aabb.top
-        aabb_polygon = Polygon(aabb.corner(bv[0]), aabb.corner(bv[1]), aabb.corner(bv[2]), aabb.corner(bv[3]))
-        xform = Transformation.from_frame(aabb_polygon.frame)
-        self.top_polygon = Polygon.from_sides_and_radius_xy(32, 106*0.5)
-        self.top_polygon.transform(xform)
-        return self.top_polygon
-        

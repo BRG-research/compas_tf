@@ -25,9 +25,7 @@ class SliceElement(Element):
     @property
     def __data__(self) -> dict:
         return {
-            "width": self.box.xsize,
-            "depth": self.box.ysize,
-            "length": self.box.zsize,
+            "frame": self._frame,
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
