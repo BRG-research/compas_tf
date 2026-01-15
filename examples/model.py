@@ -23,6 +23,10 @@ from compas_tf.edge_beam import EdgeBeamElement
 from compas_tf.quarter_floor import QuarterFloorElement
 from compas_tf.oculus import OculusElement
 from compas_tf.geometry import PlaneIntersect
+from compas_tf.joint_screw import ScrewElement
+from compas_tf.joint_connector import ConnectorElement
+from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 # Create a box representing one grid frame unit
 frame_size = 220.0
@@ -64,11 +68,19 @@ xforms_columnhead = [
 ]
 
 for xform in xforms_columnhead:
-    head_element, top_element = ColumnHeadElement.build(builder)
+    head_element, top_element, connectors, interactions = ColumnHeadElement.build(builder)
     head_element.transformation = xform
     top_element.transformation = xform
     model.add_element(head_element)
     model.add_element(top_element)
+
+    for connector in connectors:
+        connector.transformation = xform * connector.transformation
+        model.add_element(connector)
+
+    for interaction in interactions:
+        model.add_modifier(interaction[0], interaction[1], SolidDifferenceModifier() )
+        
 
 
 # 3. Build edge beam element (single - rotate yourself for others)
@@ -103,12 +115,14 @@ for element in quarter_result.boundary_beam_elements:
 oculus_element = OculusElement.build(builder)
 model.add_element(oculus_element)
 
+
+
 # View model
 
 config = Config()
 config.unit = "mm"
 viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"  # "lighted", "wireframe", "shaded", "ghosted"
+viewer.renderer.rendermode = "ghosted"  # "lighted", "wireframe", "shaded", "ghosted"
 
 groups = {
     SupportElement: viewer.scene.add_group("support_group"),
@@ -117,6 +131,11 @@ groups = {
     EdgeBeamElement: viewer.scene.add_group("edge_beam_group"),
     QuarterFloorElement: viewer.scene.add_group("quarter_floor_group"),
     OculusElement: viewer.scene.add_group("oculus_group"),
+    ScrewElement: viewer.scene.add_group("screw_group"),
+    ConnectorElement: viewer.scene.add_group("connector_group"),
+    SherpaXL120Element: viewer.scene.add_group("sherpaxl120_group"),
+
+
 }
 
 colors = {
@@ -126,6 +145,9 @@ colors = {
     EdgeBeamElement: (0.9, 0.9, 0.9),
     QuarterFloorElement: (0.6, 0.6, 0.6),
     OculusElement: (0.9, 0.9, 0.9),
+    ScrewElement: (0.2, 0.2, 0.8),
+    ConnectorElement: (0.8, 0.2, 0.2),
+    SherpaXL120Element: (0.2, 0.8, 0.2),
 }
 
 # Collect all meshes for viewer and OBJ export

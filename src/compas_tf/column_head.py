@@ -4,20 +4,23 @@ from compas.datastructures import Mesh
 from compas.geometry import Box
 from compas.geometry import Line
 from compas.geometry import Plane
+from compas.geometry import Frame
 from compas.geometry import Point
 from compas.geometry import Polyline
 from compas.geometry import Polygon
 from compas.geometry import Transformation
 from compas.geometry import Translation
+from compas.geometry import Reflection
 from compas.geometry import Vector
 from compas.geometry import intersection_line_plane
 from compas.geometry import intersection_polyline_plane
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
+
 from compas_tf.geometry import PlaneIntersect
 from compas_tf.geometry import PolylineLoft
-
+import math
 
 class ColumnHeadFeature(Feature):
     pass
@@ -154,20 +157,116 @@ class ColumnHeadElement(Element):
         top_mesh.transform(xform)
 
         #############################################################################################
-        # Joints - Holes
+        # Joints
         #############################################################################################
 
-        radius = 20
-        polygon = Polygon.from_sides_and_radius_xy(12, radius)
-        holes = [
-            polygon.transformed(Translation.from_vector([-builder.beam_w/2+radius, -builder.beam_w/2+radius, 0 ])),
-            polygon.transformed(Translation.from_vector([-builder.beam_w/2+radius, builder.beam_w/2-radius, 0 ])),
-            polygon.transformed(Translation.from_vector([builder.beam_w/2-radius, builder.beam_w/2-radius, 0 ])),
-            polygon.transformed(Translation.from_vector([builder.beam_w/2-radius, -builder.beam_w/2+radius, 0 ]))
-        ]
+        # 4x screws column-head-bottom - column
+        screw_frames = []
+        origin = Point(-builder.size - builder.beam_w / 2, -builder.size - builder.beam_w / 2, -builder.head_h)
+        offset = 40
+        corner_offsets = [(-1, -1), (1, -1), (1, 1), (-1, 1)]
+        
+        for sx, sy in corner_offsets:
+            x = sx * (builder.beam_w / 2 - offset)
+            y = sy * (builder.beam_w / 2 - offset)
+            frame = Frame(origin + Vector(x, y, 0), -Vector.Xaxis(), Vector.Yaxis())
+            screw_frames.append(frame)
+
+        # 4x screws - column-head.bottom - column-head-top
+        taper_point0 = taper[1]
+        taper_point1 = polyline_bottom[1]
+        taper_point_025 = taper_point0 + 0.2 * (taper_point1 - taper_point0)
+        taper_point_075 = taper_point0 + 0.8 * (taper_point1 - taper_point0)
+
+        frame0 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_025, taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
+        screw_frames.append(frame0)
+        frame1 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075, taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
+        screw_frames.append(frame1)
+        # OPTIONAL
+        # frame2 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075 + Vector.Yaxis()*(builder.beam_w+builder.thick), taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
+        # screw_frames.append(frame2)
+
+        diagonal_plane = Plane(origin, Vector(1, -1, 0))
+        reflection = Reflection.from_plane(diagonal_plane)
+        frame0_reflected = frame0.transformed(reflection)
+        frame1_reflected = frame1.transformed(reflection)
+        
+        screw_frames.append(Frame(frame0_reflected.point, -frame0_reflected.xaxis, frame0_reflected.yaxis))
+        screw_frames.append(Frame(frame1_reflected.point, -frame1_reflected.xaxis, frame1_reflected.yaxis))
+        # OPTIONAL
+        # frame2_reflected = frame2.transformed(reflection)
+        # frame2_reflected_flipped = Frame(frame2_reflected.point, -frame2_reflected.xaxis, frame2_reflected.yaxis)
+        # screw_frames.append(frame2_reflected_flipped)
+
+        # OPTIONAL Average frame between frame2 and frame2_reflected_flipped
+        # avg_origin = Point((frame2.point.x + frame2_reflected_flipped.point.x) / 2, (frame2.point.y + frame2_reflected_flipped.point.y) / 2, (frame2.point.z + frame2_reflected_flipped.point.z) / 2)
+        # avg_frame = Frame(avg_origin, Vector.Xaxis(), Vector.Yaxis())
+        # screw_frames.append(avg_frame)
+
+        # 1x connector - collumn-head-bottom - collumn-head-top
+        connector_frame = Frame(origin)
+
+        # 1x screw - collumn-head-bottom - connector
+        origin = Point(-builder.size - builder.beam_w / 2, -builder.size - builder.beam_w / 2, -builder.height)
+        screw_frames.append(Frame(origin, Vector.Xaxis(), Vector.Yaxis()))
+
+        # 2x screws - column-head-top - connector
+        screw_diameter = 8
+        origin_side = Point(-builder.size - builder.beam_w, -builder.size - builder.beam_w/2 - screw_diameter, -builder.head_h+40-screw_diameter)
+        screw_frames.append(Frame(origin_side, -Vector.Zaxis(), Vector.Yaxis()))
+        screw_frames.append(screw_frames[-1].rotated(math.pi/2, Vector.Zaxis(), origin).translated(Vector(0, 0, +screw_diameter)))
+
+        # 3x sherpaXL120 - column-head-top
+        sherpa_frames = []
+        for i in range(3):
+            p1 = top[i+1]
+            p0 = top[i]
+            frame = Frame((p0+p1)*0.5, p1 - p0, Vector.Zaxis().cross(p1 - p0))
+            sherpa_frames.append(frame)
 
 
+
+
+
+
+
+        #############################################################################################
+        # Create the elements
+        #############################################################################################
         head_element = ColumnHeadElement(mesh=head_mesh, name="column_head")
         top_element = ColumnHeadElement(mesh=top_mesh, name="column_head_top")
 
-        return head_element, top_element
+        from compas_tf.joint_screw import ScrewElement
+        from compas_tf.joint_connector import ConnectorElement
+        from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+
+        
+
+        screws = [
+            ScrewElement(transformation=xform * Transformation.from_frame(frame), name=f"screw_columnhead_{i}")
+            for i, frame in enumerate(screw_frames)
+        ]
+        
+        connector = ConnectorElement(transformation=xform * Transformation.from_frame(connector_frame), name="connector_columnhead")
+        
+        sherpas = []
+        for i, frame in enumerate(sherpa_frames):
+            sherpa = SherpaXL120Element(transformation=xform * Transformation.from_frame(frame), name=f"sherpaxl120_columnhead_{i}")
+            sherpas.append(sherpa)
+
+        connections = screws + [connector] + sherpas
+
+        #############################################################################################
+        # Create interactions
+        #############################################################################################
+        interactions = []
+        interactions.append((connector, head_element))
+        interactions.append((connector, top_element))
+        for sherpa in sherpas:
+            interactions.append((sherpa, top_element))
+
+        # Screw pairs
+
+
+
+        return head_element, top_element, connections, interactions

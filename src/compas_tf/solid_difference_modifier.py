@@ -39,6 +39,8 @@ class SolidDifferenceModifier(Modifier):
 
         """
 
+        print("Applying SolidDifferenceModifier...")
+
         from compas.geometry import Polyhedron
         from compas_cgal.booleans import boolean_difference_mesh_mesh
 
