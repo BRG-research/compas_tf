@@ -105,7 +105,7 @@ class FloorBuilder:
                 if cpt0 > cpt1:
                     line = Line(line.end, line.start)
                 extended_axes.append(line)
-
+                print(len(extended_axes))
             self._axes = extended_axes
         return self._axes
 
