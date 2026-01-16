@@ -1,26 +1,23 @@
+import math
 from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
+from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Plane
-from compas.geometry import Frame
 from compas.geometry import Point
 from compas.geometry import Polyline
-from compas.geometry import Polygon
+from compas.geometry import Reflection
 from compas.geometry import Transformation
 from compas.geometry import Translation
-from compas.geometry import Reflection
 from compas.geometry import Vector
 from compas.geometry import intersection_line_plane
 from compas.geometry import intersection_polyline_plane
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
-
-from compas_tf.geometry import PlaneIntersect
 from compas_tf.geometry import PolylineLoft
-import math
 
 class ColumnHeadFeature(Feature):
     pass

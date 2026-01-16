@@ -261,7 +261,9 @@ class FloorBuilder:
 
 
         if self._end_planes is None:
-            rib_parabolas = self.rib_parabolas
+            # NOTE: Accessing rib_parabolas triggers boundary_parabolas which computes head_h.
+            # Do NOT remove - head_h computation depends on this side effect.
+            _ = self.rib_parabolas  # noqa: F841
             planes = []
             for i in range(4):
                 id = i if i < 3 else -1

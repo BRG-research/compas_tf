@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 from compas.datastructures import Mesh
@@ -7,7 +8,7 @@ from compas.geometry import Polygon
 from compas.geometry import Transformation
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
-from pathlib import Path
+
 
 class SupportFeature(Feature):
     pass

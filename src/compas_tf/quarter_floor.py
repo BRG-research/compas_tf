@@ -12,11 +12,10 @@ from compas.geometry import Vector
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
+from compas_tf.geometry import PlaneIntersect
 from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PolylineOffset
-from compas_tf.geometry import PlaneIntersect
-
 
 # ==========================================================================
 # Result Container
@@ -98,7 +97,6 @@ def _build_ribs(builder):
     offset_pairs = [(0.5, -0.5), (0.5, -0.5), (0.5, -0.5), (0.5, -0.5)]
     rib_parabolas = builder.rib_parabolas
     target_planes = builder.target_planes
-    end_planes = builder.end_planes
     cut_planes = builder.cut_planes
     thick = builder.thick
     head_h = builder.head_h
