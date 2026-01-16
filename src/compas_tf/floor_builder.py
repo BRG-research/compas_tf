@@ -105,8 +105,14 @@ class FloorBuilder:
                 if cpt0 > cpt1:
                     line = Line(line.end, line.start)
                 extended_axes.append(line)
-                print(len(extended_axes))
+
+            # OPTIONAL: Move axes outward a bit to avoid double cut on the plate
+            direction0 = Vector.Zaxis().cross(extended_axes[1].direction).unitized()*self.thick*0.5
+            extended_axes[1].translate(-direction0)
+            direction1 = Vector.Zaxis().cross(extended_axes[2].direction).unitized()*self.thick*0.5
+            extended_axes[2].translate(direction1)
             self._axes = extended_axes
+
         return self._axes
 
     @property
@@ -131,7 +137,8 @@ class FloorBuilder:
                     p2 = Vector(0, 0, -self.height) + self.axes[j].end
 
                 bezier = BezierCurve.quadratic_points(p0, p1, p2, divisions)
-                self.head_h = abs(bezier[-2][2]) * 0.845 - 3.5
+                # self.head_h = abs(bezier[-2][2]) * 0.845 - 3.5
+                self.head_h = abs(bezier[-2][2]) * 0.84 - 3.5
                 
                 # self.head_h += 100
                 
@@ -181,7 +188,12 @@ class FloorBuilder:
                 point = Point(*(self.axes[i].direction * self._column_head_scale + self.corner_axis_point))
                 points.append(point)
                 plane = Plane(point, self.axes[i].direction.cross(Vector.Zaxis()))
-                axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
+
+                # OPTIONAL: second check is need when axis are offset:
+                if i == 0 or i == 3:
+                    axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
+                else:
+                    axis_planes.append(plane.offset(self.thick * (-1.0 if i > 1 else 1.0)))
 
             # Find corner profile points via middle_line intersections
             middle_line = Line(points[1], points[2])
@@ -277,6 +289,7 @@ class FloorBuilder:
 
     @property
     def end_diagonal_plane(self):
-        plane = Plane(self.corner_point, Vector(-1,-1,0)).offset(-self.thick * 2.27 )
+        # plane = Plane(self.corner_point, Vector(-1,-1,0)).offset(-self.thick * 2.27 )
+        plane = Plane(self.corner_point, Vector(-1,-1,0)).offset(-self.thick * 1.87)
         return plane
     
