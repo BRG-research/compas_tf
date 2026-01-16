@@ -93,7 +93,8 @@ def _compute_lofted_lines(builder, offset_axes):
 
 def _build_ribs(builder):
     """Compute rib meshes and polylines for quarter 1 (from slab.py:393-442)."""
-    offsets_ids = [0, 1, 1, 2]
+    offsets_ids_boundary = [0, 0, 2, 2]  # Front: diagonal ribs (1,2) use planes 0 and 2
+    offsets_ids_rib = [0, 1, 1, 2]       # Back: original values
     offset_pairs = [(0.5, -0.5), (0.5, -0.5), (0.5, -0.5), (0.5, -0.5)]
     rib_parabolas = builder.rib_parabolas
     target_planes = builder.target_planes
@@ -110,8 +111,8 @@ def _build_ribs(builder):
         # end_plane = Plane(builder.end_planes[1].point, builder.cut_planes[1].normal).offset(-30)
         end_plane = builder.end_diagonal_plane.offset(-builder.thick)
 
-        cut_boundary = cut_planes[offsets_ids[i]]
-        cut_rib = cut_planes[offsets_ids[i] + 3]
+        cut_boundary = cut_planes[offsets_ids_boundary[i]]
+        cut_rib = cut_planes[offsets_ids_rib[i] + 3]
 
         proj0 = rib_parabolas[i].translated(target_planes[i].normal * thick * offset0)
         proj1 = rib_parabolas[i].translated(target_planes[i].normal * thick * offset1)
@@ -255,9 +256,10 @@ def _build_boundaries(builder, surface_edge_polys):
         s2 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(Polyline([tl[0], bl[0]]), p0off), p1off)
         s3 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(Polyline([tl[1], bl[1]]), p0off), p1off)
 
-        s2 = Polyline([s2[0], s2[1], [s2[1][0], s2[1][1], -dist], [s2[0][0], s2[0][1], -dist], s2[0]])
-        s3 = Polyline([s3[0], s3[1], [s3[1][0], s3[1][1], -dist], [s3[0][0], s3[0][1], -dist], s3[0]])
-        meshes.append(PolylineLoft.to_mesh(s2, s3))
+        # OPTIONS: for the boundary faces
+        # s2 = Polyline([s2[0], s2[1], [s2[1][0], s2[1][1], -dist], [s2[0][0], s2[0][1], -dist], s2[0]])
+        # s3 = Polyline([s3[0], s3[1], [s3[1][0], s3[1][1], -dist], [s3[0][0], s3[0][1], -dist], s3[0]])
+        # meshes.append(PolylineLoft.to_mesh(s2, s3))
 
     # Column head boundary
     plane_cut_0 = builder.end_diagonal_plane
