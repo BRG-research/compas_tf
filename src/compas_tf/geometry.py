@@ -16,6 +16,7 @@ from compas.geometry import Polygon
 from compas.geometry import Polyline
 from compas.geometry import Vector
 from compas.geometry import earclip_polygon
+from compas.geometry import intersection_line_line
 from compas.geometry import intersection_line_plane
 from compas.geometry import intersection_plane_plane
 from compas.geometry import intersection_plane_plane_plane
@@ -92,6 +93,103 @@ class PlaneIntersect:
                 if pt:
                     intersection_points.append(pt)
         return intersection_points
+
+
+class LineOffset:
+    """Offset operations for lines."""
+
+    @staticmethod
+    def offset_xy(line, distance):
+        """Offset a line perpendicular to its direction in XY plane.
+
+        Parameters
+        ----------
+        line : :class:`compas.geometry.Line`
+            Line to offset.
+        distance : float
+            Offset distance (positive = left, negative = right).
+
+        Returns
+        -------
+        :class:`compas.geometry.Line`
+            Offset line.
+        """
+        perp = line.direction.cross(Vector.Zaxis()).unitized()
+        return Line(
+            Point(*line.start) + perp * distance,
+            Point(*line.end) + perp * distance
+        )
+
+    @staticmethod
+    def offset_pair_xy(line, distance):
+        """Offset a line in both directions perpendicular to its direction in XY plane.
+
+        Parameters
+        ----------
+        line : :class:`compas.geometry.Line`
+            Line to offset.
+        distance : float
+            Offset distance (absolute value used for both sides).
+
+        Returns
+        -------
+        tuple[:class:`compas.geometry.Line`, :class:`compas.geometry.Line`]
+            (left_offset, right_offset) lines.
+        """
+        perp = line.direction.cross(Vector.Zaxis()).unitized()
+        left = Line(
+            Point(*line.start) + perp * distance,
+            Point(*line.end) + perp * distance
+        )
+        right = Line(
+            Point(*line.start) - perp * distance,
+            Point(*line.end) - perp * distance
+        )
+        return left, right
+
+    @staticmethod
+    def offset_intersect(line0, line1, distance):
+        """Offset line0 in both directions and intersect with line1.
+
+        Creates a line connecting the intersection points of the two offset
+        versions of line0 with line1.
+
+        Parameters
+        ----------
+        line0 : :class:`compas.geometry.Line`
+            Line to offset.
+        line1 : :class:`compas.geometry.Line`
+            Line to intersect with.
+        distance : float
+            Offset distance.
+
+        Returns
+        -------
+        :class:`compas.geometry.Line`
+            Line connecting the two intersection points.
+        """
+        left, right = LineOffset.offset_pair_xy(line0, distance)
+        p0 = intersection_line_line(left, line1)[0]
+        p1 = intersection_line_line(right, line1)[0]
+        return Line(Point(*p0), Point(*p1))
+
+    @staticmethod
+    def divide(line, count):
+        """Divide line into equal segments.
+
+        Parameters
+        ----------
+        line : :class:`compas.geometry.Line`
+            Line to divide.
+        count : int
+            Number of segments.
+
+        Returns
+        -------
+        list[:class:`compas.geometry.Point`]
+            List of count+1 points along the line.
+        """
+        return [line.point_at(i / count) for i in range(count + 1)]
 
 
 class PolylineOffset:

@@ -26,6 +26,7 @@ from compas_tf.geometry import PlaneIntersect
 from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_connector import ConnectorElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.joint_dowel import DowelElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 # Create a box representing one grid frame unit
@@ -109,6 +110,10 @@ for element in quarter_result.surface_elements:
     model.add_element(element)
 for element in quarter_result.boundary_beam_elements:
     model.add_element(element)
+for screw in quarter_result.screws:
+    model.add_element(screw)
+for dowel in quarter_result.dowels:
+    model.add_element(dowel)
 
 
 # 5. Build oculus element
@@ -134,8 +139,7 @@ groups = {
     ScrewElement: viewer.scene.add_group("screw_group"),
     ConnectorElement: viewer.scene.add_group("connector_group"),
     SherpaXL120Element: viewer.scene.add_group("sherpaxl120_group"),
-
-
+    DowelElement: viewer.scene.add_group("dowel_group"),
 }
 
 colors = {
@@ -148,6 +152,7 @@ colors = {
     ScrewElement: (0.8, 0.0, 0.2),
     ConnectorElement: (0.8, 0.0, 0.2),
     SherpaXL120Element: (0.8, 0.0, 0.2),
+    DowelElement: (0.0, 0.6, 0.8),
 }
 
 # Collect all meshes for viewer and OBJ export
