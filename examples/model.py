@@ -117,8 +117,9 @@ for dowel in quarter_result.dowels:
 
 
 # 5. Build oculus element
-oculus_element = OculusElement.build(builder)
-model.add_element(oculus_element)
+oculus_elements = OculusElement.build(builder)
+for oculus_element in oculus_elements:
+    model.add_element(oculus_element)
 
 
 
@@ -127,7 +128,7 @@ model.add_element(oculus_element)
 config = Config()
 config.unit = "mm"
 viewer = Viewer(config)
-viewer.renderer.rendermode = "ghosted"  # "lighted", "wireframe", "shaded", "ghosted"
+viewer.renderer.rendermode = "lighted"  # "lighted", "wireframe", "shaded", "ghosted"
 
 groups = {
     SupportElement: viewer.scene.add_group("support_group"),
