@@ -356,17 +356,17 @@ class QuarterFloorElement(Element):
         def _line_to_screw(line: Line) -> ScrewElement:
             plane = Plane(line.start, line.direction)
             xform = Transformation.from_frame(Frame.from_plane(plane))
-            return ScrewElement(8, 25, line.length * 2, transformation=xform)
+            return ScrewElement(8, 25, line.length, transformation=xform)
 
         def _line_to_dowel(line: Line) -> DowelElement:
             plane = Plane(line.start, line.direction)
             xform = Transformation.from_frame(Frame.from_plane(plane))
-            return DowelElement(20, 20, line.length * 2, transformation=xform)
+            return DowelElement(20, 20, line.length, transformation=xform)
         
-        def _line_to_strip(frame: Line) -> AlignmentStripElement:
-            plane = Plane(frame.start, frame.direction)
-            xform = Transformation.from_frame(Frame.from_plane(plane))
-            return AlignmentStripElement(height=line.length * 2, transformation=xform)
+        def _line_to_strip(frame: Line, height) -> AlignmentStripElement:
+            frame = Frame(frame.start, frame.direction, Vector.Zaxis().cross(frame.direction))
+            xform = Transformation.from_frame(frame)
+            return AlignmentStripElement(height=height, transformation=xform)
 
         screws = []
         dowels = []
@@ -381,21 +381,21 @@ class QuarterFloorElement(Element):
         # Corner screws - 0 and 2 axis (boundary ribs)
         axis_pairs_02 = [(3, 0), (3, 1), (6, 5), (4, 2)]
         for offset_axis, intersect_axis in axis_pairs_02:
-            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.25)
+            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
+            strip_point = intersection_plane_plane_plane(builder.axes[offset_axis], builder.axes[intersect_axis], Plane([0,0,-height_middle], Vector.Zaxis()))
+            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction)
+            strips.append(_line_to_strip(strip_line, height_middle*2))
             for j in range(0, divisions):
                 if j % 2 == 0:
                     continue
                 translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
                 screws.append(_line_to_screw(translated_line))
-                if j == 0:
-                    translated_line = line.translated(-Vector.Zaxis() * height_middle)
-                    strips.append(_line_to_strip(translated_line))
 
 
         # Corner screws - 1 axis (diagonal)
         axis_pairs_1 = [(3, 4), (5, 4)]
         for offset_axis, intersect_axis in axis_pairs_1:
-            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.25)
+            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
             for j in range(0, divisions):
                 if j % 2 == 1:
                     continue

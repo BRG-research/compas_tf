@@ -115,6 +115,9 @@ for screw in quarter_result.screws:
     model.add_element(screw)
 for dowel in quarter_result.dowels:
     model.add_element(dowel)
+for strip in quarter_result.strips:
+    print(strip)
+    model.add_element(strip)
 
 
 # 5. Build oculus element
@@ -129,7 +132,7 @@ for oculus_element in oculus_elements:
 config = Config()
 config.unit = "mm"
 viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"  # "lighted", "wireframe", "shaded", "ghosted"
+viewer.renderer.rendermode = "ghosted"  # "lighted", "wireframe", "shaded", "ghosted"
 
 groups = {
     SupportElement: viewer.scene.add_group("support_group"),
