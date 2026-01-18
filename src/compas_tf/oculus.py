@@ -145,28 +145,42 @@ class OculusElement(Element):
         # Edges screws on one corner only, then rotate 4 times
 
         from compas_tf.joint_screw import ScrewElement
+        from compas_tf.joint_strip import AlignmentStripElement
 
         height_offset = 20
         divisions = 4
         height = (builder.height-builder.rise-height_offset*2) / (divisions-1)
-
+        height_center = (builder.height-builder.rise)/2
 
         offset_polygon = PolylineOffset.offset_polygon(oculus_poly, builder.thick * 0.5)
         line = Line(offset_polygon.points[0], offset_polygon.points[1])
         direction = line.direction
         basepoint = offset_polygon.points[0]- direction*builder.thick*0.5
 
-
-
         for i in range(divisions):
             screwpoint = basepoint + Vector(0, 0, height *-i - height_offset)
-            print(screwpoint)
             line = Line(screwpoint, screwpoint+direction*builder.thick*2)
-            xform = Transformation.from_frame(frame=Frame(screwpoint, Vector.Zaxis().cross(direction), Vector.Zaxis()))
+            xform_screw = Transformation.from_frame(frame=Frame(screwpoint, Vector.Zaxis().cross(direction), Vector.Zaxis()))
 
             for i in range(4):
-                screw = ScrewElement(height=line.length, transformation=Rotation.from_axis_and_angle([0,0,1], math.radians(90)*i, point=Point(0,0,0))*xform)
+                xform_rotation = Rotation.from_axis_and_angle([0,0,1], math.radians(90)*i, point=Point(0,0,0))
+                screw = ScrewElement(height=line.length, transformation=xform_rotation*xform_screw)
                 elements.append(screw)
 
+        for i in range(divisions):
+            aligmentstrip_point = screwpoint + Vector(0, 0, height_center)
+            line = Line(screwpoint, screwpoint+direction*builder.thick*2)
+            xform_alignmentstrip = Transformation.from_frame(frame=Frame(aligmentstrip_point, Vector.Zaxis().cross(direction), Vector.Zaxis()))
+
+            for i in range(4):
+                xform_rotation = Rotation.from_axis_and_angle([0,0,1], math.radians(90)*i, point=Point(0,0,0))
+                alignment_strip = AlignmentStripElement(transformation=xform_rotation*xform_alignmentstrip)
+                elements.append(alignment_strip)
+
+        # Alignment strips
+
+        
+
+    
         # Screws and dowels one one side only
         return elements
