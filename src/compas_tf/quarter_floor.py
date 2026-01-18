@@ -380,7 +380,7 @@ class QuarterFloorElement(Element):
         height_middle = (builder.height-builder.rise) * 0.5
 
         # Corner screws - 0 and 2 axis (boundary ribs)
-        axis_pairs_02 = [(3, 0), (3, 1), (5, 6), (4, 2)]
+        axis_pairs_02 = [(3, 0), (3, 1), (5, 6), (5, 2)]
         for offset_axis, intersect_axis in axis_pairs_02:
             line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
             for j in range(0, divisions):
