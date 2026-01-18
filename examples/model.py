@@ -27,6 +27,7 @@ from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_connector import ConnectorElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.joint_dowel import DowelElement
+from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 # Create a box representing one grid frame unit
@@ -141,6 +142,7 @@ groups = {
     ConnectorElement: viewer.scene.add_group("connector_group"),
     SherpaXL120Element: viewer.scene.add_group("sherpaxl120_group"),
     DowelElement: viewer.scene.add_group("dowel_group"),
+    AlignmentStripElement: viewer.scene.add_group("alignment_strip_group"),
 }
 
 colors = {
@@ -154,6 +156,8 @@ colors = {
     ConnectorElement: (0.8, 0.0, 0.2),
     SherpaXL120Element: (0.8, 0.0, 0.2),
     DowelElement: (0.0, 0.6, 0.8),
+    AlignmentStripElement: (0.2, 0.8, 0.2),
+    
 }
 
 # Collect all meshes for viewer and OBJ export

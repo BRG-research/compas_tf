@@ -343,6 +343,8 @@ class QuarterFloorElement(Element):
     def _build_screw_lines(self, builder) -> list[Line]:
         """No screw lines for quarter floor element."""
 
+        # 1 2 3 4
+
         screw_lines = []
         dowel_lines = []
 
@@ -355,21 +357,19 @@ class QuarterFloorElement(Element):
         # Corner screws - 0 and 2 axis (boundary ribs)
         axis_pairs_02 = [(3, 0), (3, 1), (6, 5), (4, 2)]
         for offset_axis, intersect_axis in axis_pairs_02:
-            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
+            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.25)
             for j in range(0, divisions):
                 if j % 2 == 0:
                     continue
                 translated_line = line.translated(- Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
                 screw_lines.append(translated_line)
-
-
-
             
+
 
         # Corner screws - 1 axis (diagonal)
         axis_pairs_1 = [(3, 4), (5, 4)]
         for offset_axis, intersect_axis in axis_pairs_1:
-            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
+            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.25)
             for j in range(0, divisions):
                 if j % 2 == 1:
                     continue
@@ -382,7 +382,7 @@ class QuarterFloorElement(Element):
         for i in rib_axes:
             axis_plane = Plane(builder.axes[i].midpoint, Vector.Zaxis().cross(builder.axes[i].direction))
             p0 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane, Plane.worldXY())
-            p1 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane.offset(-builder.thick), Plane.worldXY())
+            p1 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane.offset(-builder.thick*0.5), Plane.worldXY())
             line = Line(p0, p1)
 
             if i == 0 or i == 6:
@@ -399,14 +399,11 @@ class QuarterFloorElement(Element):
                     screw_lines.append(translated_line)
 
         # Connectors
-        rib_axes = [3, 4, 5]
         divisions = [12, 8, 12]
-        pattern = [False, False, True]
 
-
-
-        for i in range(len(rib_axes)):
-            line = builder.axes[rib_axes[i]]
+        for i in range(3):
+            line = Line(builder.quarter_polygon[1 + i], builder.quarter_polygon[2 + i])
+            # line = builder.axes[rib_axes[i]]
             direction = Vector.Zaxis().cross(line.direction).unitized() * builder.thick
 
             if i == 2:
@@ -418,21 +415,17 @@ class QuarterFloorElement(Element):
                 if idx == 0 or idx == len(points)-1:
                     continue
 
-                p_start = pt + direction * 0.5  - height_middle * Vector.Zaxis()
-                p_end = pt  - direction * 0.5 - height_middle * Vector.Zaxis()
+                p_start = pt + direction  - height_middle * Vector.Zaxis()
+                p_end = pt  + direction*0.5 - height_middle * Vector.Zaxis()
         
                 screw_line = Line(p_start, p_end)
 
 
                 if (idx % 3 == 1):
                     dowel_lines.append(screw_line)
+                else:
+                    screw_lines.append(screw_line)
 
-                elif pattern[i]:
-                    if (idx % 3 == 0):
-                        screw_lines.append(screw_line)
-                elif not pattern[i]:
-                    if (idx % 3 == 2):
-                        screw_lines.append(screw_line)
 
                 
 

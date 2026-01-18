@@ -7,6 +7,7 @@ from compas.geometry import Line
 from compas.geometry import Point
 from compas.geometry import Polyline
 from compas.geometry import Polygon
+from compas.geometry import Plane
 from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
@@ -15,6 +16,7 @@ from compas_model.elements.element import Feature
 
 from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PolylineOffset
+from compas_tf.geometry import LineOffset
 import math
 
 
@@ -145,6 +147,7 @@ class OculusElement(Element):
         # Edges screws on one corner only, then rotate 4 times
 
         from compas_tf.joint_screw import ScrewElement
+        from compas_tf.joint_dowel import DowelElement
         from compas_tf.joint_strip import AlignmentStripElement
 
         height_offset = 20
@@ -159,7 +162,7 @@ class OculusElement(Element):
 
         for i in range(divisions):
             screwpoint = basepoint + Vector(0, 0, height *-i - height_offset)
-            line = Line(screwpoint, screwpoint+direction*builder.thick*2)
+            line = Line(screwpoint, screwpoint+direction*builder.thick)
             xform_screw = Transformation.from_frame(frame=Frame(screwpoint, Vector.Zaxis().cross(direction), Vector.Zaxis()))
 
             for i in range(4):
@@ -167,20 +170,41 @@ class OculusElement(Element):
                 screw = ScrewElement(height=line.length, transformation=xform_rotation*xform_screw)
                 elements.append(screw)
 
-        for i in range(divisions):
-            aligmentstrip_point = screwpoint + Vector(0, 0, height_center)
-            line = Line(screwpoint, screwpoint+direction*builder.thick*2)
-            xform_alignmentstrip = Transformation.from_frame(frame=Frame(aligmentstrip_point, Vector.Zaxis().cross(direction), Vector.Zaxis()))
-
-            for i in range(4):
-                xform_rotation = Rotation.from_axis_and_angle([0,0,1], math.radians(90)*i, point=Point(0,0,0))
-                alignment_strip = AlignmentStripElement(transformation=xform_rotation*xform_alignmentstrip)
-                elements.append(alignment_strip)
-
         # Alignment strips
+        aligmentstrip_point = basepoint + direction*builder.thick - Vector(0,0,height_center)
+        line = Line(aligmentstrip_point, aligmentstrip_point+direction*builder.thick*2)
+        xform_alignmentstrip = Transformation.from_frame(frame=Frame(aligmentstrip_point, Vector.Zaxis().cross(direction), direction))
 
-        
-
+        for i in range(4):
+            xform_rotation = Rotation.from_axis_and_angle([0,0,1], math.radians(90)*i, point=Point(0,0,0))
+            alignment_strip = AlignmentStripElement(transformation=xform_rotation*xform_alignmentstrip)
+            elements.append(alignment_strip)
     
         # Screws and dowels one one side only
+        divisions = 8
+        pattern = [False, False, True]
+        height_middle = (builder.height-builder.rise) * 0.5
+
+        for i in range(4):
+            line = Line(oculus_poly.points[i], oculus_poly.points[(i+1)%4]).translated(Vector.Zaxis() * -height_middle)
+
+            direction = Vector.Zaxis().cross(line.direction).unitized() * -builder.thick
+            points = LineOffset.divide(line, divisions)
+
+            for idx, pt in enumerate(points):
+                if idx == 0 or idx == len(points)-1:
+                    continue
+
+                screw_line = Line(pt, pt+direction)
+                plane = Plane(pt-direction, direction)
+                xform = Transformation.from_frame(Frame.from_plane(plane))
+
+                if (idx % 3 == 1):
+                    dowel = DowelElement(height=screw_line.length, transformation=xform)
+                    elements.append(dowel)
+
+                if (idx % 3 == 0) or (idx % 3 == 2):
+                    screw = ScrewElement(height=screw_line.length, transformation=xform)
+                    elements.append(screw)
+
         return elements
