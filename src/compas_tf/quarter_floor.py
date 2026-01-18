@@ -20,6 +20,9 @@ from compas_tf.geometry import PlaneIntersect
 from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PolylineOffset
+from compas_tf.joint_screw import ScrewElement
+from compas_tf.joint_dowel import DowelElement
+from compas_tf.joint_strip import AlignmentStripElement
 
 # ==========================================================================
 # Result Container
@@ -38,6 +41,7 @@ class QuarterResult:
     boundary_beam_elements: list
     screws: list
     dowels: list
+    strips: list
 
 
 # ==========================================================================
@@ -340,13 +344,33 @@ class QuarterFloorElement(Element):
     def compute_point(self) -> Point:
         return Point(*self.modelgeometry.centroid())
     
-    def _build_screw_lines(self, builder) -> list[Line]:
-        """No screw lines for quarter floor element."""
+    def _build_screw_lines(self, builder) -> tuple[list[ScrewElement], list[DowelElement]]:
+        """Build screw and dowel elements for quarter floor connections.
 
-        # 1 2 3 4
+        Returns
+        -------
+        tuple[list[ScrewElement], list[DowelElement]]
+            Lists of screw and dowel elements.
+        """
 
-        screw_lines = []
-        dowel_lines = []
+        def _line_to_screw(line: Line) -> ScrewElement:
+            plane = Plane(line.start, line.direction)
+            xform = Transformation.from_frame(Frame.from_plane(plane))
+            return ScrewElement(8, 25, line.length * 2, transformation=xform)
+
+        def _line_to_dowel(line: Line) -> DowelElement:
+            plane = Plane(line.start, line.direction)
+            xform = Transformation.from_frame(Frame.from_plane(plane))
+            return DowelElement(20, 20, line.length * 2, transformation=xform)
+        
+        def _line_to_strip(frame: Line) -> AlignmentStripElement:
+            plane = Plane(frame.start, frame.direction)
+            xform = Transformation.from_frame(Frame.from_plane(plane))
+            return AlignmentStripElement(height=line.length * 2, transformation=xform)
+
+        screws = []
+        dowels = []
+        strips = []
 
         height_offset = 20
         divisions = 4
@@ -361,9 +385,11 @@ class QuarterFloorElement(Element):
             for j in range(0, divisions):
                 if j % 2 == 0:
                     continue
-                translated_line = line.translated(- Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
-                screw_lines.append(translated_line)
-            
+                translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
+                screws.append(_line_to_screw(translated_line))
+                if j == 0:
+                    translated_line = line.translated(-Vector.Zaxis() * height_middle)
+                    strips.append(_line_to_strip(translated_line))
 
 
         # Corner screws - 1 axis (diagonal)
@@ -373,8 +399,8 @@ class QuarterFloorElement(Element):
             for j in range(0, divisions):
                 if j % 2 == 1:
                     continue
-                translated_line = line.translated(- Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
-                screw_lines.append(translated_line)
+                translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
+                screws.append(_line_to_screw(translated_line))
 
 
         # Back corner
@@ -382,63 +408,47 @@ class QuarterFloorElement(Element):
         for i in rib_axes:
             axis_plane = Plane(builder.axes[i].midpoint, Vector.Zaxis().cross(builder.axes[i].direction))
             p0 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane, Plane.worldXY())
-            p1 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane.offset(-builder.thick*0.5), Plane.worldXY())
+            p1 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane.offset(-builder.thick * 0.5), Plane.worldXY())
             line = Line(p0, p1)
 
             if i == 0 or i == 6:
-                for j in range(divisions*2):
+                for j in range(divisions * 2):
                     if j % 2 == 0:
                         continue
-                    translated_line = line.translated(- Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
-                    screw_lines.append(translated_line)
+                    translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
+                    screws.append(_line_to_screw(translated_line))
             else:
-                for j in range(divisions*2):
+                for j in range(divisions * 2):
                     if j % 2 == 1:
                         continue
-                    translated_line = line.translated(- Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
-                    screw_lines.append(translated_line)
+                    translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
+                    screws.append(_line_to_screw(translated_line))
 
         # Connectors
         divisions = [12, 8, 12]
 
         for i in range(3):
             line = Line(builder.quarter_polygon[1 + i], builder.quarter_polygon[2 + i])
-            # line = builder.axes[rib_axes[i]]
             direction = Vector.Zaxis().cross(line.direction).unitized() * builder.thick
 
             if i == 2:
                 line = Line(line.end, line.start)
-                # continue
             points = LineOffset.divide(line, divisions[i])
 
             for idx, pt in enumerate(points):
-                if idx == 0 or idx == len(points)-1:
+                if idx == 0 or idx == len(points) - 1:
                     continue
 
-                p_start = pt + direction  - height_middle * Vector.Zaxis()
-                p_end = pt  + direction*0.5 - height_middle * Vector.Zaxis()
-        
-                screw_line = Line(p_start, p_end)
+                p_start = pt + direction - height_middle * Vector.Zaxis()
+                p_end = pt + direction * 0.5 - height_middle * Vector.Zaxis()
+                connector_line = Line(p_start, p_end)
 
-
-                if (idx % 3 == 1):
-                    dowel_lines.append(screw_line)
+                if idx % 3 == 1:
+                    dowels.append(_line_to_dowel(connector_line))
                 else:
-                    screw_lines.append(screw_line)
+                    screws.append(_line_to_screw(connector_line))
 
-
-                
-
-
-         
-
-        # Screw holes for connecting adjacent quarter floors 3 4 5
-        axes = [3, 4 , 5]
-        divisions = [12, 9, 12]
-        pattern = [2, 1, 1]
-
-
-        return screw_lines, dowel_lines
+        return screws, dowels, strips
 
     @staticmethod
     def build(builder) -> QuarterResult:
@@ -467,22 +477,7 @@ class QuarterFloorElement(Element):
         boundary_beam_meshes = _build_boundaries(builder, surface_edge_polys)
 
         # Screws and connectors
-        screw_lines, dowel_lines = QuarterFloorElement()._build_screw_lines(builder)
-        screws = []
-        from compas_tf.joint_screw import ScrewElement
-        from compas_tf.joint_dowel import DowelElement
-        for line in screw_lines:
-            plane = Plane(line.start, line.direction)
-            xform = Transformation.from_frame(Frame.from_plane(plane))
-            screw_connector = ScrewElement(8, 25, line.length*2, transformation=xform)
-            screws.append(screw_connector)
-        
-        dowels = []
-        for line in dowel_lines:
-            plane = Plane(line.start, line.direction)
-            xform = Transformation.from_frame(Frame.from_plane(plane))
-            dowel_connector = DowelElement(20, 20, line.length*2, transformation=xform)
-            dowels.append(dowel_connector)
+        screws, dowels, strips = QuarterFloorElement()._build_screw_lines(builder)
 
         # Wrap meshes in elements
         rib_elements = [QuarterFloorElement(mesh=m, name=f"rib_{i}") for i, m in enumerate(rib_meshes)]
@@ -498,5 +493,6 @@ class QuarterFloorElement(Element):
             surface_edge_polys=surface_edge_polys,
             boundary_beam_elements=boundary_beam_elements,
             screws=screws,
-            dowels=dowels
+            dowels=dowels,
+            strips=strips
         )
