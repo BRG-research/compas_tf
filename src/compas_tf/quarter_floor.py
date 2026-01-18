@@ -402,7 +402,7 @@ class QuarterFloorElement(Element):
             intersect_axis = LineOffset.offset_xy(builder.axes[intersect_axis],builder.thick*-0.5)
             strip_point = Point(*intersection_line_line(builder.axes[offset_axis], intersect_axis)[0])
             
-            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction).translated(Vector.Zaxis() * -height_middle*0.5)
+            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction).translated(Vector.Zaxis() * -height_middle)
             strips.append(_line_to_strip(strip_line, height_middle*2))
 
 
