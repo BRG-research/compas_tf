@@ -2,14 +2,20 @@ from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
+from compas.geometry import Frame
+from compas.geometry import Line
 from compas.geometry import Point
 from compas.geometry import Polyline
+from compas.geometry import Polygon
+from compas.geometry import Rotation
 from compas.geometry import Transformation
+from compas.geometry import Vector
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
 from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PolylineOffset
+import math
 
 
 def _closed_polyline(points: list) -> Polyline:
@@ -26,6 +32,19 @@ def _rect_outline(p0, p1, z0, z1) -> Polyline:
         p0.translated([0, 0, z1]),
         p0.translated([0, 0, z0]),
     ])
+
+
+def _create_lofted_walls(poly, z_top, z_bot) -> list:
+    """Create two lofted wall meshes from a 4-point polygon at two heights."""
+    top = _closed_polyline(poly.points)
+    bot = top.translated([0, 0, z_bot - z_top])
+    if z_top != 0:
+        top = _closed_polyline(poly.points).translated([0, 0, z_top])
+        bot = top.translated([0, 0, z_bot - z_top])
+
+    wall0 = Polyline([top.points[0], top.points[1], bot.points[1], bot.points[0], top.points[0]])
+    wall1 = Polyline([top.points[3], top.points[2], bot.points[2], bot.points[3], top.points[3]])
+    return PolylineLoft.to_mesh(wall0, wall1)
 
 
 class OculusFeature(Feature):
@@ -47,12 +66,12 @@ class OculusElement(Element):
     def __init__(
         self,
         mesh: Mesh = None,
-        transformation: Optional[Transformation] = None,
-        features: Optional[list[OculusFeature]] = None,
-        name: Optional[str] = None,
-    ):
-        super().__init__(transformation=transformation, features=features, name=name)
-        self.mesh = mesh if mesh else Mesh()
+            transformation: Optional[Transformation] = None,
+            features: Optional[list[OculusFeature]] = None,
+            name: Optional[str] = None,
+        ):
+            super().__init__(transformation=transformation, features=features, name=name)
+            self.mesh = mesh if mesh else Mesh()
 
     def compute_elementgeometry(self, include_features=False) -> Mesh:
         return self.mesh
@@ -75,6 +94,8 @@ class OculusElement(Element):
     def compute_point(self) -> Point:
         return Point(*self.modelgeometry.centroid())
 
+
+
     @staticmethod
     def build(builder):
         """Build oculus beam geometry from FloorBuilder data.
@@ -89,45 +110,63 @@ class OculusElement(Element):
         list[OculusElement]
             The oculus beam elements.
         """
-        # Precompute depths
-        base_depth = -builder.height + builder.rise
-        z_top, z_bot = 0, base_depth
-        z_flange_top, z_flange_bot = base_depth, base_depth + builder.thick
-
-        # Create offset polylines
-        op = builder.oculus_points
-        top = _closed_polyline(op)
-        inner = _closed_polyline(PolylineOffset.offset_polygon(top, builder.thick).points)
-        outer = _closed_polyline(PolylineOffset.offset_polygon(top, builder.thick * 2).points)
-
-        # Build segment elements
         elements = []
-        for i in range(len(top.points) - 1):
-            pt, pi, po = top.points[i], inner.points[i], outer.points[i]
-            pt_next, pi_next, po_next = top.points[i + 1], inner.points[i + 1], outer.points[i + 1]
+        base_depth = -builder.height + builder.rise
+        oculus_poly = Polygon(builder.oculus_points)
 
-            # Vertical wall segment
-            wall_outer = _rect_outline(pt, pt_next, z_top, z_bot)
-            wall_inner = _rect_outline(pi, pi_next, z_top, z_bot)
-            elements.append(OculusElement(
-                mesh=PolylineLoft.to_mesh(wall_outer, wall_inner),
-                name=f"oculus_wall_{i}"
-            ))
+        # Top walls (z=0 to z=base_depth)
+        for poly in PolylineOffset.offset_polygon_reciprocally(oculus_poly, builder.thick):
+            elements.append(OculusElement(mesh=_create_lofted_walls(poly, 0, base_depth)))
 
-            # Bottom flange segment
-            flange_inner = _rect_outline(pi, pi_next, z_flange_top, z_flange_bot)
-            flange_outer = _rect_outline(po, po_next, z_flange_top, z_flange_bot)
-            elements.append(OculusElement(
-                mesh=PolylineLoft.to_mesh(flange_inner, flange_outer),
-                name=f"oculus_flange_{i}"
-            ))
+        # Stepped walls (z=base_depth to z=base_depth+thick)
+        oculus_tsection = PolylineOffset.offset_polygon(oculus_poly, builder.thick)
+        for poly in PolylineOffset.offset_polygon_reciprocally(Polygon(oculus_tsection), builder.thick):
+            elements.append(OculusElement(mesh=_create_lofted_walls(poly, base_depth, base_depth + builder.thick)))
 
-        # Central ring
-        ring_top = inner.translated([0, 0, z_flange_bot])
-        ring_bot = inner.translated([0, 0, z_flange_bot + builder.thick])
-        elements.append(OculusElement(
-            mesh=PolylineLoft.to_mesh(ring_top, ring_bot),
-            name="oculus_central"
-        ))
+        # Center panel (z=base_depth+thick to z=base_depth+2*thick), subdivided into 3 segments
+        z0, z1 = base_depth + builder.thick, base_depth + builder.thick * 2
+        wall0 = oculus_tsection.translated([0, 0, z0])
+        wall1 = oculus_tsection.translated([0, 0, z1])
 
+        def sample_line(p0, p1, n=4):
+            line = Line(p0, p1)
+            return [line.point_at(i / (n - 1)) for i in range(n)]
+
+        pts0_edge0 = sample_line(wall0.points[0], wall0.points[1])
+        pts0_edge1 = sample_line(wall0.points[3], wall0.points[2])
+        pts1_edge0 = sample_line(wall1.points[0], wall1.points[1])
+        pts1_edge1 = sample_line(wall1.points[3], wall1.points[2])
+
+        for i in range(3):
+            seg0 = Polyline([pts0_edge0[i], pts0_edge0[i+1], pts0_edge1[i+1], pts0_edge1[i], pts0_edge0[i]])
+            seg1 = Polyline([pts1_edge0[i], pts1_edge0[i+1], pts1_edge1[i+1], pts1_edge1[i], pts1_edge0[i]])
+            elements.append(OculusElement(mesh=PolylineLoft.to_mesh(seg0, seg1)))
+
+        # Edges screws on one corner only, then rotate 4 times
+
+        from compas_tf.joint_screw import ScrewElement
+
+        height_offset = 20
+        divisions = 4
+        height = (builder.height-builder.rise-height_offset*2) / (divisions-1)
+
+
+        offset_polygon = PolylineOffset.offset_polygon(oculus_poly, builder.thick * 0.5)
+        line = Line(offset_polygon.points[0], offset_polygon.points[1])
+        direction = line.direction
+        basepoint = offset_polygon.points[0]- direction*builder.thick*0.5
+
+
+
+        for i in range(divisions):
+            screwpoint = basepoint + Vector(0, 0, height *-i - height_offset)
+            print(screwpoint)
+            line = Line(screwpoint, screwpoint+direction*builder.thick*2)
+            xform = Transformation.from_frame(frame=Frame(screwpoint, Vector.Zaxis().cross(direction), Vector.Zaxis()))
+
+            for i in range(4):
+                screw = ScrewElement(height=line.length, transformation=Rotation.from_axis_and_angle([0,0,1], math.radians(90)*i, point=Point(0,0,0))*xform)
+                elements.append(screw)
+
+        # Screws and dowels one one side only
         return elements

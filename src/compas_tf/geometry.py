@@ -195,6 +195,52 @@ class LineOffset:
 class PolylineOffset:
     """Offset operations for polylines and polygons."""
 
+    
+    @staticmethod
+    def offset_polygon_reciprocally(polygon: Polygon, offset: float) -> Polygon:
+        """Offset a 2d polygon reciprocally by a given distance.
+
+        Parameters
+        ----------
+        polygon : Polygon
+            The input polygon to be offset.
+        offset : float
+            The distance by which to offset the polygon.
+
+        Returns
+        -------
+        Polygon
+            The offset polygon.
+        """
+
+        # 4 boundary planes
+        planes = []
+        planes_ = []
+        for i in range(len(polygon.points)):
+
+            p_curr = polygon.points[i]
+            p_next = polygon.points[(i + 1) % len(polygon.points)]
+            x_axis = (p_next - p_curr)
+            translation_direction = Vector.Zaxis().cross(x_axis).unitized()
+            plane = Plane(p_curr, -translation_direction)
+            planes.append(plane)
+            planes_.append(plane.offset(-offset))
+
+        polygons = []
+
+        n = len(polygon.points)
+        for i in range(n):
+
+            # edge0
+            r0 = intersection_plane_plane_plane(polygon.plane, planes[i], planes_[(n + i - 1) % n])
+            r1 = intersection_plane_plane_plane(polygon.plane, planes[i], planes[(i + 1) % n])
+            # edge1
+            r2 = intersection_plane_plane_plane(polygon.plane, planes_[i], planes[(i + 1) % n])
+            r3 = intersection_plane_plane_plane(polygon.plane, planes_[i], planes_[(n + i - 1) % n])
+
+            polygons.append(Polygon([r0, r1, r2, r3]))
+        return polygons
+
     @staticmethod
     def offset_polygon(polygon, distance, baseplane=None):
         """Offset a polygon by a distance.
