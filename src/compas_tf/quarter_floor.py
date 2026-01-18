@@ -12,6 +12,7 @@ from compas.geometry import Transformation
 from compas.geometry import Vector
 from compas.geometry import Frame
 from compas.geometry import intersection_plane_plane_plane
+from compas.geometry import intersection_line_line
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
@@ -364,7 +365,7 @@ class QuarterFloorElement(Element):
             return DowelElement(20, 20, line.length, transformation=xform)
         
         def _line_to_strip(frame: Line, height) -> AlignmentStripElement:
-            frame = Frame(frame.start, frame.direction, Vector.Zaxis().cross(frame.direction))
+            frame = Frame(frame.start, Vector.Zaxis().cross(frame.direction), frame.direction)
             xform = Transformation.from_frame(frame)
             return AlignmentStripElement(height=height, transformation=xform)
 
@@ -379,17 +380,42 @@ class QuarterFloorElement(Element):
         height_middle = (builder.height-builder.rise) * 0.5
 
         # Corner screws - 0 and 2 axis (boundary ribs)
-        axis_pairs_02 = [(3, 0), (3, 1), (6, 5), (4, 2)]
+        axis_pairs_02 = [(3, 0), (3, 1), (5, 6), (4, 2)]
         for offset_axis, intersect_axis in axis_pairs_02:
             line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
-            strip_point = intersection_plane_plane_plane(builder.axes[offset_axis], builder.axes[intersect_axis], Plane([0,0,-height_middle], Vector.Zaxis()))
-            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction)
-            strips.append(_line_to_strip(strip_line, height_middle*2))
             for j in range(0, divisions):
                 if j % 2 == 0:
                     continue
                 translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
                 screws.append(_line_to_screw(translated_line))
+
+
+        # Strips
+        axis_pairs_strips = [(3, 4), (4, 5)]
+        for offset_axis, intersect_axis in axis_pairs_strips:
+            strip_point = Point(*intersection_line_line(builder.axes[offset_axis], builder.axes[intersect_axis])[0])   
+            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction+ builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
+            strips.append(_line_to_strip(strip_line, height_middle*2))
+
+        axis_pairs_strips = [(0,3), (6, 5),(1,3), (2,5)]
+        for offset_axis, intersect_axis in axis_pairs_strips:
+            intersect_axis = LineOffset.offset_xy(builder.axes[intersect_axis],builder.thick*-0.5)
+            strip_point = Point(*intersection_line_line(builder.axes[offset_axis], intersect_axis)[0])
+            
+            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction).translated(Vector.Zaxis() * -height_middle)
+            strips.append(_line_to_strip(strip_line, height_middle*2))
+
+
+        axis_corner = Line(builder.end_diagonal_plane.point, builder.end_diagonal_plane.point + Vector.Zaxis().cross(builder.end_diagonal_plane.normal))
+        axes = [0, 6, 1, 2]
+        for axis in axes:
+            intersect_axis = LineOffset.offset_xy(axis_corner,builder.thick*-1)
+            strip_point = Point(*intersection_line_line(builder.axes[axis], intersect_axis)[0])
+            
+            strip_line = Line(strip_point, strip_point + builder.axes[axis].direction).translated(Vector.Zaxis() * -height_middle)
+            strips.append(_line_to_strip(strip_line, height_middle*2))
+
+
 
 
         # Corner screws - 1 axis (diagonal)
@@ -440,7 +466,7 @@ class QuarterFloorElement(Element):
                     continue
 
                 p_start = pt + direction - height_middle * Vector.Zaxis()
-                p_end = pt + direction * 0.5 - height_middle * Vector.Zaxis()
+                p_end = pt + direction * 0 - height_middle * Vector.Zaxis()
                 connector_line = Line(p_start, p_end)
 
                 if idx % 3 == 1:
