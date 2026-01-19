@@ -1,3 +1,5 @@
+import math
+from dataclasses import dataclass
 from typing import Optional
 
 from compas.datastructures import Mesh
@@ -17,7 +19,18 @@ from compas_model.elements.element import Feature
 from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PolylineOffset
 from compas_tf.geometry import LineOffset
-import math
+from compas_tf.plate import PlateElement
+
+
+@dataclass
+class OculusResult:
+    """Container for oculus build results."""
+
+    oculus_elements: list  # PlateElement mesh elements
+    screws: list  # ScrewElement connectors
+    dowels: list  # DowelElement connectors
+    strips: list  # AlignmentStripElement connectors
+    interactions: list  # List of (connector, element) tuples for model.add_interaction()
 
 
 def _closed_polyline(points: list) -> Polyline:
@@ -36,8 +49,14 @@ def _rect_outline(p0, p1, z0, z1) -> Polyline:
     ])
 
 
-def _create_lofted_walls(poly, z_top, z_bot) -> list:
-    """Create two lofted wall meshes from a 4-point polygon at two heights."""
+def _create_lofted_walls(poly, z_top, z_bot) -> tuple[Polyline, Polyline, Mesh]:
+    """Create two lofted wall meshes from a 4-point polygon at two heights.
+
+    Returns
+    -------
+    tuple[Polyline, Polyline, Mesh]
+        (top_polyline, bottom_polyline, lofted_mesh)
+    """
     top = _closed_polyline(poly.points)
     bot = top.translated([0, 0, z_bot - z_top])
     if z_top != 0:
@@ -46,7 +65,8 @@ def _create_lofted_walls(poly, z_top, z_bot) -> list:
 
     wall0 = Polyline([top.points[0], top.points[1], bot.points[1], bot.points[0], top.points[0]])
     wall1 = Polyline([top.points[3], top.points[2], bot.points[2], bot.points[3], top.points[3]])
-    return PolylineLoft.to_mesh(wall0, wall1)
+    mesh = PolylineLoft.to_mesh(wall0, wall1)
+    return wall0, wall1, mesh
 
 
 class OculusFeature(Feature):
@@ -99,7 +119,7 @@ class OculusElement(Element):
 
 
     @staticmethod
-    def build(builder):
+    def build(builder) -> OculusResult:
         """Build oculus beam geometry from FloorBuilder data.
 
         Parameters
@@ -109,47 +129,55 @@ class OculusElement(Element):
 
         Returns
         -------
-        list[OculusElement]
-            The oculus beam elements.
+        OculusResult
+            Container with oculus_elements, screws, dowels, strips, and interactions.
         """
-        elements = []
-        base_depth = -builder.height + builder.rise
-        oculus_poly = Polygon(builder.oculus_points)
-
-        # Top walls (z=0 to z=base_depth)
-        for poly in PolylineOffset.offset_polygon_reciprocally(oculus_poly, builder.thick):
-            elements.append(OculusElement(mesh=_create_lofted_walls(poly, 0, base_depth)))
-
-        # Stepped walls (z=base_depth to z=base_depth+thick)
-        oculus_tsection = PolylineOffset.offset_polygon(oculus_poly, builder.thick)
-        for poly in PolylineOffset.offset_polygon_reciprocally(Polygon(oculus_tsection), builder.thick):
-            elements.append(OculusElement(mesh=_create_lofted_walls(poly, base_depth, base_depth + builder.thick)))
-
-        # Center panel (z=base_depth+thick to z=base_depth+2*thick), subdivided into 3 segments
-        z0, z1 = base_depth + builder.thick, base_depth + builder.thick * 2
-        wall0 = oculus_tsection.translated([0, 0, z0])
-        wall1 = oculus_tsection.translated([0, 0, z1])
-
-        def sample_line(p0, p1, n=4):
-            line = Line(p0, p1)
-            return [line.point_at(i / (n - 1)) for i in range(n)]
-
-        pts0_edge0 = sample_line(wall0.points[0], wall0.points[1])
-        pts0_edge1 = sample_line(wall0.points[3], wall0.points[2])
-        pts1_edge0 = sample_line(wall1.points[0], wall1.points[1])
-        pts1_edge1 = sample_line(wall1.points[3], wall1.points[2])
-
-        for i in range(3):
-            seg0 = Polyline([pts0_edge0[i], pts0_edge0[i+1], pts0_edge1[i+1], pts0_edge1[i], pts0_edge0[i]])
-            seg1 = Polyline([pts1_edge0[i], pts1_edge0[i+1], pts1_edge1[i+1], pts1_edge1[i], pts1_edge0[i]])
-            elements.append(OculusElement(mesh=PolylineLoft.to_mesh(seg0, seg1)))
-
-        # Edges screws on one corner only, then rotate 4 times
-
         from compas_tf.joint_screw import ScrewElement
         from compas_tf.joint_dowel import DowelElement
         from compas_tf.joint_strip import AlignmentStripElement
 
+        oculus_elements = []
+        screws = []
+        dowels = []
+        strips = []
+        interactions = []
+
+        base_depth = -builder.height + builder.rise
+        oculus_poly = Polygon(builder.oculus_points)
+
+        # Top walls (z=0 to z=base_depth) - 2 elements (inner and outer)
+        for poly in PolylineOffset.offset_polygon_reciprocally(oculus_poly, builder.thick):
+            top_poly, bot_poly, mesh = _create_lofted_walls(poly, 0, base_depth)
+            oculus_elements.append(PlateElement(top_polyline=top_poly, bottom_polyline=bot_poly, mesh=mesh, name="oculus_top_wall"))
+
+        # Stepped walls (z=base_depth to z=base_depth+thick) - 2 elements
+        oculus_tsection = PolylineOffset.offset_polygon(oculus_poly, builder.thick)
+        for poly in PolylineOffset.offset_polygon_reciprocally(Polygon(oculus_tsection), builder.thick):
+            top_poly, bot_poly, mesh = _create_lofted_walls(poly, base_depth, base_depth + builder.thick)
+            oculus_elements.append(PlateElement(top_polyline=top_poly, bottom_polyline=bot_poly, mesh=mesh, name="oculus_stepped_wall"))
+
+        # TODO: It is not clear: should it be 3 panels or 1 panels?
+        # Center panel (z=base_depth+thick to z=base_depth+2*thick)
+        z0, z1 = base_depth + builder.thick, base_depth + builder.thick * 2
+        wall0 = oculus_tsection.translated([0, 0, z0])
+        wall1 = oculus_tsection.translated([0, 0, z1])
+
+        line00 = Line(wall0.points[0], wall0.points[1])
+        line01 = Line(wall0.points[3], wall0.points[2])
+        line10 = Line(wall1.points[1], wall1.points[0])
+        line11 = Line(wall1.points[2], wall1.points[3])
+
+        points00 = LineOffset.divide(line00, 3)
+        points01 = LineOffset.divide(line01, 3)
+        points10 = LineOffset.divide(line10, 3)
+        points11 = LineOffset.divide(line11, 3)
+
+        polyline_top = Polyline(points00 + points10 + [points00[0]])
+        polyline_bot = Polyline(points01 + points11 + [points01[0]])
+        oculus_elements.append(PlateElement(top_polyline=polyline_top, bottom_polyline=polyline_bot, name="oculus_center_panel"))
+
+        # Corner screws - connect adjacent oculus walls at each corner
+        # These screws connect the oculus wall elements to each other
         height_offset = 20
         divisions = 4
         height = (builder.height-builder.rise-height_offset*2) / (divisions-1)
@@ -158,52 +186,66 @@ class OculusElement(Element):
         offset_polygon = PolylineOffset.offset_polygon(oculus_poly, builder.thick * 0.5)
         line = Line(offset_polygon.points[0], offset_polygon.points[1])
         direction = line.direction
-        basepoint = offset_polygon.points[0]- direction*builder.thick*0.5
+        basepoint = offset_polygon.points[0] - direction*builder.thick*0.5
 
-        for i in range(divisions):
-            screwpoint = basepoint + Vector(0, 0, height *-i - height_offset)
-            line = Line(screwpoint, screwpoint+direction*builder.thick)
+        for div_idx in range(divisions):
+            screwpoint = basepoint + Vector(0, 0, height * -div_idx - height_offset)
+            screw_line = Line(screwpoint, screwpoint + direction * builder.thick)
             xform_screw = Transformation.from_frame(frame=Frame(screwpoint, Vector.Zaxis().cross(direction), Vector.Zaxis()))
 
-            for i in range(4):
-                xform_rotation = Rotation.from_axis_and_angle([0,0,1], math.radians(90)*i, point=Point(0,0,0))
-                screw = ScrewElement(height=line.length, transformation=xform_rotation*xform_screw)
-                elements.append(screw)
+            for rot_idx in range(4):
+                xform_rotation = Rotation.from_axis_and_angle([0, 0, 1], math.radians(90) * rot_idx, point=Point(0, 0, 0))
+                screw = ScrewElement(height=screw_line.length, transformation=xform_rotation * xform_screw, name=f"oculus_corner_screw_{div_idx}_{rot_idx}")
+                screws.append(screw)
+                # Corner screws connect to both top walls (elements 0 and 1)
+                interactions.append((screw, oculus_elements[(rot_idx-1)%4]))
 
-        # Alignment strips
-        aligmentstrip_point = basepoint + direction*builder.thick - Vector(0,0,height_center)
-        line = Line(aligmentstrip_point, aligmentstrip_point+direction*builder.thick*2)
-        xform_alignmentstrip = Transformation.from_frame(frame=Frame(aligmentstrip_point, Vector.Zaxis().cross(direction), direction))
+        # Alignment strips at corners
+        alignmentstrip_point = basepoint + direction * builder.thick - Vector(0, 0, height_center)
+        xform_alignmentstrip = Transformation.from_frame(frame=Frame(alignmentstrip_point, Vector.Zaxis().cross(direction), direction))
 
-        for i in range(4):
-            xform_rotation = Rotation.from_axis_and_angle([0,0,1], math.radians(90)*i, point=Point(0,0,0))
-            alignment_strip = AlignmentStripElement(transformation=xform_rotation*xform_alignmentstrip)
-            elements.append(alignment_strip)
-    
-        # Screws and dowels one one side only
+        for rot_idx in range(4):
+            xform_rotation = Rotation.from_axis_and_angle([0, 0, 1], math.radians(90) * rot_idx, point=Point(0, 0, 0))
+            strip = AlignmentStripElement(transformation=xform_rotation * xform_alignmentstrip, name=f"oculus_corner_strip_{rot_idx}")
+            strips.append(strip)
+            # Strips connect to both top walls
+            interactions.append((strip, oculus_elements[rot_idx]))
+            interactions.append((strip, oculus_elements[(rot_idx-1)%4]))
+
+        # Boundary screws and dowels - connect oculus to quarter boundary beams
+        # These are "external" connections - the boundary_beam is not an oculus element
+        # They will need to be connected to quarter_floor boundary elements externally
         divisions = 8
         height_middle = (builder.height-builder.rise) * 0.5
 
-        for i in range(4):
-            line = Line(oculus_poly.points[i], oculus_poly.points[(i+1)%4]).translated(Vector.Zaxis() * -height_middle)
-
+        for edge_idx in range(4):
+            line = Line(oculus_poly.points[edge_idx], oculus_poly.points[(edge_idx + 1) % 4]).translated(Vector.Zaxis() * -height_middle)
             direction = Vector.Zaxis().cross(line.direction).unitized() * -builder.thick
             points = LineOffset.divide(line, divisions)
 
             for idx, pt in enumerate(points):
-                if idx == 0 or idx == len(points)-1:
+                if idx == 0 or idx == len(points) - 1:
                     continue
 
-                screw_line = Line(pt, pt+direction)
-                plane = Plane(pt-direction, direction)
+                screw_line = Line(pt, pt + direction)
+                plane = Plane(pt - direction, direction)
                 xform = Transformation.from_frame(Frame.from_plane(plane))
 
-                if (idx % 3 == 1):
-                    dowel = DowelElement(height=screw_line.length, transformation=xform)
-                    elements.append(dowel)
+                if idx % 3 == 1:
+                    dowel = DowelElement(height=screw_line.length, transformation=xform, name=f"oculus_boundary_dowel_{edge_idx}_{idx}")
+                    dowels.append(dowel)
+                    # Boundary dowels connect to top walls (external to quarter boundary)
+                    interactions.append((dowel, oculus_elements[edge_idx]))
+                else:
+                    screw = ScrewElement(height=screw_line.length, transformation=xform, name=f"oculus_boundary_screw_{edge_idx}_{idx}")
+                    screws.append(screw)
+                    # Boundary screws connect to top walls (external to quarter boundary)
+                    interactions.append((screw, oculus_elements[edge_idx]))
 
-                if (idx % 3 == 0) or (idx % 3 == 2):
-                    screw = ScrewElement(height=screw_line.length, transformation=xform)
-                    elements.append(screw)
-
-        return elements
+        return OculusResult(
+            oculus_elements=oculus_elements,
+            screws=screws,
+            dowels=dowels,
+            strips=strips,
+            interactions=interactions,
+        )
