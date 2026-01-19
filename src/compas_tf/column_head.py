@@ -18,6 +18,7 @@ from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
 from compas_tf.geometry import PolylineLoft
+from compas_tf.plate import PlateElement
 
 class ColumnHeadFeature(Feature):
     pass
@@ -143,6 +144,9 @@ class ColumnHeadElement(Element):
 
         head_mesh = PolylineLoft.multiple_to_mesh([taper, polyline_bottom, polyline_top])
         head_mesh.transform(xform)
+        # Transform polylines for PlateElement
+        head_top_polyline = polyline_top.transformed(xform)
+        head_bottom_polyline = taper.transformed(xform)
 
         #############################################################################################
         # Top block
@@ -152,6 +156,9 @@ class ColumnHeadElement(Element):
         bottom = top.translated(Vector(0, 0, -head_h))
         top_mesh = PolylineLoft.to_mesh(bottom, top, True)
         top_mesh.transform(xform)
+        # Transform polylines for PlateElement
+        top_top_polyline = top.transformed(xform)
+        top_bottom_polyline = bottom.transformed(xform)
 
         #############################################################################################
         # Joints
@@ -230,8 +237,8 @@ class ColumnHeadElement(Element):
         #############################################################################################
         # Create the elements
         #############################################################################################
-        head_element = ColumnHeadElement(mesh=head_mesh, name="column_head")
-        top_element = ColumnHeadElement(mesh=top_mesh, name="column_head_top")
+        head_element = PlateElement(top_polyline=head_top_polyline, bottom_polyline=head_bottom_polyline, mesh=head_mesh, name="column_head")
+        top_element = PlateElement(top_polyline=top_top_polyline, bottom_polyline=top_bottom_polyline, mesh=top_mesh, name="column_head_top")
 
         from compas_tf.joint_screw import ScrewElement
         from compas_tf.joint_connector import ConnectorElement
