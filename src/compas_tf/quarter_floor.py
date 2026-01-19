@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,6 +9,7 @@ from compas.geometry import Point
 from compas.geometry import Polyline
 from compas.geometry import Line
 from compas.geometry import Projection
+from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
 from compas.geometry import Frame
@@ -477,13 +479,16 @@ class QuarterFloorElement(Element):
         return screws, dowels, strips
 
     @staticmethod
-    def build(builder) -> QuarterResult:
+    def build(builder, angle: float = 0) -> QuarterResult:
         """Build quarter floor geometry from FloorBuilder.
 
         Parameters
         ----------
         builder : FloorBuilder
             The floor builder containing base geometry parameters.
+        angle : float
+            Rotation angle in degrees around Z-axis at origin (0, 0, 0).
+            Valid values: 0, 90, 180, 270.
 
         Returns
         -------
@@ -491,6 +496,11 @@ class QuarterFloorElement(Element):
             Container with rib_elements, rib_polys, tsection_elements,
             surface_elements, surface_edge_polys, boundary_beam_elements.
         """
+        # Create rotation transformation around Z-axis at origin
+        rotation_xform = Rotation.from_axis_and_angle(
+            [0, 0, 1], math.radians(angle), point=[0, 0, 0]
+        ) if angle != 0 else None
+
         # Compute internal helper geometry (only used by quarter floor)
         axis_planes = _compute_axis_planes(builder)
         offset_axes = _compute_offset_axes(builder)
@@ -505,11 +515,53 @@ class QuarterFloorElement(Element):
         # Screws and connectors
         screws, dowels, strips = QuarterFloorElement()._build_screw_lines(builder)
 
-        # Wrap meshes in elements
-        rib_elements = [QuarterFloorElement(mesh=m, name=f"rib_{i}") for i, m in enumerate(rib_meshes)]
-        tsection_elements = [QuarterFloorElement(mesh=m, name=f"tsection_{i}") for i, m in enumerate(tsection_meshes)]
-        surface_elements = [QuarterFloorElement(mesh=m, name=f"surface_{i}") for i, m in enumerate(surface_meshes)]
-        boundary_beam_elements = [QuarterFloorElement(mesh=m, name=f"boundary_{i}") for i, m in enumerate(boundary_beam_meshes)]
+        # Apply rotation to screws, dowels, strips if needed
+        if rotation_xform:
+            screws = [
+                ScrewElement(
+                    s.diameter, s.diameter_head, s.height,
+                    transformation=rotation_xform * s.transformation if s.transformation else rotation_xform,
+                    name=s.name
+                ) for s in screws
+            ]
+            dowels = [
+                DowelElement(
+                    d.width, d.depth, d.height,
+                    transformation=rotation_xform * d.transformation if d.transformation else rotation_xform,
+                    name=d.name
+                ) for d in dowels
+            ]
+            strips = [
+                AlignmentStripElement(
+                    s.width, s.depth, s.height,
+                    transformation=rotation_xform * s.transformation if s.transformation else rotation_xform,
+                    name=s.name
+                ) for s in strips
+            ]
+            # Transform polylines
+            rib_polys = [p.transformed(rotation_xform) for p in rib_polys]
+            surface_edge_polys = [
+                [poly.transformed(rotation_xform) for poly in edge_group]
+                for edge_group in surface_edge_polys
+            ]
+
+        # Wrap meshes in elements with rotation transformation
+        rib_elements = [
+            QuarterFloorElement(mesh=m, transformation=rotation_xform, name=f"rib_{i}")
+            for i, m in enumerate(rib_meshes)
+        ]
+        tsection_elements = [
+            QuarterFloorElement(mesh=m, transformation=rotation_xform, name=f"tsection_{i}")
+            for i, m in enumerate(tsection_meshes)
+        ]
+        surface_elements = [
+            QuarterFloorElement(mesh=m, transformation=rotation_xform, name=f"surface_{i}")
+            for i, m in enumerate(surface_meshes)
+        ]
+        boundary_beam_elements = [
+            QuarterFloorElement(mesh=m, transformation=rotation_xform, name=f"boundary_{i}")
+            for i, m in enumerate(boundary_beam_meshes)
+        ]
 
         return QuarterResult(
             rib_elements=rib_elements,

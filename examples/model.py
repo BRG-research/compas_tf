@@ -9,6 +9,8 @@ from compas.geometry import Plane
 from compas.geometry import Transformation
 from compas.geometry import Translation
 from compas.geometry import intersection_polyline_plane
+import math
+from compas.geometry import Rotation
 from compas.files import OBJ
 from compas_model.elements.column import ColumnElement
 from compas_model.models import Model
@@ -101,23 +103,29 @@ for xform in xforms_beams:
 
 
 # 4. Build quarter floor elements and add to model
-quarter_result = QuarterFloorElement.build(builder)
+# Todo: initialize the default transformation to identity
+# Todo: check the serialization of each class
+# Todo: assign correct interfaces and retrieve main elements with connectors
+# Todo: check if you can get minimal info: outlines, central axis, baseplanes, orient to 2d to verify
+# Todo: check boolean difference and update issue on github cgal
 
-for element in quarter_result.rib_elements:
-    model.add_element(element)
-for element in quarter_result.tsection_elements:
-    model.add_element(element)
-for element in quarter_result.surface_elements:
-    model.add_element(element)
-for element in quarter_result.boundary_beam_elements:
-    model.add_element(element)
-for screw in quarter_result.screws:
-    model.add_element(screw)
-for dowel in quarter_result.dowels:
-    model.add_element(dowel)
-for strip in quarter_result.strips:
-    print(strip)
-    model.add_element(strip)
+for i in range(4):
+    quarter_result = QuarterFloorElement.build(builder, i*90)
+
+    for element in quarter_result.rib_elements:
+        model.add_element(element)
+    for element in quarter_result.tsection_elements:
+        model.add_element(element)
+    for element in quarter_result.surface_elements:
+        model.add_element(element)
+    for element in quarter_result.boundary_beam_elements:
+        model.add_element(element)
+    for screw in quarter_result.screws:
+        model.add_element(screw)
+    for dowel in quarter_result.dowels:
+        model.add_element(dowel)
+    for strip in quarter_result.strips:
+        model.add_element(strip)
 
 
 # 5. Build oculus element
@@ -158,8 +166,8 @@ colors = {
     ScrewElement: (0.8, 0.0, 0.2),
     ConnectorElement: (0.8, 0.0, 0.2),
     SherpaXL120Element: (0.8, 0.0, 0.2),
-    DowelElement: (0.0, 0.6, 0.8),
-    AlignmentStripElement: (0.2, 0.8, 0.2),
+    DowelElement: (0.8, 0.0, 0.2),
+    AlignmentStripElement: (0.8, 0.0, 0.2),
     
 }
 
@@ -177,33 +185,12 @@ obj.write(all_meshes)
 print(f"Exported {len(all_meshes)} mesh(es) to {obj_filepath}")
 
 
-polygon, line = PlaneIntersect.plane_rectangle(builder.cut_planes[0])
-# viewer.scene.add(polygon, name="cut_plane")
-# viewer.scene.add(line, name="cut_plane")    
+polygon, line = PlaneIntersect.plane_rectangle(builder.cut_planes[0])  
 parabola = builder.rib_parabolas[0]
 parabola = builder.rib_parabolas[0]  # First boundary parabola
 cut_plane = builder.cut_planes[3]  # First cut plane
 result = intersection_polyline_plane(parabola,cut_plane, 1)
 viewer.scene.add(parabola, name="rib_parabola")
 viewer.scene.add(Point(*result[0]), name="rib_parabola")
-
-# for plane in builder.end_planes:
-#     polygon, line = PlaneIntersect.plane_rectangle(plane)
-#     viewer.scene.add(polygon, name="end_plane")
-#     viewer.scene.add(line, name="end_plane")
-
-# print(builder.top_end_planes)
-# for plane in builder.top_end_planes:
-#     polygon, line = PlaneIntersect.plane_rectangle(plane)
-#     viewer.scene.add(polygon, name="end_plane")
-#     viewer.scene.add(line, name="end_plane")
-
-
-
-
-# polygon, line = PlaneIntersect.plane_rectangle(builder.end_diagonal_plane)
-# # polygon, line = PlaneIntersect.plane_rectangle(Plane(builder.end_planes[1].point, builder.cut_planes[1].normal).offset(-30))
-# viewer.scene.add(polygon, name="end_diagonal_plane")
-# viewer.scene.add(line, name="end_diagonal_plane")
 
 viewer.show()

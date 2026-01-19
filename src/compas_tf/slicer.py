@@ -27,7 +27,6 @@ class SliceElement(Element):
         return {
             "frame": self._frame,
             "transformation": self.transformation,
-            "features": self._features,
             "name": self.name,
         }
 
@@ -37,7 +36,7 @@ class SliceElement(Element):
         transformation: Optional[Transformation] = None,
         name: Optional[str] = None,
     ):
-        super().__init__(transformation=transformation, features=[], name=name)
+        super().__init__(transformation=transformation, features=None, name=name)
         self._frame = frame
 
     @property

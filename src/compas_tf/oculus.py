@@ -182,7 +182,6 @@ class OculusElement(Element):
     
         # Screws and dowels one one side only
         divisions = 8
-        pattern = [False, False, True]
         height_middle = (builder.height-builder.rise) * 0.5
 
         for i in range(4):

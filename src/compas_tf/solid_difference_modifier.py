@@ -17,7 +17,7 @@ class SolidDifferenceModifier(Modifier):
 
     @property
     def __data__(self) -> dict:
-        return {"frame": self.frame}
+        return {}
 
     def apply(
         self,

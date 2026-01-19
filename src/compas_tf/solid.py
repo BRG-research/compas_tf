@@ -30,7 +30,6 @@ class Solid(Element):
         return {
             "mesh": self.mesh,
             "transformation": self.transformation,
-            "features": self._features,
             "name": self.name,
         }
 
@@ -40,7 +39,7 @@ class Solid(Element):
         transformation: Optional[Transformation] = None,
         name: Optional[str] = None,
     ):
-        super().__init__(transformation=transformation, features=[], name=name)
+        super().__init__(transformation=transformation, features=None, name=name)
         self._mesh = mesh
 
     @property

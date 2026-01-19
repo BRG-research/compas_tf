@@ -51,7 +51,6 @@ class SupportElement(Element):
     @property
     def __data__(self) -> dict:
         return {
-            "mesh": self.mesh,
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
