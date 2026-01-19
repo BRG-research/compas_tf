@@ -119,7 +119,7 @@ class OculusElement(Element):
 
 
     @staticmethod
-    def build(builder) -> OculusResult:
+    def build(builder, continuous = False) -> OculusResult:
         """Build oculus beam geometry from FloorBuilder data.
 
         Parameters
@@ -162,19 +162,27 @@ class OculusElement(Element):
         wall0 = oculus_tsection.translated([0, 0, z0])
         wall1 = oculus_tsection.translated([0, 0, z1])
 
-        line00 = Line(wall0.points[0], wall0.points[1])
-        line01 = Line(wall0.points[3], wall0.points[2])
-        line10 = Line(wall1.points[1], wall1.points[0])
-        line11 = Line(wall1.points[2], wall1.points[3])
+        line_b0 = Line(wall0.points[0], wall0.points[1])
+        line_b1 = Line(wall0.points[3], wall0.points[2])
+        line_t0 = Line(wall1.points[1], wall1.points[0])
+        line_t1 = Line(wall1.points[2], wall1.points[3])
 
-        points00 = LineOffset.divide(line00, 3)
-        points01 = LineOffset.divide(line01, 3)
-        points10 = LineOffset.divide(line10, 3)
-        points11 = LineOffset.divide(line11, 3)
+        points_b0 = LineOffset.divide(line_b0, 3)
+        points_b1 = LineOffset.divide(line_b1, 3)
+        points_t0 = LineOffset.divide(line_t0, 3)
+        points_t1 = LineOffset.divide(line_t1, 3)
 
-        polyline_top = Polyline(points00 + points10 + [points00[0]])
-        polyline_bot = Polyline(points01 + points11 + [points01[0]])
-        oculus_elements.append(PlateElement(top_polyline=polyline_top, bottom_polyline=polyline_bot, name="oculus_center_panel"))
+        if continuous:
+            polyline_top = Polyline(points_b0 + points_t0 + [points_b0[0]])
+            polyline_bot = Polyline(points_b1 + points_t1 + [points_b1[0]])
+            oculus_elements.append(PlateElement(top_polyline=polyline_top, bottom_polyline=polyline_bot, name="oculus_center_panel"))
+        else:
+            for i in range(3):
+                polyline_top = Polyline([points_b0[i], points_b0[i+1], points_b1[i+1], points_b1[i], points_b0[i]])
+                polyline_bot = Polyline([points_t0[i], points_t0[i+1], points_t1[i+1], points_t1[i], points_t0[i] ])
+                oculus_elements.append(PlateElement(top_polyline=polyline_top, bottom_polyline=polyline_bot, name="oculus_center_panel"))
+
+
 
         # Corner screws - connect adjacent oculus walls at each corner
         # These screws connect the oculus wall elements to each other

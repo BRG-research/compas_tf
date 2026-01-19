@@ -345,16 +345,16 @@ for q_idx, quarter_data in enumerate(viewer_data["quarters"]):
             all_meshes.append(c.modelgeometry)
     break
 
-# # 6. Oculus group (with nested connectors)
-# oculus_group = viewer.scene.add_group("oculus")
-# oculus_data = viewer_data["oculus"]
-# if oculus_data:
-#     for i, (element, connectors) in enumerate(oculus_data["elements"]):
-#         element_name = element.name if element.name else f"oculus_element_{i}"
-#         add_element_with_connectors(oculus_group, element, connectors, element_name)
-#         all_meshes.append(element.modelgeometry)
-#         for c in connectors:
-#             all_meshes.append(c.modelgeometry)
+# 6. Oculus group (with nested connectors)
+oculus_group = viewer.scene.add_group("oculus")
+oculus_data = viewer_data["oculus"]
+if oculus_data:
+    for i, (element, connectors) in enumerate(oculus_data["elements"]):
+        element_name = element.name if element.name else f"oculus_element_{i}"
+        add_element_with_connectors(oculus_group, element, connectors, element_name)
+        all_meshes.append(element.modelgeometry)
+        for c in connectors:
+            all_meshes.append(c.modelgeometry)
 
 # Export all viewer meshes to a single OBJ file
 obj_filepath = os.path.join(os.path.dirname(__file__), "model_export.obj")

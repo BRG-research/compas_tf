@@ -257,7 +257,7 @@ def _build_tsections(builder, axis_planes, lofted_lines):
     return quarter_meshes, polyline_pairs
 
 
-def _build_surfaces(builder, axis_planes, lofted_lines):
+def _build_surfaces(builder, axis_planes, lofted_lines, continuous=False):
     """Compute surface meshes, edge polylines, and polyline pairs for quarter 1.
 
     Returns
@@ -296,9 +296,21 @@ def _build_surfaces(builder, axis_planes, lofted_lines):
         bl, br, tl, tr = pair[0], pair[1], pair[2], pair[3]
         poly0 = Polyline(bl.points + list(reversed(br.points)))
         poly1 = Polyline(tl.points + list(reversed(tr.points)))
-        quarter_meshes.append(PolylineLoft.to_mesh(poly0, poly1))
+        
         quarter_edge_polylines.append([tl, bl, tr, br])
-        polyline_pairs.append((poly0, poly1))
+
+
+        if continuous:
+            quarter_meshes.append(PolylineLoft.to_mesh(poly0, poly1)) # this
+            polyline_pairs.append((poly0, poly1)) # this
+        else:
+            # Individual plates
+            for j in range(len(bl.points)-1):
+                poly_t = Polyline([bl[j], bl[j+1], tl[j+1], tl[j], bl[j]])
+                poly_b = Polyline([br[j], br[j+1], tr[j+1], tr[j], br[j]])
+                quarter_meshes.append(PolylineLoft.to_mesh(poly_t, poly_b))
+                # quarter_edge_polylines.append([poly_t, poly_b, poly_t, poly_b])
+                polyline_pairs.append((poly_t, poly_b))
 
     return quarter_meshes, quarter_edge_polylines, polyline_pairs
 
