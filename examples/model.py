@@ -83,8 +83,9 @@ xforms_columnhead = [
     Transformation.from_frame(Frame([-offset, offset, 0],[0,-1,0],[1,0,0])),
 ]
 
-for xform in xforms_columnhead:
-    head_element, top_element, connections, interactions, modifiers = ColumnHeadElement.build(builder)
+for i, xform in enumerate(xforms_columnhead):
+    column = viewer_data["columns"][i]
+    head_element, top_element, connections, interactions, modifiers = ColumnHeadElement.build(builder, column_element=column)
     head_element.transformation = xform
     top_element.transformation = xform
     model.add_element(head_element)
@@ -105,17 +106,22 @@ for xform in xforms_columnhead:
     # Store for viewer grouping - build element->connectors mapping
     head_connectors = []
     top_connectors = []
+    column_connectors = []
     for connector, element in interactions:
         if element is head_element:
             head_connectors.append(connector)
         elif element is top_element:
             top_connectors.append(connector)
+        elif element is column:
+            column_connectors.append(connector)
 
     viewer_data["column_heads"].append({
         "head": head_element,
         "head_connectors": head_connectors,
         "top": top_element,
         "top_connectors": top_connectors,
+        "column": column,
+        "column_connectors": column_connectors,
     })
         
 
@@ -143,14 +149,12 @@ for xform in xforms_beams:
 for i in range(4):
     quarter_result = QuarterFloorElement.build(builder, i*90)
 
-    # Add main elements
-    for element in quarter_result.rib_elements:
+    # Add main elements (axis_elements is a dict keyed by axis index: 0,1,2,3,4,5,6,7)
+    for element in quarter_result.axis_elements.values():
         model.add_element(element)
     for element in quarter_result.tsection_elements:
         model.add_element(element)
     for element in quarter_result.surface_elements:
-        model.add_element(element)
-    for element in quarter_result.boundary_beam_elements:
         model.add_element(element)
 
     # Add connectors
@@ -171,18 +175,16 @@ for i in range(4):
         return element_connectors
 
     all_elements = (
-        quarter_result.rib_elements +
+        list(quarter_result.axis_elements.values()) +
         quarter_result.tsection_elements +
-        quarter_result.surface_elements +
-        quarter_result.boundary_beam_elements
+        quarter_result.surface_elements
     )
     connector_map = build_connector_map(all_elements, quarter_result.interactions)
 
     viewer_data["quarters"].append({
-        "ribs": [(e, connector_map[e]) for e in quarter_result.rib_elements],
+        "axis_elements": [(axis_idx, e, connector_map[e]) for axis_idx, e in quarter_result.axis_elements.items()],
         "tsections": [(e, connector_map[e]) for e in quarter_result.tsection_elements],
         "surfaces": [(e, connector_map[e]) for e in quarter_result.surface_elements],
-        "boundaries": [(e, connector_map[e]) for e in quarter_result.boundary_beam_elements],
     })
 
     # Add interactions (connector-element relationships)
@@ -273,52 +275,55 @@ all_meshes = []
 #     all_meshes.append(mesh)
 #     supports_group.add(mesh, name=f"support_{i}", hide_coplanaredges=True, color=SUPPORT_COLOR)
 
-# # 2. Columns group
-# columns_group = viewer.scene.add_group("columns")
-# for i, column in enumerate(viewer_data["columns"]):
-#     mesh = column.modelgeometry
-#     all_meshes.append(mesh)
-#     columns_group.add(mesh, name=f"column_{i}", hide_coplanaredges=True, color=COLUMN_COLOR)
+# 2. Columns group (with connectors from column heads)
+columns_group = viewer.scene.add_group("columns")
+for i, column in enumerate(viewer_data["columns"]):
+    # Get column connectors from the corresponding column head data
+    column_connectors = viewer_data["column_heads"][i]["column_connectors"] if i < len(viewer_data["column_heads"]) else []
+    add_element_with_connectors(columns_group, column, column_connectors, f"column_{i}", COLUMN_COLOR)
+    all_meshes.append(column.modelgeometry)
+    for c in column_connectors:
+        all_meshes.append(c.modelgeometry)
 
-# # 3. Column heads group (with nested connectors)
-# column_heads_group = viewer.scene.add_group("column_heads")
-# for i, ch_data in enumerate(viewer_data["column_heads"]):
-#     corner_group = viewer.scene.add_group(f"corner_{i}", parent=column_heads_group)
+# 3. Column heads group (with nested connectors)
+column_heads_group = viewer.scene.add_group("column_heads")
+for i, ch_data in enumerate(viewer_data["column_heads"]):
+    corner_group = viewer.scene.add_group(f"corner_{i}", parent=column_heads_group)
 
-#     # Head element with connectors
-#     head_group = add_element_with_connectors(
-#         corner_group, ch_data["head"], ch_data["head_connectors"],
-#         "head", COLUMN_HEAD_COLOR
-#     )
-#     all_meshes.append(ch_data["head"].modelgeometry)
-#     for c in ch_data["head_connectors"]:
-#         all_meshes.append(c.modelgeometry)
+    # Head element with connectors
+    head_group = add_element_with_connectors(
+        corner_group, ch_data["head"], ch_data["head_connectors"],
+        "head", COLUMN_HEAD_COLOR
+    )
+    all_meshes.append(ch_data["head"].modelgeometry)
+    for c in ch_data["head_connectors"]:
+        all_meshes.append(c.modelgeometry)
 
-#     # Top element with connectors
-#     top_group = add_element_with_connectors(
-#         corner_group, ch_data["top"], ch_data["top_connectors"],
-#         "top", COLUMN_HEAD_COLOR
-#     )
-#     all_meshes.append(ch_data["top"].modelgeometry)
-#     for c in ch_data["top_connectors"]:
-#         all_meshes.append(c.modelgeometry)
+    # Top element with connectors
+    top_group = add_element_with_connectors(
+        corner_group, ch_data["top"], ch_data["top_connectors"],
+        "top", COLUMN_HEAD_COLOR
+    )
+    all_meshes.append(ch_data["top"].modelgeometry)
+    for c in ch_data["top_connectors"]:
+        all_meshes.append(c.modelgeometry)
 
-# # 4. Edge beams group
-# edge_beams_group = viewer.scene.add_group("edge_beams")
-# for i, edge_beam in enumerate(viewer_data["edge_beams"]):
-#     mesh = edge_beam.modelgeometry
-#     all_meshes.append(mesh)
-#     edge_beams_group.add(mesh, name=f"edge_beam_{i}", hide_coplanaredges=True, color=ELEMENT_COLOR)
+# 4. Edge beams group
+edge_beams_group = viewer.scene.add_group("edge_beams")
+for i, edge_beam in enumerate(viewer_data["edge_beams"]):
+    mesh = edge_beam.modelgeometry
+    all_meshes.append(mesh)
+    edge_beams_group.add(mesh, name=f"edge_beam_{i}", hide_coplanaredges=True, color=ELEMENT_COLOR)
 
 # 5. Quarters group (with nested element types and connectors)
 quarters_group = viewer.scene.add_group("quarters")
 for q_idx, quarter_data in enumerate(viewer_data["quarters"]):
     quarter_group = viewer.scene.add_group(f"quarter_{q_idx}", parent=quarters_group)
 
-    # Ribs
-    ribs_group = viewer.scene.add_group("ribs", parent=quarter_group)
-    for i, (element, connectors) in enumerate(quarter_data["ribs"]):
-        add_element_with_connectors(ribs_group, element, connectors, f"rib_{i}")
+    # Axis elements (unified: ribs at 0,1,2,6 and boundaries at 3,4,5,7)
+    axis_group = viewer.scene.add_group("axis_elements", parent=quarter_group)
+    for axis_idx, element, connectors in quarter_data["axis_elements"]:
+        add_element_with_connectors(axis_group, element, connectors, f"axis_{axis_idx}")
         all_meshes.append(element.modelgeometry)
         for c in connectors:
             all_meshes.append(c.modelgeometry)
@@ -338,14 +343,6 @@ for q_idx, quarter_data in enumerate(viewer_data["quarters"]):
         all_meshes.append(element.modelgeometry)
         for c in connectors:
             all_meshes.append(c.modelgeometry)
-
-    # Boundaries
-    boundaries_group = viewer.scene.add_group("boundaries", parent=quarter_group)
-    for i, (element, connectors) in enumerate(quarter_data["boundaries"]):
-        add_element_with_connectors(boundaries_group, element, connectors, f"boundary_{i}")
-        all_meshes.append(element.modelgeometry)
-        for c in connectors:
-            all_meshes.append(c.modelgeometry)
     break
 
 # # 6. Oculus group (with nested connectors)
@@ -353,7 +350,6 @@ for q_idx, quarter_data in enumerate(viewer_data["quarters"]):
 # oculus_data = viewer_data["oculus"]
 # if oculus_data:
 #     for i, (element, connectors) in enumerate(oculus_data["elements"]):
-#         print(type(element))
 #         element_name = element.name if element.name else f"oculus_element_{i}"
 #         add_element_with_connectors(oculus_group, element, connectors, element_name)
 #         all_meshes.append(element.modelgeometry)

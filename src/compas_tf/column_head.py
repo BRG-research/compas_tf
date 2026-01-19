@@ -18,7 +18,6 @@ from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
 from compas_tf.geometry import PolylineLoft
-from compas_tf.plate import PlateElement
 
 class ColumnHeadFeature(Feature):
     pass
@@ -88,10 +87,17 @@ class ColumnHeadElement(Element):
         return Point(*self.modelgeometry.centroid())
 
     @staticmethod
-    def build(builder):
+    def build(builder, column_element=None):
         """Build column head geometry from FloorBuilder data.
 
-        Returns: (head_element, top_element)
+        Parameters
+        ----------
+        builder : FloorBuilder
+            The floor builder containing geometry parameters.
+        column_element : Element, optional
+            The column element to connect screws to.
+
+        Returns: (head_element, top_element, connections, interactions, modifiers)
         """
 
         #############################################################################################
@@ -176,7 +182,7 @@ class ColumnHeadElement(Element):
             frame = Frame(origin + Vector(x, y, 0), -Vector.Xaxis(), Vector.Yaxis())
             screw_frames.append(frame)
 
-        # 4x screws - column-head.bottom - column-head-top
+        # 4x inclined screws - within column-head-bottom (along taper edge)
         taper_point0 = taper[1]
         taper_point1 = polyline_bottom[1]
         taper_point_025 = taper_point0 + 0.2 * (taper_point1 - taper_point0)
@@ -237,8 +243,8 @@ class ColumnHeadElement(Element):
         #############################################################################################
         # Create the elements
         #############################################################################################
-        head_element = PlateElement(top_polyline=head_top_polyline, bottom_polyline=head_bottom_polyline, mesh=head_mesh, name="column_head")
-        top_element = PlateElement(top_polyline=top_top_polyline, bottom_polyline=top_bottom_polyline, mesh=top_mesh, name="column_head_top")
+        head_element = ColumnHeadElement(mesh=head_mesh, name="column_head")
+        top_element = ColumnHeadElement(mesh=top_mesh, name="column_head_top")
 
         from compas_tf.joint_screw import ScrewElement
         from compas_tf.joint_connector import ConnectorElement
@@ -271,25 +277,28 @@ class ColumnHeadElement(Element):
 
         # Screw interactions by index ranges
         SCREWS_HEAD_COLUMN = slice(0, 4)       # 4x screws column-head-bottom - column
-        SCREWS_HEAD_TOP = slice(4, 8)          # 4x screws column-head-bottom - column-head-top
+        SCREWS_HEAD_INCLINED = slice(4, 8)     # 4x inclined screws within column-head-bottom
         SCREW_HEAD_CONNECTOR = 8               # 1x screw column-head-bottom - connector
         SCREWS_TOP_CONNECTOR = slice(9, 11)    # 2x screws column-head-top - connector
 
         for screw in screws[SCREWS_HEAD_COLUMN]:
             interactions.append((screw, head_element))
+            if column_element is not None:
+                interactions.append((screw, column_element))
 
-        for screw in screws[SCREWS_HEAD_TOP]:
+        for screw in screws[SCREWS_HEAD_INCLINED]:
             interactions.append((screw, head_element))
-            interactions.append((screw, top_element))
-        
-        modifiers = []
-        
+            # Note: These screws are entirely within head_element (along taper edge),
+            # they do NOT connect to top_element
 
-        modifiers.append((screws[SCREW_HEAD_CONNECTOR], head_element))
-        modifiers.append((screws[SCREW_HEAD_CONNECTOR], connector))
+        # Screw-connector interactions (previously modifiers)
+        interactions.append((screws[SCREW_HEAD_CONNECTOR], head_element))
+        interactions.append((screws[SCREW_HEAD_CONNECTOR], connector))
 
         for screw in screws[SCREWS_TOP_CONNECTOR]:
-            modifiers.append((screw, top_element))
-            modifiers.append((screw, connector))
+            interactions.append((screw, top_element))
+            interactions.append((screw, connector))
+
+        modifiers = []
 
         return head_element, top_element, connections, interactions, modifiers

@@ -26,6 +26,33 @@ from compas_tf.geometry import PolylineOffset
 from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_strip import AlignmentStripElement
+from compas_tf.plate import PlateElement
+
+
+# ==========================================================================
+# Connector Helper Functions
+# ==========================================================================
+
+
+def _line_to_screw(line: Line) -> ScrewElement:
+    """Create a ScrewElement from a line."""
+    plane = Plane(line.start, line.direction)
+    xform = Transformation.from_frame(Frame.from_plane(plane))
+    return ScrewElement(8, 25, line.length, transformation=xform)
+
+
+def _line_to_dowel(line: Line) -> DowelElement:
+    """Create a DowelElement from a line."""
+    plane = Plane(line.start, line.direction)
+    xform = Transformation.from_frame(Frame.from_plane(plane))
+    return DowelElement(20, 20, line.length, transformation=xform)
+
+
+def _line_to_strip(line: Line, height: float) -> AlignmentStripElement:
+    """Create an AlignmentStripElement from a line."""
+    frame = Frame(line.start, Vector.Zaxis().cross(line.direction), line.direction)
+    xform = Transformation.from_frame(frame)
+    return AlignmentStripElement(height=height, transformation=xform)
 
 # ==========================================================================
 # Result Container
@@ -34,14 +61,24 @@ from compas_tf.joint_strip import AlignmentStripElement
 
 @dataclass
 class QuarterResult:
-    """Container for quarter floor build results."""
+    """Container for quarter floor build results.
 
-    rib_elements: list
-    rib_polys: list[Polyline]
+    axis_elements is a dict keyed by axis index containing all main elements:
+    - axis_elements[0]: rib at axis 0 (bottom boundary)
+    - axis_elements[1]: rib at axis 1 (diagonal 1)
+    - axis_elements[2]: rib at axis 2 (diagonal 2)
+    - axis_elements[3]: boundary at axis 3 (edge-oculus)
+    - axis_elements[4]: boundary at axis 4 (oculus-oculus)
+    - axis_elements[5]: boundary at axis 5 (oculus-edge)
+    - axis_elements[6]: rib at axis 6 (left boundary)
+    - axis_elements[7]: boundary at axis 7 (diagonal cut at column head)
+    """
+
+    axis_elements: dict  # {axis_idx: PlateElement}
+    axis_polys: dict[int, list[Polyline]]
     tsection_elements: list
     surface_elements: list
     surface_edge_polys: list
-    boundary_beam_elements: list
     screws: list
     dowels: list
     strips: list
@@ -106,35 +143,50 @@ def _compute_lofted_lines(builder, offset_axes):
 
 
 def _build_ribs(builder):
-    """Compute rib meshes and polylines for quarter 1 (from slab.py:393-442)."""
-    offsets_ids_boundary = [0, 0, 2, 2]  # Front: diagonal ribs (1,2) use planes 0 and 2
-    offsets_ids_rib = [0, 1, 1, 2]       # Back: original values
-    offset_pairs = [(0.5, -0.5), (0.5, -0.5), (0.5, -0.5), (0.5, -0.5)]
+    """Compute rib meshes and polyline pairs for quarter 1 (from slab.py:393-442).
+
+    Ribs are keyed by axis index to follow builder.axes order:
+    - rib[0] -> axes[0] (bottom boundary)
+    - rib[1] -> axes[1] (diagonal 1)
+    - rib[2] -> axes[2] (diagonal 2)
+    - rib[6] -> axes[6] (left boundary)
+
+    Returns
+    -------
+    tuple[dict, dict, dict]
+        (meshes, flat_polylines, polyline_pairs) all keyed by axis index
+    """
+    # Rib configuration: (axis_idx, parabola_idx, target_plane_idx, boundary_cut_idx, rib_cut_idx)
+    rib_configs = [
+        (0, 0, 0, 0, 0),  # axis 0: parabola[0], target[0], boundary_cut[0], rib_cut[0+3]
+        (1, 1, 1, 0, 1),  # axis 1: parabola[1], target[1], boundary_cut[0], rib_cut[1+3]
+        (2, 2, 2, 2, 1),  # axis 2: parabola[2], target[2], boundary_cut[2], rib_cut[1+3]
+        (6, 3, 3, 2, 2),  # axis 6: parabola[3], target[3], boundary_cut[2], rib_cut[2+3]
+    ]
+
     rib_parabolas = builder.rib_parabolas
     target_planes = builder.target_planes
     cut_planes = builder.cut_planes
     thick = builder.thick
     head_h = builder.head_h
 
-    quarter_meshes = []
-    list_rib_polylines = []
+    quarter_meshes = {}
+    list_rib_polylines = {}
+    polyline_pairs = {}
 
-    for i in range(len(rib_parabolas)):
-        offset0, offset1 = offset_pairs[i]
-        # end_plane = cut_planes[1]
-        # end_plane = Plane(builder.end_planes[1].point, builder.cut_planes[1].normal).offset(-30)
+    for axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx in rib_configs:
+        offset0, offset1 = 0.5, -0.5
         end_plane = builder.end_diagonal_plane.offset(-builder.thick)
 
-        cut_boundary = cut_planes[offsets_ids_boundary[i]]
-        cut_rib = cut_planes[offsets_ids_rib[i] + 3]
+        cut_boundary = cut_planes[boundary_cut_idx]
+        cut_rib = cut_planes[rib_cut_idx + 3]
 
-        proj0 = rib_parabolas[i].translated(target_planes[i].normal * thick * offset0)
-        proj1 = rib_parabolas[i].translated(target_planes[i].normal * thick * offset1)
+        proj0 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset0)
+        proj1 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset1)
 
         cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj0, cut_rib), cut_boundary)
         cut1 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj1, cut_rib), cut_boundary)
 
-        extension = 378 if i in [0, 3] else 498
         extension = 600
         line0 = PolylineCut.cut_by_plane(Polyline([cut0[0], cut0[-1]]).extended([extension, 0]), end_plane, flip=True)
         line1 = PolylineCut.cut_by_plane(Polyline([cut1[0], cut1[-1]]).extended([extension, 0]), end_plane, flip=True)
@@ -151,14 +203,21 @@ def _build_ribs(builder):
         joined0.append(joined0.points[0])
         joined1.append(joined1.points[0])
 
-        quarter_meshes.append(PolylineLoft.to_mesh(joined0, joined1))
-        list_rib_polylines.extend([joined0, joined1])
+        quarter_meshes[axis_idx] = PolylineLoft.to_mesh(joined0, joined1)
+        list_rib_polylines[axis_idx] = [joined0, joined1]
+        polyline_pairs[axis_idx] = (joined0, joined1)
 
-    return quarter_meshes, list_rib_polylines
+    return quarter_meshes, list_rib_polylines, polyline_pairs
 
 
 def _build_tsections(builder, axis_planes, lofted_lines):
-    """Compute T-section meshes for quarter 1 (from slab.py:444-485)."""
+    """Compute T-section meshes and polyline pairs for quarter 1 (from slab.py:444-485).
+
+    Returns
+    -------
+    tuple[list[Mesh], list[tuple[Polyline, Polyline]]]
+        (meshes, polyline_pairs) where polyline_pairs is [(top, bottom), ...]
+    """
     lofted_bottom = lofted_lines[0]
     cut_planes = builder.cut_planes
     rib_parabolas = builder.rib_parabolas
@@ -167,6 +226,7 @@ def _build_tsections(builder, axis_planes, lofted_lines):
     offsets = [[1], [-1, 1], [-1, 1], [-1]]
     offsets_ids = [[0], [0, 1], [1, 2], [2]]
     quarter_meshes = []
+    polyline_pairs = []
 
     for i in range(len(rib_parabolas)):
         for j in range(len(offsets[i])):
@@ -192,12 +252,19 @@ def _build_tsections(builder, axis_planes, lofted_lines):
             merged0 = Polyline(proj0.points + list(reversed(cut0.points)))
             merged1 = Polyline(proj1.points + list(reversed(cut1.points)))
             quarter_meshes.append(PolylineLoft.to_mesh(merged0, merged1, True))
+            polyline_pairs.append((merged0, merged1))
 
-    return quarter_meshes
+    return quarter_meshes, polyline_pairs
 
 
 def _build_surfaces(builder, axis_planes, lofted_lines):
-    """Compute surface meshes and edge polylines for quarter 1 (from slab.py:487-528)."""
+    """Compute surface meshes, edge polylines, and polyline pairs for quarter 1.
+
+    Returns
+    -------
+    tuple[list[Mesh], list, list[tuple[Polyline, Polyline]]]
+        (meshes, edge_polylines, polyline_pairs) where polyline_pairs is [(top, bottom), ...]
+    """
     lofted_bottom = lofted_lines[0]
     lofted_top = lofted_lines[1]
     cut_planes = builder.cut_planes
@@ -224,18 +291,32 @@ def _build_surfaces(builder, axis_planes, lofted_lines):
 
     quarter_meshes = []
     quarter_edge_polylines = []
+    polyline_pairs = []
     for pair in [surface_edges[i : i + 4] for i in range(0, len(surface_edges), 4)]:
         bl, br, tl, tr = pair[0], pair[1], pair[2], pair[3]
         poly0 = Polyline(bl.points + list(reversed(br.points)))
         poly1 = Polyline(tl.points + list(reversed(tr.points)))
         quarter_meshes.append(PolylineLoft.to_mesh(poly0, poly1))
         quarter_edge_polylines.append([tl, bl, tr, br])
+        polyline_pairs.append((poly0, poly1))
 
-    return quarter_meshes, quarter_edge_polylines
+    return quarter_meshes, quarter_edge_polylines, polyline_pairs
 
 
 def _build_boundaries(builder, surface_edge_polys):
-    """Compute boundary beam meshes for quarter 1 (from slab.py:607-653)."""
+    """Compute boundary beam meshes and polyline pairs for quarter 1.
+
+    Boundaries are keyed by axis index to follow builder.axes order:
+    - boundary[3] -> axes[3] (edge-oculus)
+    - boundary[4] -> axes[4] (oculus-oculus)
+    - boundary[5] -> axes[5] (oculus-edge)
+    - boundary[7] -> diagonal cut at column head
+
+    Returns
+    -------
+    tuple[dict, dict]
+        (meshes, polyline_pairs) all keyed by axis index
+    """
     q1 = builder.quarter_polygon
     thick = builder.thick
     height = builder.height
@@ -245,14 +326,18 @@ def _build_boundaries(builder, surface_edge_polys):
     poly1 = PolylineOffset.offset_polyline_xy(poly0, thick)
     poly2 = PolylineOffset.offset_polyline_xy(poly0, thick * 1.5)
 
-    meshes = []
+    meshes = {}
+    polyline_pairs = {}
     dist = height - rise
 
+    # j=0 -> axis 3, j=1 -> axis 4, j=2 -> axis 5
     for j in range(len(poly0) - 1):
+        axis_idx = j + 3  # Map j to axis index
         # Main beam
         s0 = Polyline([poly0[j], poly0[j + 1], Vector(0, 0, -dist) + poly0[j + 1], Vector(0, 0, -dist) + poly0[j], poly0[j]])
         s1 = Polyline([poly1[j], poly1[j + 1], Vector(0, 0, -dist) + poly1[j + 1], Vector(0, 0, -dist) + poly1[j], poly1[j]])
-        meshes.append(PolylineLoft.to_mesh(s0, s1))
+        meshes[axis_idx] = PolylineLoft.to_mesh(s0, s1)
+        polyline_pairs[axis_idx] = (s0, s1)
 
         # T-section
         tl, bl, tr, br = surface_edge_polys[j]
@@ -275,7 +360,7 @@ def _build_boundaries(builder, surface_edge_polys):
         # s3 = Polyline([s3[0], s3[1], [s3[1][0], s3[1][1], -dist], [s3[0][0], s3[0][1], -dist], s3[0]])
         # meshes.append(PolylineLoft.to_mesh(s2, s3))
 
-    # Column head boundary
+    # Column head boundary (diagonal cut) -> axis 7
     plane_cut_0 = builder.end_diagonal_plane
     plane_cut_1 = builder.end_diagonal_plane.offset(-builder.thick)
     plane0 = Plane.worldXY()
@@ -285,10 +370,10 @@ def _build_boundaries(builder, surface_edge_polys):
     result0 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_0))
     result1 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_1))
 
-    meshes.append(PolylineLoft.to_mesh(result0, result1))
+    meshes[7] = PolylineLoft.to_mesh(result0, result1)
+    polyline_pairs[7] = (result0, result1)
 
-
-    return meshes
+    return meshes, polyline_pairs
 
 
 
@@ -347,189 +432,6 @@ class QuarterFloorElement(Element):
 
     def compute_point(self) -> Point:
         return Point(*self.modelgeometry.centroid())
-    
-    def _build_screw_lines(self, builder) -> tuple[list, list, list, list]:
-        """Build screw and dowel elements for quarter floor connections.
-
-        Returns
-        -------
-        tuple[list, list, list, list]
-            - screws: List of ScrewElement
-            - dowels: List of DowelElement
-            - strips: List of AlignmentStripElement
-            - interaction_specs: List of (connector, element_type, element_indices) tuples
-              where element_type is "rib", "tsection", "surface", or "boundary"
-              and element_indices is a list of indices into that element list
-        """
-
-        def _line_to_screw(line: Line) -> ScrewElement:
-            plane = Plane(line.start, line.direction)
-            xform = Transformation.from_frame(Frame.from_plane(plane))
-            return ScrewElement(8, 25, line.length, transformation=xform)
-
-        def _line_to_dowel(line: Line) -> DowelElement:
-            plane = Plane(line.start, line.direction)
-            xform = Transformation.from_frame(Frame.from_plane(plane))
-            return DowelElement(20, 20, line.length, transformation=xform)
-
-        def _line_to_strip(frame: Line, height) -> AlignmentStripElement:
-            frame = Frame(frame.start, Vector.Zaxis().cross(frame.direction), frame.direction)
-            xform = Transformation.from_frame(frame)
-            return AlignmentStripElement(height=height, transformation=xform)
-
-        screws = []
-        dowels = []
-        strips = []
-        interaction_specs = []  # (connector, element_type, element_indices)
-
-        height_offset = 20
-        divisions = 4
-        height0 = (builder.height-builder.rise-height_offset*2) / (divisions-1)
-        height1 = (builder.head_h-height_offset*2) / (divisions*2-1)
-        height_middle = (builder.height-builder.rise) * 0.5
-
-        # Corner screws - 0 and 2 axis (boundary ribs)
-        # These screws belong to boundary elements, not ribs
-        # Ribs should only have strip elements
-        # Maps axis pairs to correct boundary indices:
-        # - (3, 0), (3, 1): bottom edge → boundary[0]
-        # - (5, 6), (5, 2): right edge → boundary[2]
-        axis_pairs_02_to_boundary = {
-            (3, 0): 0,  # bottom edge
-            (3, 1): 0,  # bottom edge
-            (5, 6): 2,  # right edge
-            (5, 2): 2,  # right edge
-        }
-        for (offset_axis, intersect_axis), boundary_idx in axis_pairs_02_to_boundary.items():
-            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
-            for j in range(0, divisions):
-                if j % 2 == 0:
-                    continue
-                translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
-                screw = _line_to_screw(translated_line)
-                screws.append(screw)
-                interaction_specs.append((screw, "boundary", [boundary_idx]))
-
-
-        # Strips between diagonal ribs (rib_1 and rib_2)
-        axis_pairs_strips = [(3, 4), (4, 5)]
-        for offset_axis, intersect_axis in axis_pairs_strips:
-            strip_point = Point(*intersection_line_line(builder.axes[offset_axis], builder.axes[intersect_axis])[0])
-            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction+ builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
-            strip = _line_to_strip(strip_line, height_middle*2)
-            strips.append(strip)
-            interaction_specs.append((strip, "rib", [1, 2]))  # connects diagonal ribs
-
-        # Strips at rib corners - connect adjacent ribs
-        # Maps axis pairs to the ribs they connect
-        axis_strip_to_ribs = {
-            (0, 3): [0, 1],  # connects rib_0 and rib_1 (boundary-diagonal junction)
-            (6, 5): [2, 3],  # connects rib_2 and rib_3 (diagonal-boundary junction)
-            (1, 3): [1],     # connects rib_1 only (diagonal rib corner)
-            (2, 5): [2],     # connects rib_2 only (diagonal rib corner)
-        }
-        axis_pairs_strips = [(0, 3), (6, 5), (1, 3), (2, 5)]
-        for offset_axis, intersect_axis in axis_pairs_strips:
-            rib_indices = axis_strip_to_ribs[(offset_axis, intersect_axis)]
-            intersect_line = LineOffset.offset_xy(builder.axes[intersect_axis], builder.thick*-0.5)
-            strip_point = Point(*intersection_line_line(builder.axes[offset_axis], intersect_line)[0])
-
-            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction).translated(Vector.Zaxis() * -height_middle)
-            strip = _line_to_strip(strip_line, height_middle*2)
-            strips.append(strip)
-            interaction_specs.append((strip, "rib", rib_indices))
-
-
-        # Corner strips at column head - connect rib to back boundary_3
-        axis_corner = Line(builder.end_diagonal_plane.point, builder.end_diagonal_plane.point + Vector.Zaxis().cross(builder.end_diagonal_plane.normal))
-        axis_to_rib = {0: 0, 6: 3, 1: 1, 2: 2}  # axis index to rib index
-        axes = [0, 6, 1, 2]
-        for axis in axes:
-            rib_idx = axis_to_rib[axis]
-            intersect_line = LineOffset.offset_xy(axis_corner, builder.thick*-1)
-            strip_point = Point(*intersection_line_line(builder.axes[axis], intersect_line)[0])
-
-            strip_line = Line(strip_point, strip_point + builder.axes[axis].direction).translated(Vector.Zaxis() * -builder.head_h*0.5)
-            strip = _line_to_strip(strip_line, builder.head_h)
-            strips.append(strip)
-            # Strip connects rib to back boundary_3
-            interaction_specs.append((strip, "rib", [rib_idx]))
-            interaction_specs.append((strip, "boundary", [3]))
-
-
-
-
-        # Corner screws - diagonal ribs near oculus
-        # These screws belong to boundary[1] (oculus side), not boundary[3]
-        # Ribs should only have strip elements
-        axis_pairs_1 = [(3, 4), (5, 4)]
-        for offset_axis, intersect_axis in axis_pairs_1:
-            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
-            for j in range(0, divisions):
-                if j % 2 == 1:
-                    continue
-                translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
-                screw = _line_to_screw(translated_line)
-                screws.append(screw)
-                interaction_specs.append((screw, "boundary", [1]))  # oculus side boundary
-
-
-        # Back corner screws - belong to back boundary_3 (not ribs)
-        # These screws are at the diagonal cut near the column head
-        rib_axes = [0, 1, 2, 6]
-        for i in rib_axes:
-            axis_plane = Plane(builder.axes[i].midpoint, Vector.Zaxis().cross(builder.axes[i].direction))
-            p0 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane, Plane.worldXY())
-            p1 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane.offset(-builder.thick * 0.5), Plane.worldXY())
-            line = Line(p0, p1)
-
-            if i == 0 or i == 6:
-                for j in range(divisions * 2):
-                    if j % 2 == 0:
-                        continue
-                    translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
-                    screw = _line_to_screw(translated_line)
-                    screws.append(screw)
-                    interaction_specs.append((screw, "boundary", [3]))  # back boundary_3
-            else:
-                for j in range(divisions * 2):
-                    if j % 2 == 1:
-                        continue
-                    translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
-                    screw = _line_to_screw(translated_line)
-                    screws.append(screw)
-                    interaction_specs.append((screw, "boundary", [3]))  # back boundary_3
-
-        # Boundary connectors - connect to boundary_beam_elements
-        # boundary_beam_elements: [0]=edge-oculus, [1]=oculus-oculus, [2]=oculus-edge
-        divisions = [12, 8, 12]
-
-        for i in range(3):
-            line = Line(builder.quarter_polygon[1 + i], builder.quarter_polygon[2 + i])
-            direction = Vector.Zaxis().cross(line.direction).unitized() * builder.thick
-
-            if i == 2:
-                line = Line(line.end, line.start)
-            points = LineOffset.divide(line, divisions[i])
-
-            for idx, pt in enumerate(points):
-                if idx == 0 or idx == len(points) - 1:
-                    continue
-
-                p_start = pt + direction - height_middle * Vector.Zaxis()
-                p_end = pt + direction * 0 - height_middle * Vector.Zaxis()
-                connector_line = Line(p_start, p_end)
-
-                if idx % 3 == 1:
-                    dowel = _line_to_dowel(connector_line)
-                    dowels.append(dowel)
-                    interaction_specs.append((dowel, "boundary", [i]))
-                else:
-                    screw = _line_to_screw(connector_line)
-                    screws.append(screw)
-                    interaction_specs.append((screw, "boundary", [i]))
-
-        return screws, dowels, strips, interaction_specs
 
     @staticmethod
     def build(builder, angle: float = 0) -> QuarterResult:
@@ -560,104 +462,225 @@ class QuarterFloorElement(Element):
         offset_axes = _compute_offset_axes(builder)
         lofted_lines = _compute_lofted_lines(builder, offset_axes)
 
-        # Build components
-        rib_meshes, rib_polys = _build_ribs(builder)
-        tsection_meshes = _build_tsections(builder, axis_planes, lofted_lines)
-        surface_meshes, surface_edge_polys = _build_surfaces(builder, axis_planes, lofted_lines)
-        boundary_beam_meshes = _build_boundaries(builder, surface_edge_polys)
+        # Build components with polyline pairs
+        rib_meshes, rib_polys, rib_polyline_pairs = _build_ribs(builder)
+        tsection_meshes, tsection_polyline_pairs = _build_tsections(builder, axis_planes, lofted_lines)
+        surface_meshes, surface_edge_polys, surface_polyline_pairs = _build_surfaces(builder, axis_planes, lofted_lines)
+        boundary_beam_meshes, boundary_polyline_pairs = _build_boundaries(builder, surface_edge_polys)
 
-        # Screws and connectors with interaction specs
-        screws, dowels, strips, interaction_specs = QuarterFloorElement()._build_screw_lines(builder)
-
-        # Apply rotation to screws, dowels, strips if needed
-        # Track connector mapping for interactions
-        connector_map = {}  # old connector -> new connector
+        # Apply rotation to polylines if needed (dicts for ribs/boundaries, lists for others)
         if rotation_xform:
-            new_screws = []
-            for s in screws:
-                new_s = ScrewElement(
-                    s.diameter, s.diameter_head, s.height,
-                    transformation=rotation_xform * s.transformation if s.transformation else rotation_xform,
-                    name=s.name
-                )
-                connector_map[s] = new_s
-                new_screws.append(new_s)
-            screws = new_screws
-
-            new_dowels = []
-            for d in dowels:
-                new_d = DowelElement(
-                    d.width, d.depth, d.height,
-                    transformation=rotation_xform * d.transformation if d.transformation else rotation_xform,
-                    name=d.name
-                )
-                connector_map[d] = new_d
-                new_dowels.append(new_d)
-            dowels = new_dowels
-
-            new_strips = []
-            for s in strips:
-                new_s = AlignmentStripElement(
-                    s.width, s.depth, s.height,
-                    transformation=rotation_xform * s.transformation if s.transformation else rotation_xform,
-                    name=s.name
-                )
-                connector_map[s] = new_s
-                new_strips.append(new_s)
-            strips = new_strips
-
-            # Transform polylines
-            rib_polys = [p.transformed(rotation_xform) for p in rib_polys]
+            rib_polys = {axis_idx: [p.transformed(rotation_xform) for p in polys] for axis_idx, polys in rib_polys.items()}
             surface_edge_polys = [
                 [poly.transformed(rotation_xform) for poly in edge_group]
                 for edge_group in surface_edge_polys
             ]
+            rib_polyline_pairs = {axis_idx: (p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for axis_idx, (p0, p1) in rib_polyline_pairs.items()}
+            tsection_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in tsection_polyline_pairs]
+            surface_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in surface_polyline_pairs]
+            boundary_polyline_pairs = {axis_idx: (p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for axis_idx, (p0, p1) in boundary_polyline_pairs.items()}
 
-        # Wrap meshes in elements with rotation transformation
-        rib_elements = [
-            QuarterFloorElement(mesh=m, transformation=rotation_xform, name=f"rib_{i}")
-            for i, m in enumerate(rib_meshes)
-        ]
+        # Create PlateElements with polylines - unified axis_elements dict
+        axis_elements = {}
+        axis_polys = {}
+
+        # Add rib elements (axes 0, 1, 2, 6)
+        for axis_idx, m in rib_meshes.items():
+            axis_elements[axis_idx] = PlateElement(
+                top_polyline=rib_polyline_pairs[axis_idx][0],
+                bottom_polyline=rib_polyline_pairs[axis_idx][1],
+                mesh=m.transformed(rotation_xform) if rotation_xform else m,
+                name=f"axis_{axis_idx}"
+            )
+            axis_polys[axis_idx] = rib_polys[axis_idx]
+
+        # Add boundary elements (axes 3, 4, 5, 7)
+        for axis_idx, m in boundary_beam_meshes.items():
+            axis_elements[axis_idx] = PlateElement(
+                top_polyline=boundary_polyline_pairs[axis_idx][0],
+                bottom_polyline=boundary_polyline_pairs[axis_idx][1],
+                mesh=m.transformed(rotation_xform) if rotation_xform else m,
+                name=f"axis_{axis_idx}"
+            )
+            axis_polys[axis_idx] = [boundary_polyline_pairs[axis_idx][0], boundary_polyline_pairs[axis_idx][1]]
+
         tsection_elements = [
-            QuarterFloorElement(mesh=m, transformation=rotation_xform, name=f"tsection_{i}")
+            PlateElement(top_polyline=tsection_polyline_pairs[i][0], bottom_polyline=tsection_polyline_pairs[i][1],
+                        mesh=m.transformed(rotation_xform) if rotation_xform else m, name=f"tsection_{i}")
             for i, m in enumerate(tsection_meshes)
         ]
         surface_elements = [
-            QuarterFloorElement(mesh=m, transformation=rotation_xform, name=f"surface_{i}")
+            PlateElement(top_polyline=surface_polyline_pairs[i][0], bottom_polyline=surface_polyline_pairs[i][1],
+                        mesh=m.transformed(rotation_xform) if rotation_xform else m, name=f"surface_{i}")
             for i, m in enumerate(surface_meshes)
         ]
-        boundary_beam_elements = [
-            QuarterFloorElement(mesh=m, transformation=rotation_xform, name=f"boundary_{i}")
-            for i, m in enumerate(boundary_beam_meshes)
-        ]
 
-        # Build interactions list from interaction specs
-        # Maps element_type to element list
-        element_lists = {
-            "rib": rib_elements,
-            "tsection": tsection_elements,
-            "surface": surface_elements,
-            "boundary": boundary_beam_elements,
-        }
-
+        # =======================================================================
+        # Build connectors directly referencing elements
+        # =======================================================================
+        screws = []
+        dowels = []
+        strips = []
         interactions = []
-        for connector, element_type, element_indices in interaction_specs:
-            # Get the (possibly rotated) connector
-            actual_connector = connector_map.get(connector, connector)
-            # Get the element list for this type
-            elements = element_lists.get(element_type, [])
-            # Add interaction for each element index
-            for idx in element_indices:
-                if idx < len(elements):
-                    interactions.append((actual_connector, elements[idx]))
+
+        height_offset = 20
+        divisions = 4
+        height0 = (builder.height - builder.rise - height_offset * 2) / (divisions - 1)
+        height1 = (builder.head_h - height_offset * 2) / (divisions * 2 - 1)
+        height_middle = (builder.height - builder.rise) * 0.5
+
+        # Helper to apply rotation to connector
+        def apply_rotation(connector):
+            if rotation_xform and connector.transformation:
+                connector.transformation = rotation_xform * connector.transformation
+            elif rotation_xform:
+                connector.transformation = rotation_xform
+            return connector
+
+        # -----------------------------------------------------------------------
+        # Corner screws - axes 0, 1, 2, 6 corners
+        # -----------------------------------------------------------------------
+        axis_pairs_02_to_boundary = {
+            (3, 0): axis_elements[3],  # axis 3
+            (3, 1): axis_elements[3],  # axis 3
+            (5, 6): axis_elements[5],  # axis 5
+            (5, 2): axis_elements[5],  # axis 5
+        }
+        for (offset_axis, intersect_axis), boundary_element in axis_pairs_02_to_boundary.items():
+            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
+            for j in range(0, divisions):
+                if j % 2 == 0:
+                    continue
+                translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
+                screw = apply_rotation(_line_to_screw(translated_line))
+                screws.append(screw)
+                interactions.append((screw, boundary_element))
+
+        # -----------------------------------------------------------------------
+        # Strips between diagonal axes (axis[1] and axis[2])
+        # -----------------------------------------------------------------------
+        axis_pairs_strips = [(3, 4), (4, 5)]
+        for offset_axis, intersect_axis in axis_pairs_strips:
+            strip_point = Point(*intersection_line_line(builder.axes[offset_axis], builder.axes[intersect_axis])[0])
+            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction + builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
+            strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
+            strips.append(strip)
+            interactions.append((strip, axis_elements[offset_axis]))
+            interactions.append((strip, axis_elements[intersect_axis]))
+
+        # -----------------------------------------------------------------------
+        # Strips at axis corners
+        # -----------------------------------------------------------------------
+        axis_strip_to_elements = {
+            (0, 3): [axis_elements[0], axis_elements[3]],  # axis 0
+            (6, 5): [axis_elements[6], axis_elements[5]],  # axis 6
+            (1, 3): [axis_elements[1], axis_elements[3]],  # axis 1
+            (2, 5): [axis_elements[2], axis_elements[5]],  # axis 2
+        }
+        for (offset_axis, intersect_axis), connected_elements in axis_strip_to_elements.items():
+            intersect_line = LineOffset.offset_xy(builder.axes[intersect_axis], builder.thick * -0.5)
+            strip_point = Point(*intersection_line_line(builder.axes[offset_axis], intersect_line)[0])
+            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction).translated(Vector.Zaxis() * -height_middle)
+            strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
+            strips.append(strip)
+            for element in connected_elements:
+                interactions.append((strip, element))
+
+        # -----------------------------------------------------------------------
+        # Corner strips at column head - connect to axis[7]
+        # -----------------------------------------------------------------------
+        axis_corner = Line(builder.end_diagonal_plane.point, builder.end_diagonal_plane.point + Vector.Zaxis().cross(builder.end_diagonal_plane.normal))
+        axis_to_element = {
+            0: axis_elements[0],  # axis 0
+            6: axis_elements[6],  # axis 6
+            1: axis_elements[1],  # axis 1
+            2: axis_elements[2],  # axis 2
+        }
+        for axis, element in axis_to_element.items():
+            intersect_line = LineOffset.offset_xy(axis_corner, builder.thick * -1)
+            strip_point = Point(*intersection_line_line(builder.axes[axis], intersect_line)[0])
+            strip_line = Line(strip_point, strip_point + builder.axes[axis].direction).translated(Vector.Zaxis() * -builder.head_h * 0.5)
+            strip = apply_rotation(_line_to_strip(strip_line, builder.head_h))
+            strips.append(strip)
+            interactions.append((strip, element))
+            interactions.append((strip, axis_elements[7]))
+
+        # -----------------------------------------------------------------------
+        # Corner screws - near oculus (belong to axis[4])
+        # -----------------------------------------------------------------------
+        axis_pairs_1 = [(3, 4), (5, 4)]
+        for offset_axis, intersect_axis in axis_pairs_1:
+            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
+            for j in range(0, divisions):
+                if j % 2 == 1:
+                    continue
+                translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height0 * j)
+                screw = apply_rotation(_line_to_screw(translated_line))
+                screws.append(screw)
+                interactions.append((screw, axis_elements[offset_axis]))
+
+        # -----------------------------------------------------------------------
+        # Back corner screws - belong to axis[7]
+        # -----------------------------------------------------------------------
+        rib_axes = [0, 1, 2, 6]
+        for i in rib_axes:
+            axis_plane = Plane(builder.axes[i].midpoint, Vector.Zaxis().cross(builder.axes[i].direction))
+            p0 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane, Plane.worldXY())
+            p1 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane.offset(-builder.thick * 1.0), Plane.worldXY())
+            line = Line(p0, p1)
+
+            if i == 0 or i == 6:
+                for j in range(divisions * 2):
+                    if j % 2 == 0:
+                        continue
+                    translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
+                    screw = apply_rotation(_line_to_screw(translated_line))
+                    screws.append(screw)
+                    interactions.append((screw, axis_elements[7]))
+            else:
+                for j in range(divisions * 2):
+                    if j % 2 == 1:
+                        continue
+                    translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
+                    screw = apply_rotation(_line_to_screw(translated_line))
+                    screws.append(screw)
+                    interactions.append((screw, axis_elements[7]))
+
+        # -----------------------------------------------------------------------
+        # Boundary connectors - connect to axis_elements[3, 4, 5]
+        # -----------------------------------------------------------------------
+        boundary_configs = [(3, 12), (4, 8), (5, 12)]  # (axis_idx, divisions)
+        for i, (axis_idx, num_divisions) in enumerate(boundary_configs):
+            line = Line(builder.quarter_polygon[1 + i], builder.quarter_polygon[2 + i])
+            direction = Vector.Zaxis().cross(line.direction).unitized() * builder.thick
+
+            if axis_idx == 5:
+                line = Line(line.end, line.start)
+            points = LineOffset.divide(line, num_divisions)
+
+            for idx, pt in enumerate(points):
+                if idx == 0 or idx == len(points) - 1:
+                    continue
+
+                p_start = pt + direction - height_middle * Vector.Zaxis()
+                p_end = pt + direction * 0 - height_middle * Vector.Zaxis()
+                connector_line = Line(p_start, p_end)
+
+                if idx % 3 == 1:
+                    dowel = apply_rotation(_line_to_dowel(connector_line))
+                    dowels.append(dowel)
+                    interactions.append((dowel, axis_elements[axis_idx]))
+                else:
+                    screw = apply_rotation(_line_to_screw(connector_line))
+                    screws.append(screw)
+                    interactions.append((screw, axis_elements[axis_idx]))
 
         return QuarterResult(
-            rib_elements=rib_elements,
-            rib_polys=rib_polys,
+            axis_elements=axis_elements,
+            axis_polys=axis_polys,
             tsection_elements=tsection_elements,
             surface_elements=surface_elements,
             surface_edge_polys=surface_edge_polys,
-            boundary_beam_elements=boundary_beam_elements,
             screws=screws,
             dowels=dowels,
             strips=strips,
