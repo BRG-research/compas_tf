@@ -337,6 +337,8 @@ def _build_boundaries(builder, surface_edge_polys):
     poly0 = Polyline([q1[i] for i in [1, 2, 3, 4]])  # edge -> oculus -> oculus -> edge
     poly1 = PolylineOffset.offset_polyline_xy(poly0, thick)
     poly2 = PolylineOffset.offset_polyline_xy(poly0, thick * 1.5)
+    # poly1 = PolylineOffset.offset_polygon_reciprocally(poly0, thick)
+    # poly2 = PolylineOffset.offset_polygon_reciprocally(poly0, thick * 1.5)
 
     meshes = {}
     polyline_pairs = {}
@@ -364,8 +366,8 @@ def _build_boundaries(builder, surface_edge_polys):
         tl = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(tl, p0), p1)
         bl = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(bl, p0), p1)
 
-        s2 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(Polyline([tl[0], bl[0]]), p0off), p1off)
-        s3 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(Polyline([tl[1], bl[1]]), p0off), p1off)
+        # s2 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(Polyline([tl[0], bl[0]]), p0off), p1off)
+        # s3 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(Polyline([tl[1], bl[1]]), p0off), p1off)
 
         # OPTIONS: for the boundary faces
         # s2 = Polyline([s2[0], s2[1], [s2[1][0], s2[1][1], -dist], [s2[0][0], s2[0][1], -dist], s2[0]])
