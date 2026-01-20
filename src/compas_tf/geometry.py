@@ -240,6 +240,82 @@ class PolylineOffset:
 
             polygons.append(Polygon([r0, r1, r2, r3]))
         return polygons
+    
+    @staticmethod
+    def offset_quarter_reciprocally(polygon: Polygon, offset: float) -> Polygon:
+        """Offset a 2d polygon reciprocally by a given distance.
+
+        Parameters
+        ----------
+        polygon : Polygon
+            The input polygon to be offset.
+        offset : float
+            The distance by which to offset the polygon.
+
+        Returns
+        -------
+        Polygon
+            The offset polygon.
+        """
+
+        # 4 boundary planes
+        planes = []
+        planes_ = []
+        for i in range(len(polygon.points)):
+
+            p_curr = polygon.points[i]
+            p_next = polygon.points[(i + 1) % len(polygon.points)]
+            x_axis = (p_next - p_curr)
+            translation_direction = Vector.Zaxis().cross(x_axis).unitized()
+            
+            plane = Plane(p_curr, -translation_direction)
+            planes.append(plane)
+            planes_.append(plane.offset(-offset))
+        
+        plane_start = Plane(polygon.points[0], polygon.points[1] - polygon.points[0])
+        plane_end = Plane(polygon.points[-1], polygon.points[-2] - polygon.points[-1])
+        polygons = []
+
+        # Plate0
+
+        r0 = intersection_plane_plane_plane(polygon.plane, planes[0], plane_start)
+        r1 = intersection_plane_plane_plane(polygon.plane, planes[0], planes[1])
+        r2 = intersection_plane_plane_plane(polygon.plane, planes_[0], planes[1])
+        r3 = intersection_plane_plane_plane(polygon.plane, planes_[0], plane_start)
+        polygons.append(Polygon([r0, r1, r2, r3]))
+
+        # Plate1
+
+        r0 = intersection_plane_plane_plane(polygon.plane, planes[1], planes_[0])
+        r1 = intersection_plane_plane_plane(polygon.plane, planes[1], planes_[2])
+        r2 = intersection_plane_plane_plane(polygon.plane, planes_[1], planes_[2])
+        r3 = intersection_plane_plane_plane(polygon.plane, planes_[1], planes_[0])
+        polygons.append(Polygon([r0, r1, r2, r3]))
+
+        # Plate2
+        r0 = intersection_plane_plane_plane(polygon.plane, planes[2], plane_end)
+        r1 = intersection_plane_plane_plane(polygon.plane, planes[2], planes[1])
+        r2 = intersection_plane_plane_plane(polygon.plane, planes_[2], planes[1])
+        r3 = intersection_plane_plane_plane(polygon.plane, planes_[2], plane_end)
+        polygons.append(Polygon([r0, r1, r2, r3]))
+
+        # polygons = []
+        # print(len(planes))
+
+        # n = len(polygon.points)
+        # for i in range(n):
+
+        #     sign = -1 if i == 2 else 1
+
+        #     # edge0
+        #     r0 = intersection_plane_plane_plane(polygon.plane, planes[i], planes_[(n + i - 1) % n])
+        #     r1 = intersection_plane_plane_plane(polygon.plane, planes[i], planes[(i + 1) % n])
+        #     # edge1
+        #     r2 = intersection_plane_plane_plane(polygon.plane, planes_[i], planes[(i + 1) % n])
+        #     r3 = intersection_plane_plane_plane(polygon.plane, planes_[i], planes_[(n + i - 1) % n])
+
+        #     polygons.append(Polygon([r0, r1, r2, r3]))
+        return polygons
 
     @staticmethod
     def offset_polygon(polygon, distance, baseplane=None):

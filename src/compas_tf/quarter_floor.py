@@ -337,8 +337,7 @@ def _build_boundaries(builder, surface_edge_polys):
     poly0 = Polyline([q1[i] for i in [1, 2, 3, 4]])  # edge -> oculus -> oculus -> edge
     poly1 = PolylineOffset.offset_polyline_xy(poly0, thick)
     poly2 = PolylineOffset.offset_polyline_xy(poly0, thick * 1.5)
-    # poly1 = PolylineOffset.offset_polygon_reciprocally(poly0, thick)
-    # poly2 = PolylineOffset.offset_polygon_reciprocally(poly0, thick * 1.5)
+    poly1_r_list = PolylineOffset.offset_quarter_reciprocally(poly0, thick)
 
     meshes = {}
     polyline_pairs = {}
@@ -350,6 +349,8 @@ def _build_boundaries(builder, surface_edge_polys):
         # Main beam
         s0 = Polyline([poly0[j], poly0[j + 1], Vector(0, 0, -dist) + poly0[j + 1], Vector(0, 0, -dist) + poly0[j], poly0[j]])
         s1 = Polyline([poly1[j], poly1[j + 1], Vector(0, 0, -dist) + poly1[j + 1], Vector(0, 0, -dist) + poly1[j], poly1[j]])
+        s0 = Polyline(poly1_r_list[j].points+[poly1_r_list[j].points[0]])
+        s1 = s0.translated(Vector.Zaxis() * -dist)
         meshes[axis_idx] = PolylineLoft.to_mesh(s0, s1)
         polyline_pairs[axis_idx] = (s0, s1)
 
