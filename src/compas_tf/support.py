@@ -3,9 +3,11 @@ from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
+from compas.geometry import Frame
 from compas.geometry import Point
 from compas.geometry import Polygon
 from compas.geometry import Transformation
+from compas.geometry import Vector
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
@@ -104,3 +106,24 @@ class SupportElement(Element):
 
     def compute_point(self) -> Point:
         return Point(*self.modelgeometry.centroid())
+
+    @property
+    def base_frame(self) -> Frame:
+        """Get the base frame at the bottom center of the mesh, with transformation applied.
+
+        Returns
+        -------
+        :class:`compas.geometry.Frame`
+            Frame at the bottom center of the mesh with Z-axis pointing up.
+        """
+        # Get mesh bounding box to find bottom center
+        aabb = self.mesh.aabb()
+        bottom_center = Point(
+            (aabb.xmin + aabb.xmax) / 2,
+            (aabb.ymin + aabb.ymax) / 2,
+            aabb.zmin
+        )
+        frame = Frame(bottom_center, Vector.Xaxis(), Vector.Yaxis())
+        if self.transformation:
+            frame.transform(self.transformation)
+        return frame

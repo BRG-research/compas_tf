@@ -31,6 +31,7 @@ from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
+from compas_tf.plate import PlateElement
 
 # Create a box representing one grid frame unit
 frame_size = 220.0
@@ -237,6 +238,40 @@ SUPPORT_COLOR = (0.9, 0.9, 0.9)
 COLUMN_COLOR = (0.9, 0.9, 0.9)
 COLUMN_HEAD_COLOR = (0.4, 0.4, 0.4)
 
+def get_base_frame_from_obb(element) -> Frame:
+    """Compute base_frame from element's OBB (for ColumnElement)."""
+    mesh = element.modelgeometry
+    obb = mesh.obb() if callable(mesh.obb) else mesh.obb
+    obb_frame = obb.frame
+    bottom_point = obb_frame.point - obb_frame.zaxis * (obb.zsize / 2)
+    return Frame(bottom_point, obb_frame.xaxis, obb_frame.yaxis)
+
+
+def frame_rectangle(frame, scale=100):
+    """Create a rectangle polygon and normal line from a frame.
+
+    Parameters
+    ----------
+    frame : :class:`compas.geometry.Frame`
+        The frame to create rectangle on.
+    scale : float
+        Half-size of the rectangle.
+
+    Returns
+    -------
+    tuple[:class:`compas.geometry.Polygon`, :class:`compas.geometry.Line`]
+        Rectangle polygon and normal line.
+    """
+    from compas.geometry import Polygon as GeomPolygon
+    p0 = frame.point - frame.xaxis * scale - frame.yaxis * scale
+    p1 = frame.point + frame.xaxis * scale - frame.yaxis * scale
+    p2 = frame.point + frame.xaxis * scale + frame.yaxis * scale
+    p3 = frame.point - frame.xaxis * scale + frame.yaxis * scale
+    polygon = GeomPolygon([p0, p1, p2, p3])
+    normal_line = Line(frame.point, frame.point + frame.zaxis * scale)
+    return polygon, normal_line
+
+
 def add_element_with_connectors(parent_group, element, connectors, element_name, element_color=ELEMENT_COLOR):
     """Add an element and its connectors as a nested group structure."""
     # Create element group
@@ -246,21 +281,25 @@ def add_element_with_connectors(parent_group, element, connectors, element_name,
     mesh = element.modelgeometry
     element_group.add(mesh, name="mesh", hide_coplanaredges=True, color=element_color)
 
-    # Add top/bottom polylines for PlateElement
-    if hasattr(element, 'top_polyline') and element.top_polyline is not None:
-        polylines_group = viewer.scene.add_group("polylines", parent=element_group)
-        polylines_group.add(element.top_polyline, name="top_polyline", linewidth=2)
-    if hasattr(element, 'bottom_polyline') and element.bottom_polyline is not None:
-        if not hasattr(element, 'top_polyline') or element.top_polyline is None:
+    # Add top/bottom polylines for PlateElement, EdgeBeamElement
+    if isinstance(element, (PlateElement, EdgeBeamElement)):
+        if element.top_polyline is not None or element.bottom_polyline is not None:
             polylines_group = viewer.scene.add_group("polylines", parent=element_group)
-        polylines_group.add(element.bottom_polyline, name="bottom_polyline", linewidth=2)
+            if element.top_polyline is not None:
+                polylines_group.add(element.top_polyline, name="top_polyline", linewidth=2)
+            if element.bottom_polyline is not None:
+                polylines_group.add(element.bottom_polyline, name="bottom_polyline", linewidth=2)
 
-    # Add base_plane visualization for PlateElement
-    if hasattr(element, 'base_plane') and element.base_plane is not None:
-        plane_polygon, plane_normal = PlaneIntersect.plane_rectangle(element.base_plane, scale=50)
-        planes_group = viewer.scene.add_group("base_plane", parent=element_group)
-        planes_group.add(plane_polygon, name="plane_rect", facecolor=(0.2, 0.6, 0.9), opacity=0.5)
-        planes_group.add(plane_normal, name="plane_normal", linewidth=2, linecolor=(0.9, 0.2, 0.2))
+    # Add base_frame visualization
+    if isinstance(element, ColumnElement):
+        base_frame = get_base_frame_from_obb(element)
+    else:
+        base_frame = element.base_frame
+
+    frame_polygon, frame_normal = frame_rectangle(base_frame, scale=50)
+    frames_group = viewer.scene.add_group("base_frame", parent=element_group)
+    frames_group.add(frame_polygon, name="frame_rect", facecolor=(0.2, 0.6, 0.9), opacity=0.5)
+    frames_group.add(frame_normal, name="frame_normal", linewidth=2, linecolor=(0.9, 0.2, 0.2))
 
     # Add connectors group if there are connectors
     if connectors:
@@ -276,11 +315,10 @@ def add_element_with_connectors(parent_group, element, connectors, element_name,
 all_meshes = []
 
 # 1. Supports group
-# supports_group = viewer.scene.add_group("supports")
-# for i, support in enumerate(viewer_data["supports"]):
-#     mesh = support.modelgeometry
-#     all_meshes.append(mesh)
-#     supports_group.add(mesh, name=f"support_{i}", hide_coplanaredges=True, color=SUPPORT_COLOR)
+supports_group = viewer.scene.add_group("supports")
+for i, support in enumerate(viewer_data["supports"]):
+    add_element_with_connectors(supports_group, support, [], f"support_{i}", SUPPORT_COLOR)
+    all_meshes.append(support.modelgeometry)
 
 # 2. Columns group (with connectors from column heads)
 columns_group = viewer.scene.add_group("columns")
@@ -318,9 +356,8 @@ for i, ch_data in enumerate(viewer_data["column_heads"]):
 # 4. Edge beams group
 edge_beams_group = viewer.scene.add_group("edge_beams")
 for i, edge_beam in enumerate(viewer_data["edge_beams"]):
-    mesh = edge_beam.modelgeometry
-    all_meshes.append(mesh)
-    edge_beams_group.add(mesh, name=f"edge_beam_{i}", hide_coplanaredges=True, color=ELEMENT_COLOR)
+    add_element_with_connectors(edge_beams_group, edge_beam, [], f"edge_beam_{i}", ELEMENT_COLOR)
+    all_meshes.append(edge_beam.modelgeometry)
 
 # 5. Quarters group (with nested element types and connectors)
 quarters_group = viewer.scene.add_group("quarters")

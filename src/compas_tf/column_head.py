@@ -86,6 +86,25 @@ class ColumnHeadElement(Element):
     def compute_point(self) -> Point:
         return Point(*self.modelgeometry.centroid())
 
+    @property
+    def base_frame(self) -> Frame:
+        """Get the base frame at the leftmost bottommost corner of the mesh bounding box.
+
+        The frame is computed from untransformed geometry and then transformed.
+
+        Returns
+        -------
+        :class:`compas.geometry.Frame`
+            Frame at bottom left corner of mesh with Z-axis pointing up.
+        """
+        # Use untransformed mesh, then apply transformation
+        aabb = self.mesh.aabb()
+        bottom_left = Point(aabb.xmin, aabb.ymin, aabb.zmin)
+        frame = Frame(bottom_left, Vector.Xaxis(), Vector.Yaxis())
+        if self.transformation:
+            frame.transform(self.transformation)
+        return frame
+
     @staticmethod
     def build(builder, column_element=None):
         """Build column head geometry from FloorBuilder data.

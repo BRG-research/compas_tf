@@ -109,8 +109,8 @@ class PlateElement(Element):
             "thickness": self.thickness,
             "top": self.top,
             "bottom": self.bottom,
-            "top_polyline": self.top_polyline,
-            "bottom_polyline": self.bottom_polyline,
+            "top_polyline": self._top_polyline,
+            "bottom_polyline": self._bottom_polyline,
             "mesh": self._mesh,
             "transformation": self.transformation,
             "features": self._features,
@@ -170,8 +170,8 @@ class PlateElement(Element):
                 bottom_polyline = _flip_polyline(bottom_polyline)
                 top_polyline = _flip_polyline(top_polyline)
 
-            self.top_polyline: Optional[Polyline] = top_polyline
-            self.bottom_polyline: Optional[Polyline] = bottom_polyline
+            self._top_polyline: Optional[Polyline] = top_polyline
+            self._bottom_polyline: Optional[Polyline] = bottom_polyline
             self._bottom_plane: Plane = bottom_plane
             self._top_plane: Plane = top_plane
 
@@ -183,8 +183,8 @@ class PlateElement(Element):
             if self._mesh is None:
                 self._mesh = PolylineLoft.to_mesh(top_polyline, bottom_polyline)
         else:
-            self.top_polyline = None
-            self.bottom_polyline = None
+            self._top_polyline = None
+            self._bottom_polyline = None
             self._bottom_plane = None
             self._top_plane = None
 
@@ -213,44 +213,80 @@ class PlateElement(Element):
                     point += up
 
     @property
-    def base_plane(self) -> Plane:
-        """Get the base plane from the bottom polyline, with transformation applied.
-
-        The normal points from bottom to top polyline for polyline-based plates.
-
-        Returns
-        -------
-        :class:`compas.geometry.Plane`
-            Best-fit plane of the bottom polyline with normal pointing to top.
-        """
-        if self._bottom_plane is not None:
-            plane = Plane(self._bottom_plane.point, self._bottom_plane.normal)
-        else:
-            plane = Plane(self.bottom.centroid, self.bottom.normal)
-
+    def top_polyline(self) -> Optional[Polyline]:
+        """Get top polyline with transformation applied."""
+        if self._top_polyline is None:
+            return None
         if self.transformation:
-            plane.transform(self.transformation)
-        return plane
+            return self._top_polyline.transformed(self.transformation)
+        return self._top_polyline
 
     @property
-    def top_plane(self) -> Plane:
-        """Get the top plane from the top polyline, with transformation applied.
+    def bottom_polyline(self) -> Optional[Polyline]:
+        """Get bottom polyline with transformation applied."""
+        if self._bottom_polyline is None:
+            return None
+        if self.transformation:
+            return self._bottom_polyline.transformed(self.transformation)
+        return self._bottom_polyline
 
-        The normal points same direction as base_plane (from bottom to top).
+    @property
+    def base_frame(self) -> Frame:
+        """Get the base frame from the bottom polyline, with transformation applied.
+
+        The z-axis (normal) points from bottom to top polyline.
+        The x-axis is aligned to the first edge of the bottom polyline.
 
         Returns
         -------
-        :class:`compas.geometry.Plane`
-            Best-fit plane of the top polyline with normal pointing away from bottom.
+        :class:`compas.geometry.Frame`
+            Frame at centroid of bottom polyline with oriented axes.
         """
-        if self._top_plane is not None:
-            plane = Plane(self._top_plane.point, self._top_plane.normal)
+        if self._bottom_plane is not None and self._bottom_polyline is not None:
+            # Get first edge direction as x-axis
+            xaxis = Vector.from_start_end(self._bottom_polyline.points[0], self._bottom_polyline.points[1]).unitized()
+            zaxis = self._bottom_plane.normal
+            yaxis = zaxis.cross(xaxis)
+            frame = Frame(self._bottom_plane.point, xaxis, yaxis)
         else:
-            plane = Plane(self.top.centroid, self.top.normal)
+            # Fallback for polygon-based plates
+            xaxis = Vector.from_start_end(self.bottom.points[0], self.bottom.points[1]).unitized()
+            zaxis = self.bottom.normal
+            yaxis = zaxis.cross(xaxis)
+            frame = Frame(self.bottom.centroid, xaxis, yaxis)
 
         if self.transformation:
-            plane.transform(self.transformation)
-        return plane
+            frame.transform(self.transformation)
+        return frame
+
+    @property
+    def top_frame(self) -> Frame:
+        """Get the top frame from the top polyline, with transformation applied.
+
+        The z-axis (normal) points same direction as base_frame (from bottom to top).
+        The x-axis is aligned to the first edge of the top polyline.
+
+        Returns
+        -------
+        :class:`compas.geometry.Frame`
+            Frame at centroid of top polyline with oriented axes.
+        """
+        if self._top_plane is not None and self._top_polyline is not None:
+            # Get first edge direction as x-axis
+            xaxis = Vector.from_start_end(self._top_polyline.points[0], self._top_polyline.points[1]).unitized()
+            zaxis = self._top_plane.normal
+            yaxis = zaxis.cross(xaxis)
+            frame = Frame(self._top_plane.point, xaxis, yaxis)
+        else:
+            # Fallback for polygon-based plates
+            xaxis = Vector.from_start_end(self.top.points[0], self.top.points[1]).unitized()
+            zaxis = self.top.normal
+            yaxis = zaxis.cross(xaxis)
+            frame = Frame(self.top.centroid, xaxis, yaxis)
+
+        if self.transformation:
+            frame.transform(self.transformation)
+        return frame
 
     def compute_elementgeometry(self, include_features=False) -> Mesh:
         """Compute the shape of the plate from the given polygons or return pre-computed mesh.
