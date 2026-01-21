@@ -6,7 +6,6 @@ from compas.geometry import Line
 from compas.geometry import Point
 from compas.geometry import Polyline
 from compas.geometry import Transformation
-from compas.geometry import Translation
 from compas_model.elements import Element
 from compas_model.elements.element import Feature
 
@@ -21,6 +20,7 @@ class DowelElement(Element):
     """Class representing a rectangular dowel connector element.
 
     Simple extruded rectangle along Z axis.
+    The element geometry is represented as a line (axis) for visualization.
 
     Parameters
     ----------
@@ -45,10 +45,8 @@ class DowelElement(Element):
         The depth of the dowel.
     height : float
         The height of the dowel.
-    mesh : :class:`compas.datastructures.Mesh`
-        The mesh geometry of the dowel.
     axis : :class:`compas.geometry.Line`
-        The center axis of the dowel.
+        The center axis of the dowel (with transformation applied).
     """
 
     @property
@@ -75,9 +73,18 @@ class DowelElement(Element):
         self.width = width
         self.depth = depth
         self.height = height
+        self._axis = Line([0, 0, 0], [0, 0, height])
 
-        # Create rectangle centered at origin
-        w, d = width / 2, depth / 2
+    @property
+    def axis(self) -> Line:
+        """Get the axis line with transformation applied."""
+        if self.transformation:
+            return self._axis.transformed(self.transformation)
+        return self._axis
+
+    def compute_mesh(self) -> Mesh:
+        """Compute the detailed mesh geometry for boolean operations."""
+        w, d = self.width / 2, self.depth / 2
         rect_bottom = Polyline([
             Point(-w, -d, 0),
             Point(w, -d, 0),
@@ -85,31 +92,22 @@ class DowelElement(Element):
             Point(-w, d, 0),
             Point(-w, -d, 0),
         ])
-        rect_top = rect_bottom.translated([0, 0, height])
+        rect_top = rect_bottom.translated([0, 0, self.height])
+        return PolylineLoft.to_mesh(rect_bottom, rect_top)
 
-        self.mesh = PolylineLoft.to_mesh(rect_bottom, rect_top)
-        self.axis = Line([0, 0, 0], [0, 0, height])
-
-    def compute_elementgeometry(self, include_features=False) -> Mesh:
-        return self.mesh
+    def compute_elementgeometry(self, include_features=False) -> Line:
+        return self._axis
 
     def compute_aabb(self, inflate: float = 1.0) -> Box:
-        box = self.modelgeometry.aabb
-        if inflate != 1.0:
-            box.xsize *= inflate
-            box.ysize *= inflate
-            box.zsize *= inflate
+        line = self.axis
+        midpoint = line.midpoint
+        size = max(self.width, self.depth)
+        box = Box(size * inflate, size * inflate, self.height * inflate, frame=midpoint)
         self._aabb = box
         return box
 
     def compute_obb(self, inflate: float = 1.0) -> Box:
-        box = self.modelgeometry.obb
-        if inflate != 1.0:
-            box.xsize *= inflate
-            box.ysize *= inflate
-            box.zsize *= inflate
-        self._obb = box
-        return box
+        return self.compute_aabb(inflate)
 
     def compute_point(self) -> Point:
-        return Point(*self.modelgeometry.centroid())
+        return Point(*self.axis.midpoint)

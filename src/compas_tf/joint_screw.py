@@ -21,6 +21,7 @@ class ScrewElement(Element):
     """Class representing a screw connector element.
 
     The screw has a wider head at the base that tapers to a smaller diameter shaft.
+    The element geometry is represented as a line (axis) for visualization.
 
     Parameters
     ----------
@@ -45,10 +46,8 @@ class ScrewElement(Element):
         The diameter of the screw head.
     height : float
         The total height of the screw.
-    mesh : :class:`compas.datastructures.Mesh`
-        The mesh geometry of the screw.
     axis : :class:`compas.geometry.Line`
-        The center axis of the screw.
+        The center axis of the screw (with transformation applied).
     """
 
     @property
@@ -75,39 +74,43 @@ class ScrewElement(Element):
         self.diameter = diameter
         self.diameter_head = diameter_head
         self.height = height
+        self._axis = Line([0, 0, 0], [0, 0, height])
 
-        rectangle0 = Polygon.from_sides_and_radius_xy(4, diameter / 2)
-        rectangle1 = Polygon.from_sides_and_radius_xy(4, diameter_head / 2)
+    @property
+    def axis(self) -> Line:
+        """Get the axis line with transformation applied."""
+        if self.transformation:
+            return self._axis.transformed(self.transformation)
+        return self._axis
+
+    def compute_mesh(self) -> Mesh:
+        """Compute the detailed mesh geometry for boolean operations."""
+        rectangle0 = Polygon.from_sides_and_radius_xy(4, self.diameter / 2)
+        rectangle1 = Polygon.from_sides_and_radius_xy(4, self.diameter_head / 2)
         xform_boolean_tolerance = Translation.from_vector([0, 0, -1])
-        xform0 = Translation.from_vector([0, 0, diameter])
-        xform1 = Translation.from_vector([0, 0, height])
+        xform0 = Translation.from_vector([0, 0, self.diameter])
+        xform1 = Translation.from_vector([0, 0, self.height])
 
-        polylines = [rectangle1.transformed(xform_boolean_tolerance), rectangle1.transformed(xform0), rectangle0.transformed(xform0), rectangle0.transformed(xform1)]
-        # polylines = [rectangle0.transformed(xform_boolean_tolerance), rectangle0.transformed(xform1)]
-        self.mesh = PolylineLoft.multiple_to_mesh(polylines)
-        self.axis = Line([0, 0, 0], [0, 0, height])
+        polylines = [
+            rectangle1.transformed(xform_boolean_tolerance),
+            rectangle1.transformed(xform0),
+            rectangle0.transformed(xform0),
+            rectangle0.transformed(xform1)
+        ]
+        return PolylineLoft.multiple_to_mesh(polylines)
 
-
-    def compute_elementgeometry(self, include_features=False) -> Mesh:
-        return self.mesh
+    def compute_elementgeometry(self, include_features=False) -> Line:
+        return self._axis
 
     def compute_aabb(self, inflate: float = 1.0) -> Box:
-        box = self.modelgeometry.aabb
-        if inflate != 1.0:
-            box.xsize *= inflate
-            box.ysize *= inflate
-            box.zsize *= inflate
+        line = self.axis
+        midpoint = line.midpoint
+        box = Box(self.diameter_head * inflate, self.diameter_head * inflate, self.height * inflate, frame=midpoint)
         self._aabb = box
         return box
 
     def compute_obb(self, inflate: float = 1.0) -> Box:
-        box = self.modelgeometry.obb
-        if inflate != 1.0:
-            box.xsize *= inflate
-            box.ysize *= inflate
-            box.zsize *= inflate
-        self._obb = box
-        return box
+        return self.compute_aabb(inflate)
 
     def compute_point(self) -> Point:
-        return Point(*self.modelgeometry.centroid())
+        return Point(*self.axis.midpoint)
