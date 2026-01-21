@@ -574,10 +574,20 @@ class QuarterFloorElement(Element):
         # -----------------------------------------------------------------------
         # Strips between diagonal axes (axis[1] and axis[2])
         # -----------------------------------------------------------------------
-        axis_pairs_strips = [(3, 4), (4, 5)]
+        # axis_pairs_strips = [(3, 4), (4, 5)]
+        # for offset_axis, intersect_axis in axis_pairs_strips:
+        #     strip_point = Point(*intersection_line_line(builder.axes[offset_axis], builder.axes[intersect_axis])[0])
+        #     strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction + builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
+        #     strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
+            # strips.append(strip)
+            # interactions.append((strip, axis_elements[offset_axis]))
+            # interactions.append((strip, axis_elements[intersect_axis]))
+        axis_pairs_strips = [(3, 4), (5, 4)]
         for offset_axis, intersect_axis in axis_pairs_strips:
-            strip_point = Point(*intersection_line_line(builder.axes[offset_axis], builder.axes[intersect_axis])[0])
-            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction + builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
+            offset_line = LineOffset.offset_xy(builder.axes[offset_axis], builder.thick * -0.5)
+            strip_point = Point(*intersection_line_line(offset_line, builder.axes[intersect_axis])[0])
+            
+            strip_line = Line(strip_point, strip_point + Vector.Zaxis().cross(builder.axes[offset_axis].direction)).translated(Vector.Zaxis() * -height_middle)
             strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
             strips.append(strip)
             interactions.append((strip, axis_elements[offset_axis]))
