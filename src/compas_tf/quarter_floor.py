@@ -349,10 +349,15 @@ def _build_boundaries(builder, surface_edge_polys):
         # Main beam - use vertical sides (inner and outer faces)
         # s0: inner vertical face, s1: outer vertical face
         inner_pts = poly1_r_list[j].points
-        s0 = Polyline([inner_pts[0], inner_pts[1], inner_pts[1] + Vector(0, 0, -dist), inner_pts[0] + Vector(0, 0, -dist), inner_pts[0]])
-        s1 = Polyline([inner_pts[3], inner_pts[2], inner_pts[2] + Vector(0, 0, -dist), inner_pts[3] + Vector(0, 0, -dist), inner_pts[3]])
-        meshes[axis_idx] = PolylineLoft.to_mesh(s0, s1)
-        polyline_pairs[axis_idx] = (s0, s1)
+        # First two boundaries (j=0,1) need reversed winding
+        if j < 2:
+            s0 = Polyline([inner_pts[0], inner_pts[0] + Vector(0, 0, -dist), inner_pts[1] + Vector(0, 0, -dist), inner_pts[1], inner_pts[0]])
+            s1 = Polyline([inner_pts[3], inner_pts[3] + Vector(0, 0, -dist), inner_pts[2] + Vector(0, 0, -dist), inner_pts[2], inner_pts[3]])
+        else:
+            s0 = Polyline([inner_pts[0], inner_pts[1], inner_pts[1] + Vector(0, 0, -dist), inner_pts[0] + Vector(0, 0, -dist), inner_pts[0]])
+            s1 = Polyline([inner_pts[3], inner_pts[2], inner_pts[2] + Vector(0, 0, -dist), inner_pts[3] + Vector(0, 0, -dist), inner_pts[3]])
+        meshes[axis_idx] = PolylineLoft.to_mesh(s1, s0)
+        polyline_pairs[axis_idx] = (s1, s0)
 
         # T-section
         tl, bl, tr, br = surface_edge_polys[j]
@@ -521,8 +526,8 @@ class QuarterFloorElement(Element):
 
         tsection_elements = [
             PlateElement(top_polyline=tsection_polyline_pairs[i][0], bottom_polyline=tsection_polyline_pairs[i][1],
-                        mesh=m.transformed(rotation_xform) if rotation_xform else m, name=f"tsection_{i}")
-            for i, m in enumerate(tsection_meshes)
+                        name=f"tsection_{i}")
+            for i in range(len(tsection_polyline_pairs))
         ]
         surface_elements = [
             PlateElement(top_polyline=surface_polyline_pairs[i][0], bottom_polyline=surface_polyline_pairs[i][1],

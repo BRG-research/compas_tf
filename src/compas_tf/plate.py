@@ -104,6 +104,7 @@ class PlateElement(Element):
 
     @property
     def __data__(self) -> dict:
+        # Don't serialize mesh - let it regenerate with winding correction
         return {
             "polygon": self.polygon,
             "thickness": self.thickness,
@@ -111,7 +112,6 @@ class PlateElement(Element):
             "bottom": self.bottom,
             "top_polyline": self._top_polyline,
             "bottom_polyline": self._bottom_polyline,
-            "mesh": self._mesh,
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
@@ -181,7 +181,7 @@ class PlateElement(Element):
             self.polygon = self.bottom
             # Auto-generate mesh from polylines if not provided
             if self._mesh is None:
-                self._mesh = PolylineLoft.to_mesh(top_polyline, bottom_polyline)
+                self._mesh = PolylineLoft.to_mesh(bottom_polyline, top_polyline)
         else:
             self._top_polyline = None
             self._bottom_polyline = None

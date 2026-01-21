@@ -15,6 +15,15 @@ from compas_tf.column_head import ColumnHeadElement, ColumnHeadFeature
 from compas_tf.quarter_floor import QuarterFloorElement, QuarterFloorFeature, QuarterResult
 from compas_tf.oculus import OculusElement, OculusFeature
 
+# Additional element types for JSON serialization
+from compas_tf.plate import PlateElement
+from compas_tf.support import SupportElement
+from compas_tf.joint_screw import ScrewElement
+from compas_tf.joint_dowel import DowelElement
+from compas_tf.joint_strip import AlignmentStripElement
+from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.joint_connector import ConnectorElement
+
 __all__ = [
     "PolylineOffset",
     "PolylineCut",
@@ -29,4 +38,11 @@ __all__ = [
     "QuarterResult",
     "OculusElement",
     "OculusFeature",
+    "PlateElement",
+    "SupportElement",
+    "ScrewElement",
+    "DowelElement",
+    "AlignmentStripElement",
+    "SherpaXL120Element",
+    "ConnectorElement",
 ]
