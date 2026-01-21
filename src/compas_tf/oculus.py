@@ -179,13 +179,13 @@ class OculusElement(Element):
         points_t1 = LineOffset.divide(line_t1, 3)
 
         if continuous:
-            polyline_top = Polyline(points_b0 + points_t0 + [points_b0[0]])
-            polyline_bot = Polyline(points_b1 + points_t1 + [points_b1[0]])
+            polyline_bot = Polyline(points_b0 + points_t0 + [points_b0[0]])
+            polyline_top = Polyline(points_b1 + points_t1 + [points_b1[0]])
             oculus_elements.append(PlateElement(top_polyline=polyline_top, bottom_polyline=polyline_bot, name="oculus_center_panel"))
         else:
             for i in range(3):
-                polyline_top = Polyline([points_t0[i], points_t0[i+1], points_t1[i+1], points_t1[i], points_t0[i]])
-                polyline_bot = Polyline([points_b0[i], points_b0[i+1], points_b1[i+1], points_b1[i], points_b0[i]])
+                polyline_bot = Polyline([points_t0[i], points_t0[i+1], points_t1[i+1], points_t1[i], points_t0[i]])
+                polyline_top = Polyline([points_b0[i], points_b0[i+1], points_b1[i+1], points_b1[i], points_b0[i]])
                 oculus_elements.append(PlateElement(top_polyline=polyline_top, bottom_polyline=polyline_bot, name="oculus_center_panel"))
 
 

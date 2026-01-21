@@ -2,11 +2,14 @@ from typing import Optional, Union
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
+from compas.geometry import Frame
+from compas.geometry import Plane
 from compas.geometry import Point
 from compas.geometry import Polygon
 from compas.geometry import Polyline
 from compas.geometry import Transformation
 from compas.geometry import Vector
+from compas.geometry import bestfit_plane
 from compas.itertools import pairwise
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
@@ -16,6 +19,40 @@ from compas_tf.geometry import PolylineLoft
 
 class PlateFeature(Feature):
     pass
+
+
+def _is_clockwise_on_plane(polyline: Polyline, plane: Plane) -> bool:
+    """Check if polyline is clockwise when viewed from plane normal direction.
+
+    Uses the shoelace formula on the XY projection after transforming to the plane's frame.
+
+    Parameters
+    ----------
+    polyline : :class:`compas.geometry.Polyline`
+        The polyline to check.
+    plane : :class:`compas.geometry.Plane`
+        The plane to project onto.
+
+    Returns
+    -------
+    bool
+        True if clockwise, False if counter-clockwise.
+    """
+    frame = Frame.from_plane(plane)
+    world_to_local = Transformation.from_frame_to_frame(frame, Frame.worldXY())
+
+    local_points = [Point(*p).transformed(world_to_local) for p in polyline.points]
+
+    total = 0.0
+    for i in range(len(local_points) - 1):
+        total += (local_points[i + 1].x - local_points[i].x) * (local_points[i + 1].y + local_points[i].y)
+
+    return total > 0
+
+
+def _flip_polyline(polyline: Polyline) -> Polyline:
+    """Reverse the order of points in a polyline."""
+    return Polyline(list(reversed(polyline.points)))
 
 
 class PlateElement(Element):
@@ -100,8 +137,44 @@ class PlateElement(Element):
 
         # Handle polyline-based construction
         if top_polyline is not None and bottom_polyline is not None:
+            # Create best-fit planes for both polylines
+            # Use polygon centroid for closed polylines, bestfit centroid for open
+            bottom_plane_data = bestfit_plane(bottom_polyline.points)
+            top_plane_data = bestfit_plane(top_polyline.points)
+
+            # Get centroid - use polygon centroid for closed polylines (more accurate)
+            if bottom_polyline.is_closed:
+                bottom_centroid = Point(*Polygon(bottom_polyline.points[:-1]).centroid)
+            else:
+                bottom_centroid = Point(*bottom_plane_data[0])
+
+            if top_polyline.is_closed:
+                top_centroid = Point(*Polygon(top_polyline.points[:-1]).centroid)
+            else:
+                top_centroid = Point(*top_plane_data[0])
+
+            bottom_plane = Plane(bottom_centroid, Vector(*bottom_plane_data[1]))
+            top_plane = Plane(top_centroid, Vector(*top_plane_data[1]))
+
+            # Orient bottom plane normal to point towards top plane
+            direction_to_top = Vector.from_start_end(bottom_plane.point, top_plane.point)
+            if direction_to_top.dot(bottom_plane.normal) < 0:
+                bottom_plane = Plane(bottom_plane.point, bottom_plane.normal * -1)
+
+            # Orient top plane normal to point same direction as bottom (away from bottom)
+            if bottom_plane.normal.dot(top_plane.normal) < 0:
+                top_plane = Plane(top_plane.point, top_plane.normal * -1)
+
+            # Check winding - if clockwise, flip both polylines to make CCW (consistent with normal)
+            if _is_clockwise_on_plane(bottom_polyline, bottom_plane):
+                bottom_polyline = _flip_polyline(bottom_polyline)
+                top_polyline = _flip_polyline(top_polyline)
+
             self.top_polyline: Optional[Polyline] = top_polyline
             self.bottom_polyline: Optional[Polyline] = bottom_polyline
+            self._bottom_plane: Plane = bottom_plane
+            self._top_plane: Plane = top_plane
+
             # Convert polylines to polygons for compatibility
             self.top = Polygon(top_polyline.points[:-1]) if top_polyline.is_closed else None
             self.bottom = Polygon(bottom_polyline.points[:-1]) if bottom_polyline.is_closed else None
@@ -112,6 +185,8 @@ class PlateElement(Element):
         else:
             self.top_polyline = None
             self.bottom_polyline = None
+            self._bottom_plane = None
+            self._top_plane = None
 
             # Handle polygon-based construction
             if polygon is None:
@@ -136,6 +211,46 @@ class PlateElement(Element):
                 self.top = polygon.copy()
                 for point in self.top.points:
                     point += up
+
+    @property
+    def base_plane(self) -> Plane:
+        """Get the base plane from the bottom polyline, with transformation applied.
+
+        The normal points from bottom to top polyline for polyline-based plates.
+
+        Returns
+        -------
+        :class:`compas.geometry.Plane`
+            Best-fit plane of the bottom polyline with normal pointing to top.
+        """
+        if self._bottom_plane is not None:
+            plane = Plane(self._bottom_plane.point, self._bottom_plane.normal)
+        else:
+            plane = Plane(self.bottom.centroid, self.bottom.normal)
+
+        if self.transformation:
+            plane.transform(self.transformation)
+        return plane
+
+    @property
+    def top_plane(self) -> Plane:
+        """Get the top plane from the top polyline, with transformation applied.
+
+        The normal points same direction as base_plane (from bottom to top).
+
+        Returns
+        -------
+        :class:`compas.geometry.Plane`
+            Best-fit plane of the top polyline with normal pointing away from bottom.
+        """
+        if self._top_plane is not None:
+            plane = Plane(self._top_plane.point, self._top_plane.normal)
+        else:
+            plane = Plane(self.top.centroid, self.top.normal)
+
+        if self.transformation:
+            plane.transform(self.transformation)
+        return plane
 
     def compute_elementgeometry(self, include_features=False) -> Mesh:
         """Compute the shape of the plate from the given polygons or return pre-computed mesh.

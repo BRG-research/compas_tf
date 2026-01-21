@@ -346,11 +346,11 @@ def _build_boundaries(builder, surface_edge_polys):
     # j=0 -> axis 3, j=1 -> axis 4, j=2 -> axis 5
     for j in range(len(poly0) - 1):
         axis_idx = j + 3  # Map j to axis index
-        # Main beam
-        s0 = Polyline([poly0[j], poly0[j + 1], Vector(0, 0, -dist) + poly0[j + 1], Vector(0, 0, -dist) + poly0[j], poly0[j]])
-        s1 = Polyline([poly1[j], poly1[j + 1], Vector(0, 0, -dist) + poly1[j + 1], Vector(0, 0, -dist) + poly1[j], poly1[j]])
-        s0 = Polyline(poly1_r_list[j].points+[poly1_r_list[j].points[0]])
-        s1 = s0.translated(Vector.Zaxis() * -dist)
+        # Main beam - use vertical sides (inner and outer faces)
+        # s0: inner vertical face, s1: outer vertical face
+        inner_pts = poly1_r_list[j].points
+        s0 = Polyline([inner_pts[0], inner_pts[1], inner_pts[1] + Vector(0, 0, -dist), inner_pts[0] + Vector(0, 0, -dist), inner_pts[0]])
+        s1 = Polyline([inner_pts[3], inner_pts[2], inner_pts[2] + Vector(0, 0, -dist), inner_pts[3] + Vector(0, 0, -dist), inner_pts[3]])
         meshes[axis_idx] = PolylineLoft.to_mesh(s0, s1)
         polyline_pairs[axis_idx] = (s0, s1)
 
@@ -376,8 +376,8 @@ def _build_boundaries(builder, surface_edge_polys):
         # meshes.append(PolylineLoft.to_mesh(s2, s3))
 
     # Column head boundary (diagonal cut) -> axis 7
-    plane_cut_0 = builder.end_diagonal_plane
-    plane_cut_1 = builder.end_diagonal_plane.offset(-builder.thick)
+    plane_cut_1 = builder.end_diagonal_plane
+    plane_cut_0 = builder.end_diagonal_plane.offset(-builder.thick)
     plane0 = Plane.worldXY()
     plane1 = Plane(builder.axes[0].midpoint, Vector.Zaxis().cross(builder.axes[0].direction)).offset(-builder.thick*0.5)
     plane2 = Plane.worldXY().offset(-builder.head_h)

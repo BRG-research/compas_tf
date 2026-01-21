@@ -255,6 +255,13 @@ def add_element_with_connectors(parent_group, element, connectors, element_name,
             polylines_group = viewer.scene.add_group("polylines", parent=element_group)
         polylines_group.add(element.bottom_polyline, name="bottom_polyline", linewidth=2)
 
+    # Add base_plane visualization for PlateElement
+    if hasattr(element, 'base_plane') and element.base_plane is not None:
+        plane_polygon, plane_normal = PlaneIntersect.plane_rectangle(element.base_plane, scale=50)
+        planes_group = viewer.scene.add_group("base_plane", parent=element_group)
+        planes_group.add(plane_polygon, name="plane_rect", facecolor=(0.2, 0.6, 0.9), opacity=0.5)
+        planes_group.add(plane_normal, name="plane_normal", linewidth=2, linecolor=(0.9, 0.2, 0.2))
+
     # Add connectors group if there are connectors
     if connectors:
         connectors_group = viewer.scene.add_group("connectors", parent=element_group)
