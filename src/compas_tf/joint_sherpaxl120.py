@@ -40,8 +40,8 @@ class SherpaXL120Element(Element):
 
     def __init__(
         self,
-        width: float = 20.0,
-        depth: float = 120.0,
+        width: float = 120.0,
+        depth: float = 20.0,
         height: float = 410.0,
         frame: Optional[Frame] = None,
         transformation: Optional[Transformation] = None,
