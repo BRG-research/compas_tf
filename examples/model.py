@@ -202,7 +202,7 @@ def add_model_to_viewer(model, viewer):
 
 
 # Create a box representing one grid frame unit
-frame_size = 220.0
+frame_size = 240.0
 grid_size = 6000.0
 height = 3000.0
 floor_thickness = 650.0

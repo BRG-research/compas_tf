@@ -29,10 +29,13 @@ class SherpaXL120Element(Element):
 
     @property
     def __data__(self) -> dict:
+        # Note: Box.from_width_height_depth(depth, height+1, width+1) with
+        # Box.from_width_height_depth(w,h,d) -> xsize=w, ysize=d, zsize=h
+        # So: xsize=depth, ysize=width+1, zsize=height+1
         return {
-            "width": self._box.xsize,
-            "depth": self._box.ysize,
-            "height": self._box.zsize,
+            "width": self._box.ysize - 1,   # ysize = width + 1
+            "depth": self._box.xsize,        # xsize = depth
+            "height": self._box.zsize - 1,   # zsize = height + 1
             "frame": self._box.frame,
             "transformation": self.transformation,
             "name": self.name,
@@ -40,8 +43,8 @@ class SherpaXL120Element(Element):
 
     def __init__(
         self,
-        width: float = 120.0,
-        depth: float = 20.0,
+        width: float = 20.0,
+        depth: float = 120.0,
         height: float = 410.0,
         frame: Optional[Frame] = None,
         transformation: Optional[Transformation] = None,
