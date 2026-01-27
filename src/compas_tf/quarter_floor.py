@@ -23,11 +23,10 @@ from compas_tf.geometry import PlaneIntersect
 from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PolylineOffset
-from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_dowel import DowelElement
+from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.plate import PlateElement
-
 
 # ==========================================================================
 # Connector Helper Functions
@@ -361,8 +360,8 @@ def _build_boundaries(builder, surface_edge_polys):
 
         # T-section
         tl, bl, tr, br = surface_edge_polys[j]
-        p0off = Plane(tl[-2], -Vector(0, 0, 1).cross(tl.lines[0].direction)).offset(thick)
-        p1off = Plane(bl[-2], Vector(0, 0, 1).cross(bl.lines[0].direction)).offset(thick)
+        _p0off = Plane(tl[-2], -Vector(0, 0, 1).cross(tl.lines[0].direction)).offset(thick)  # noqa: F841
+        _p1off = Plane(bl[-2], Vector(0, 0, 1).cross(bl.lines[0].direction)).offset(thick)  # noqa: F841
 
         mid0 = (poly1[j] + poly1[j + 1]) * 0.5
         mid1 = (poly2[j] + poly2[j + 1]) * 0.5
@@ -580,7 +579,8 @@ class QuarterFloorElement(Element):
         # axis_pairs_strips = [(3, 4), (4, 5)]
         # for offset_axis, intersect_axis in axis_pairs_strips:
         #     strip_point = Point(*intersection_line_line(builder.axes[offset_axis], builder.axes[intersect_axis])[0])
-        #     strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction + builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
+        #     strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction +  # noqa: E501
+        #         builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
         #     strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
             # strips.append(strip)
             # interactions.append((strip, axis_elements[offset_axis]))

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv --version:*)",
+      "Bash(uv pip install:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(.venv/Scripts/ruff.exe check src/)",
+      "Bash(.venv/Scripts/ruff.exe check src/ --fix)"
+    ]
+  }
+}
