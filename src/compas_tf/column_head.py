@@ -19,6 +19,7 @@ from compas_model.elements.element import Feature
 
 from compas_tf.geometry import PolylineLoft
 
+
 class ColumnHeadFeature(Feature):
     pass
 
@@ -131,7 +132,7 @@ class ColumnHeadElement(Element):
 
         pts, pts_offset = builder.column_head_points
         corner = builder.corner_point
-        end_planes = builder.end_planes
+        _end_planes = builder.end_planes  # noqa: F841
         head_h = builder.head_h
         beam_w = builder.beam_w
         height = builder.height
@@ -170,8 +171,8 @@ class ColumnHeadElement(Element):
         head_mesh = PolylineLoft.multiple_to_mesh([taper, polyline_bottom, polyline_top])
         head_mesh.transform(xform)
         # Transform polylines for PlateElement
-        head_top_polyline = polyline_top.transformed(xform)
-        head_bottom_polyline = taper.transformed(xform)
+        _head_top_polyline = polyline_top.transformed(xform)  # noqa: F841
+        _head_bottom_polyline = taper.transformed(xform)  # noqa: F841
 
         #############################################################################################
         # Top block
@@ -182,8 +183,8 @@ class ColumnHeadElement(Element):
         top_mesh = PolylineLoft.to_mesh(bottom, top, True)
         top_mesh.transform(xform)
         # Transform polylines for PlateElement
-        top_top_polyline = top.transformed(xform)
-        top_bottom_polyline = bottom.transformed(xform)
+        _top_top_polyline = top.transformed(xform)  # noqa: F841
+        _top_bottom_polyline = bottom.transformed(xform)  # noqa: F841
 
         #############################################################################################
         # Joints
@@ -212,7 +213,8 @@ class ColumnHeadElement(Element):
         frame1 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075, taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
         screw_frames.append(frame1)
         # OPTIONAL
-        # frame2 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075 + Vector.Yaxis()*(builder.beam_w+builder.thick), taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
+        # frame2 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075 + Vector.Yaxis()*(builder.beam_w+builder.thick),  # noqa: E501
+        #     taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
         # screw_frames.append(frame2)
 
         diagonal_plane = Plane(origin, Vector(1, -1, 0))
@@ -228,7 +230,8 @@ class ColumnHeadElement(Element):
         # screw_frames.append(frame2_reflected_flipped)
 
         # OPTIONAL Average frame between frame2 and frame2_reflected_flipped
-        # avg_origin = Point((frame2.point.x + frame2_reflected_flipped.point.x) / 2, (frame2.point.y + frame2_reflected_flipped.point.y) / 2, (frame2.point.z + frame2_reflected_flipped.point.z) / 2)
+        # avg_origin = Point((frame2.point.x + frame2_reflected_flipped.point.x) / 2,  # noqa: E501
+        #     (frame2.point.y + frame2_reflected_flipped.point.y) / 2, (frame2.point.z + frame2_reflected_flipped.point.z) / 2)
         # avg_frame = Frame(avg_origin, Vector.Xaxis(), Vector.Yaxis())
         # screw_frames.append(avg_frame)
 
@@ -265,8 +268,8 @@ class ColumnHeadElement(Element):
         head_element = ColumnHeadElement(mesh=head_mesh, name="column_head")
         top_element = ColumnHeadElement(mesh=top_mesh, name="column_head_top")
 
-        from compas_tf.joint_screw import ScrewElement
         from compas_tf.joint_connector import ConnectorElement
+        from compas_tf.joint_screw import ScrewElement
         from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 
         

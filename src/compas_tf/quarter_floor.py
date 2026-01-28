@@ -4,17 +4,17 @@ from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
+from compas.geometry import Frame
+from compas.geometry import Line
 from compas.geometry import Plane
 from compas.geometry import Point
 from compas.geometry import Polyline
-from compas.geometry import Line
 from compas.geometry import Projection
 from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
-from compas.geometry import Frame
-from compas.geometry import intersection_plane_plane_plane
 from compas.geometry import intersection_line_line
+from compas.geometry import intersection_plane_plane_plane
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
@@ -23,11 +23,10 @@ from compas_tf.geometry import PlaneIntersect
 from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PolylineOffset
-from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_dowel import DowelElement
+from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.plate import PlateElement
-
 
 # ==========================================================================
 # Connector Helper Functions
@@ -53,6 +52,7 @@ def _line_to_strip(line: Line, height: float) -> AlignmentStripElement:
     frame = Frame(line.start, Vector.Zaxis().cross(line.direction), line.direction)
     xform = Transformation.from_frame(frame)
     return AlignmentStripElement(height=height, transformation=xform)
+
 
 # ==========================================================================
 # Result Container
@@ -296,18 +296,17 @@ def _build_surfaces(builder, axis_planes, lofted_lines, continuous=False):
         bl, br, tl, tr = pair[0], pair[1], pair[2], pair[3]
         poly0 = Polyline(bl.points + list(reversed(br.points)))
         poly1 = Polyline(tl.points + list(reversed(tr.points)))
-        
-        quarter_edge_polylines.append([tl, bl, tr, br])
 
+        quarter_edge_polylines.append([tl, bl, tr, br])
 
         if continuous:
             quarter_meshes.append(PolylineLoft.to_mesh(poly0, poly1)) # this
             polyline_pairs.append((poly0, poly1)) # this
         else:
             # Individual plates
-            for j in range(len(bl.points)-1):
-                poly_t = Polyline([bl[j], bl[j+1], tl[j+1], tl[j], bl[j]])
-                poly_b = Polyline([br[j], br[j+1], tr[j+1], tr[j], br[j]])
+            for j in range(len(bl.points) - 1):
+                poly_t = Polyline([bl[j], bl[j + 1], tl[j + 1], tl[j], bl[j]])
+                poly_b = Polyline([br[j], br[j + 1], tr[j + 1], tr[j], br[j]])
                 quarter_meshes.append(PolylineLoft.to_mesh(poly_t, poly_b))
                 # quarter_edge_polylines.append([poly_t, poly_b, poly_t, poly_b])
                 polyline_pairs.append((poly_t, poly_b))
@@ -361,8 +360,8 @@ def _build_boundaries(builder, surface_edge_polys):
 
         # T-section
         tl, bl, tr, br = surface_edge_polys[j]
-        p0off = Plane(tl[-2], -Vector(0, 0, 1).cross(tl.lines[0].direction)).offset(thick)
-        p1off = Plane(bl[-2], Vector(0, 0, 1).cross(bl.lines[0].direction)).offset(thick)
+        _p0off = Plane(tl[-2], -Vector(0, 0, 1).cross(tl.lines[0].direction)).offset(thick)  # noqa: F841
+        _p1off = Plane(bl[-2], Vector(0, 0, 1).cross(bl.lines[0].direction)).offset(thick)  # noqa: F841
 
         mid0 = (poly1[j] + poly1[j + 1]) * 0.5
         mid1 = (poly2[j] + poly2[j + 1]) * 0.5
@@ -384,9 +383,9 @@ def _build_boundaries(builder, surface_edge_polys):
     plane_cut_1 = builder.end_diagonal_plane
     plane_cut_0 = builder.end_diagonal_plane.offset(-builder.thick)
     plane0 = Plane.worldXY()
-    plane1 = Plane(builder.axes[0].midpoint, Vector.Zaxis().cross(builder.axes[0].direction)).offset(-builder.thick*0.5)
+    plane1 = Plane(builder.axes[0].midpoint, Vector.Zaxis().cross(builder.axes[0].direction)).offset(-builder.thick * 0.5)
     plane2 = Plane.worldXY().offset(-builder.head_h)
-    plane3 = Plane(builder.axes[-1].midpoint, Vector.Zaxis().cross(builder.axes[-1].direction)).offset(-builder.thick*0.5)
+    plane3 = Plane(builder.axes[-1].midpoint, Vector.Zaxis().cross(builder.axes[-1].direction)).offset(-builder.thick * 0.5)
     result0 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_0))
     result1 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_1))
 
@@ -394,8 +393,6 @@ def _build_boundaries(builder, surface_edge_polys):
     polyline_pairs[7] = (result0, result1)
 
     return meshes, polyline_pairs
-
-
 
 
 # ==========================================================================
@@ -582,7 +579,8 @@ class QuarterFloorElement(Element):
         # axis_pairs_strips = [(3, 4), (4, 5)]
         # for offset_axis, intersect_axis in axis_pairs_strips:
         #     strip_point = Point(*intersection_line_line(builder.axes[offset_axis], builder.axes[intersect_axis])[0])
-        #     strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction + builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
+        #     strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction +  # noqa: E501
+        #         builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
         #     strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
             # strips.append(strip)
             # interactions.append((strip, axis_elements[offset_axis]))
@@ -591,7 +589,7 @@ class QuarterFloorElement(Element):
         for offset_axis, intersect_axis in axis_pairs_strips:
             offset_line = LineOffset.offset_xy(builder.axes[offset_axis], builder.thick * -0.5)
             strip_point = Point(*intersection_line_line(offset_line, builder.axes[intersect_axis])[0])
-            
+
             strip_line = Line(strip_point, strip_point + Vector.Zaxis().cross(builder.axes[offset_axis].direction)).translated(Vector.Zaxis() * -height_middle)
             strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
             strips.append(strip)

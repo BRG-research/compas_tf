@@ -6,19 +6,19 @@ from compas.datastructures import Mesh
 from compas.geometry import Box
 from compas.geometry import Frame
 from compas.geometry import Line
-from compas.geometry import Point
-from compas.geometry import Polyline
-from compas.geometry import Polygon
 from compas.geometry import Plane
+from compas.geometry import Point
+from compas.geometry import Polygon
+from compas.geometry import Polyline
 from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
+from compas_tf.geometry import LineOffset
 from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PolylineOffset
-from compas_tf.geometry import LineOffset
 from compas_tf.plate import PlateElement
 
 
@@ -132,8 +132,8 @@ class OculusElement(Element):
         OculusResult
             Container with oculus_elements, screws, dowels, strips, and interactions.
         """
-        from compas_tf.joint_screw import ScrewElement
         from compas_tf.joint_dowel import DowelElement
+        from compas_tf.joint_screw import ScrewElement
         from compas_tf.joint_strip import AlignmentStripElement
 
         oculus_elements = []
