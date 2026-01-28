@@ -347,29 +347,27 @@ class FloorSkeleton:
 
     def _compute_corner_geometry(self):
         """Compute corner geometry for cut planes and column heads (quarter 1)."""
+        # Use FloorBuilder's compute method instead of duplicated logic
+        from compas_tf.floor_builder import FloorBuilder
+
+        temp_builder = FloorBuilder(
+            size=self.size,
+            height=self.height,
+            rise=self.rise,
+            oculus=self.oculus,
+            thick=self.thick,
+            beam_w=self.beam_w,
+        )
+        pts, pts_offset = temp_builder.compute_column_head_points(scale=460, inclination=180)
+
+        # Compute axis_planes for return value (still need local axes for planes)
         axes = self.axes
         intersection = intersection_line_line(axes[0], axes[-1])[0]
-
-        scale, angle_inclination = 460, 180
-        points, planes = [], []
+        planes = []
         for i in range(4):
-            point = Point(*(axes[i].direction * scale + intersection))
-            points.append(point)
+            point = Point(*(axes[i].direction * 460 + intersection))
             plane = Plane(point, axes[i].direction.cross(Vector.Zaxis()))
             planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
-
-        middle_line = Line(points[1], points[2])
-        pts = [
-            planes[0].closest_point(Point(*intersection_line_plane(middle_line, planes[1]))),
-            Point(*intersection_line_plane(middle_line, planes[1])),
-            Point(*intersection_line_plane(middle_line, planes[2])),
-            planes[3].closest_point(Point(*intersection_line_plane(middle_line, planes[2]))),
-        ]
-
-        pts_offset = [axes[i].direction * angle_inclination + pts[i] for i in range(4)]
-        pts_offset[0] = planes[0].closest_point(pts_offset[1])
-        pts_offset[3] = planes[3].closest_point(pts_offset[2])
-        pts_offset = [-Vector.Zaxis() * self.height + p for p in pts_offset]
 
         return pts, pts_offset, planes
 

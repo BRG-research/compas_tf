@@ -179,57 +179,107 @@ class FloorBuilder:
             self._rib_parabolas = [parabola0, parabola1, parabola2, parabola3]
         return self._rib_parabolas
     
-    @property
-    def column_head_points(self):
-        """Corner profile points (pts, pts_offset) for column head."""
-        if self._corner_pts is None:
-            # Find corner intersection and create 4 points/planes along axes
-            points, axis_planes = [], []
-            for i in range(4):
-                point = Point(*(self.axes[i].direction * self._column_head_scale + self.corner_axis_point))
-                points.append(point)
-                plane = Plane(point, self.axes[i].direction.cross(Vector.Zaxis()))
+    def compute_column_head_points(self, scale=None, inclination=None):
+        """Compute corner profile points without caching.
 
-                # OPTIONAL: second check is need when axis are offset:
-                if i == 0 or i == 3:
-                    axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
-                else:
-                    axis_planes.append(plane.offset(self.thick * (-1.0 if i > 1 else 1.0)))
+        Parameters
+        ----------
+        scale : float, optional
+            Defaults to self._column_head_scale.
+        inclination : float, optional
+            Defaults to self._column_head_inclination.
 
-            # Find corner profile points via middle_line intersections
-            middle_line = Line(points[1], points[2])
-            pts = [
-                axis_planes[0].closest_point(Point(*intersection_line_plane(middle_line, axis_planes[1]))),
-                Point(*intersection_line_plane(middle_line, axis_planes[1])),
-                Point(*intersection_line_plane(middle_line, axis_planes[2])),
-                axis_planes[3].closest_point(Point(*intersection_line_plane(middle_line, axis_planes[2]))),
-            ]
+        Returns
+        -------
+        tuple[list[Point], list[Point]]
+            (pts, pts_offset)
+        """
+        scale = scale if scale is not None else self._column_head_scale
+        inclination = inclination if inclination is not None else self._column_head_inclination
 
-            # Offset points: move along axis direction, then down by height
-            pts_offset = [self.axes[i].direction * self._column_head_inclination + pts[i] for i in range(4)]
-            pts_offset[0] = axis_planes[0].closest_point(pts_offset[1])
-            pts_offset[3] = axis_planes[3].closest_point(pts_offset[2])
-            pts_offset = [-Vector.Zaxis() * self.height + p for p in pts_offset]
+        # Find corner intersection and create 4 points/planes along axes
+        points, axis_planes = [], []
+        for i in range(4):
+            point = Point(*(self.axes[i].direction * scale + self.corner_axis_point))
+            points.append(point)
+            plane = Plane(point, self.axes[i].direction.cross(Vector.Zaxis()))
+
+            # OPTIONAL: second check is need when axis are offset:
+            if i == 0 or i == 3:
+                axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
+            else:
+                axis_planes.append(plane.offset(self.thick * (-1.0 if i > 1 else 1.0)))
+
+        # Find corner profile points via middle_line intersections
+        middle_line = Line(points[1], points[2])
+        pts = [
+            axis_planes[0].closest_point(Point(*intersection_line_plane(middle_line, axis_planes[1]))),
+            Point(*intersection_line_plane(middle_line, axis_planes[1])),
+            Point(*intersection_line_plane(middle_line, axis_planes[2])),
+            axis_planes[3].closest_point(Point(*intersection_line_plane(middle_line, axis_planes[2]))),
+        ]
+
+        # Offset points: move along axis direction, then down by height
+        pts_offset = [self.axes[i].direction * inclination + pts[i] for i in range(4)]
+        pts_offset[0] = axis_planes[0].closest_point(pts_offset[1])
+        pts_offset[3] = axis_planes[3].closest_point(pts_offset[2])
+        pts_offset = [-Vector.Zaxis() * self.height + p for p in pts_offset]
 
         return pts, pts_offset
 
     @property
+    def column_head_points(self):
+        """Cached version using default parameters."""
+        if self._corner_pts is None:
+            self._corner_pts = self.compute_column_head_points()
+        return self._corner_pts
+
+    def compute_cut_planes(self, scale=None, inclination=None):
+        """Compute cut planes without caching.
+
+        Parameters
+        ----------
+        scale : float, optional
+        inclination : float, optional
+
+        Returns
+        -------
+        list[Plane]
+            6 planes: 3 boundary offsets + 3 corner planes.
+        """
+        pts, pts_offset = self.compute_column_head_points(scale, inclination)
+
+        # Build cut planes: 3 boundary offsets + 3 corner planes
+        boundary_planes = [Plane(self.axes[j].midpoint, Vector.Zaxis().cross(self.axes[j].direction)) for j in range(3, len(self.axes) - 1)]
+        offset_boundary_planes = [plane.offset(self.thick * 0.5) for plane in boundary_planes]
+        normals = [-(pts[i + 1] - pts[i]).cross(pts_offset[i] - pts[i]) for i in range(3)]
+        corner_planes = [Plane((pts[i] + pts[i + 1]) * 0.5, normals[i]) for i in range(3)]
+        return offset_boundary_planes + corner_planes
+
+    @property
     def cut_planes(self):
-        """Cut planes for trimming geometry. Also computes corner_points."""
+        """Cached version using default parameters."""
         if self._cut_planes is None:
-
-            # Cache corner points for column_head
-            pts, pts_offset = self.column_head_points
-
-            # Build cut planes: 3 boundary offsets + 3 corner planes
-            boundary_planes = [Plane(self.axes[j].midpoint, Vector.Zaxis().cross(self.axes[j].direction)) for j in range(3, len(self.axes) - 1)]
-            offset_boundary_planes = [plane.offset(self.thick * 0.5) for plane in boundary_planes]
-            normals = [-(pts[i + 1] - pts[i]).cross(pts_offset[i] - pts[i]) for i in range(3)]
-            corner_planes = [Plane(( pts[i] + pts[i + 1]) * 0.5, normals[i]) for i in range(3)]
-            self._cut_planes = offset_boundary_planes + corner_planes
-
+            self._cut_planes = self.compute_cut_planes()
         return self._cut_planes
-    
+
+    def set_column_head_params(self, scale=None, inclination=None):
+        """Update parameters and invalidate caches.
+
+        Parameters
+        ----------
+        scale : float, optional
+            New column head scale value.
+        inclination : float, optional
+            New column head inclination value.
+        """
+        if scale is not None:
+            self._column_head_scale = scale
+        if inclination is not None:
+            self._column_head_inclination = inclination
+        self._corner_pts = None
+        self._cut_planes = None
+
     @property
     def top_corner_block_points(self):
         """Points defining the top block of the column head."""

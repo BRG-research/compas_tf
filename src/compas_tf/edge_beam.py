@@ -176,7 +176,11 @@ class EdgeBeamElement(Element):
         cut = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj, cut_corner), cut_boundary)
 
         # Extend and cut by end plane
-        line = PolylineCut.cut_by_plane(Polyline([cut[0], cut[-1]]).extended([1000, 0]), builder.top_end_planes[0], flip=True)
+        # line = PolylineCut.cut_by_plane(Polyline([cut[0], cut[-1]]).extended([1000, 0]), builder.top_end_planes[0], flip=True)
+        end_planes = builder.compute_cut_planes(scale=100, inclination=0)[3:6]
+        end_plane = Plane(end_planes[0].point, -end_planes[0].normal)
+        line = PolylineCut.cut_by_plane(Polyline([cut[0], cut[-1]]).extended([1000, 0]), end_plane, flip=True)
+
 
         # Build step profile: top (z=0) + mid (z=-head_h) + curve
         xy_proj = Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis())

@@ -179,6 +179,7 @@ def _build_ribs(builder):
     end_planes = [end_plane0, end_plane1, end_plane2]
 
     # end_planes = [builder.cut_planes[3], builder.cut_planes[4], builder.cut_planes[5]]
+    end_planes = builder.compute_cut_planes(scale=100, inclination=0)[3:6]
 
 
     quarter_meshes = {}
@@ -188,7 +189,7 @@ def _build_ribs(builder):
     for axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx in rib_configs:
         offset0, offset1 = 0.5, -0.5
         end_plane = builder.end_diagonal_plane.offset(-builder.thick)
-        end_plane = end_planes[end_plane_idx].offset(500)
+        end_plane = Plane(end_planes[end_plane_idx].point, -end_planes[end_plane_idx].normal)
 
         cut_boundary = cut_planes[boundary_cut_idx]
         cut_rib = cut_planes[rib_cut_idx + 3]
@@ -401,8 +402,8 @@ def _build_boundaries(builder, surface_edge_polys):
     result0 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_0))
     result1 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_1))
 
-    meshes[7] = PolylineLoft.to_mesh(result0, result1)
-    polyline_pairs[7] = (result0, result1)
+    # meshes[7] = PolylineLoft.to_mesh(result0, result1)
+    # polyline_pairs[7] = (result0, result1)
 
     return meshes, polyline_pairs
 
@@ -643,7 +644,7 @@ class QuarterFloorElement(Element):
             strip = apply_rotation(_line_to_strip(strip_line, builder.head_h))
             strips.append(strip)
             interactions.append((strip, element))
-            interactions.append((strip, axis_elements[7]))
+            # interactions.append((strip, axis_elements[7]))
 
         # -----------------------------------------------------------------------
         # Corner screws - near oculus (belong to axis[4])
@@ -662,29 +663,29 @@ class QuarterFloorElement(Element):
         # -----------------------------------------------------------------------
         # Back corner screws - belong to axis[7]
         # -----------------------------------------------------------------------
-        rib_axes = [0, 1, 2, 6]
-        for i in rib_axes:
-            axis_plane = Plane(builder.axes[i].midpoint, Vector.Zaxis().cross(builder.axes[i].direction))
-            p0 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane, Plane.worldXY())
-            p1 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane.offset(-builder.thick * 1.0), Plane.worldXY())
-            line = Line(p0, p1)
+        # rib_axes = [0, 1, 2, 6]
+        # for i in rib_axes:
+        #     axis_plane = Plane(builder.axes[i].midpoint, Vector.Zaxis().cross(builder.axes[i].direction))
+        #     p0 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane, Plane.worldXY())
+        #     p1 = intersection_plane_plane_plane(axis_plane, builder.end_diagonal_plane.offset(-builder.thick * 1.0), Plane.worldXY())
+        #     line = Line(p0, p1)
 
-            if i == 0 or i == 6:
-                for j in range(divisions * 2):
-                    if j % 2 == 0:
-                        continue
-                    translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
-                    screw = apply_rotation(_line_to_screw(translated_line))
-                    screws.append(screw)
-                    interactions.append((screw, axis_elements[7]))
-            else:
-                for j in range(divisions * 2):
-                    if j % 2 == 1:
-                        continue
-                    translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
-                    screw = apply_rotation(_line_to_screw(translated_line))
-                    screws.append(screw)
-                    interactions.append((screw, axis_elements[7]))
+        #     if i == 0 or i == 6:
+        #         for j in range(divisions * 2):
+        #             if j % 2 == 0:
+        #                 continue
+        #             translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
+        #             screw = apply_rotation(_line_to_screw(translated_line))
+        #             screws.append(screw)
+        #             interactions.append((screw, axis_elements[7]))
+        #     else:
+        #         for j in range(divisions * 2):
+        #             if j % 2 == 1:
+        #                 continue
+        #             translated_line = line.translated(-Vector.Zaxis() * height_offset - Vector.Zaxis() * height1 * j)
+        #             screw = apply_rotation(_line_to_screw(translated_line))
+        #             screws.append(screw)
+        #             interactions.append((screw, axis_elements[7]))
 
         # -----------------------------------------------------------------------
         # Boundary connectors - connect to axis_elements[3, 4, 5]

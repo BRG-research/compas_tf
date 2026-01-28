@@ -400,9 +400,10 @@ print(f"Exported Model to {model_filepath}")
 # Visualize cut planes from builder
 from compas.geometry import Plane
 from compas_tf.geometry import PlaneIntersect
-for plane in builder.cut_planes:
+for plane in builder.compute_cut_planes(scale=100, inclination=0)[3:6]:
     polygon, normal_line = PlaneIntersect.plane_rectangle(plane, scale=100)
-    viewer.scene.add(polygon, name="cut_plane", color=(0.9, 0.6, 0.0), opacity=0.3)
+    viewer.scene.add(polygon, name="cut_plane", color=(0.9, 0.6, 0.0))
     viewer.scene.add(normal_line, name="cut_plane_normal", color=(1.0, 0.0, 0.0))
+
 
 viewer.show()
