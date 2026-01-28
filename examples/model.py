@@ -1,5 +1,5 @@
 import os
-from compas.geometry import Box, Line, Frame, Transformation, Translation
+from compas.geometry import Box, Line, Frame, Transformation, Translation, Vector
 from compas_model.elements.column import ColumnElement
 from compas_model.elements.group import Group
 from compas_model.models import Model
@@ -202,11 +202,12 @@ def add_model_to_viewer(model, viewer):
 
 
 # Create a box representing one grid frame unit
-frame_size = 240.0
+column_size = 200.0
 grid_size = 6000.0
 height = 3000.0
 floor_thickness = 650.0
-box = Box(frame_size+grid_size, frame_size+grid_size, height+floor_thickness, Frame([0,0,-(height+floor_thickness)*0.5]))
+thick = 40.0
+box = Box(grid_size-(column_size*0.5-thick)*2, grid_size-(column_size*0.5-thick)*2, height+floor_thickness, Frame([0,0,-(height+floor_thickness)*0.5]))
 
 # Model with hierarchical groups
 model = Model(name="Example Model")
@@ -234,57 +235,57 @@ for i, corner_id in enumerate(box.bottom):
     corner = box.corner(corner_id)
     frame = Frame(corner, [1, 0, 0], [0, 1, 0])
     xform = Transformation.from_frame(frame) * Translation.from_vector([0, 0, SupportElement.HEIGHT])
-    column = ColumnElement(frame_size, frame_size, height-SupportElement.HEIGHT, xform)
+    column = ColumnElement(column_size, column_size, height-SupportElement.HEIGHT+floor_thickness, xform)
     column.name = f"column_{i}"
     model.add_element(column, parent=columns_group)
     columns.append(column)
 
 # 3. Create builder for floor elements
-builder = FloorBuilder(size=3000, height=650, rise=453, oculus=1000, thick=40, beam_w=frame_size, column_head_scale=460, column_head_inclination=180)
+builder = FloorBuilder(size=3000, height=650, rise=453, oculus=1000, thick=thick, beam_w=thick, column_head_scale=250, column_head_inclination=0)
 pts, pts_offset = builder.column_head_points
 
 # 4. Build column head elements with nested groups
 offset = builder.size + builder.beam_w * 0.5
-xforms_columnhead = [
-    Transformation.from_frame(Frame([-offset, -offset, 0], [1,0,0], [0,1,0])),
-    Transformation.from_frame(Frame([offset, -offset, 0], [0,1,0], [-1,0,0])),
-    Transformation.from_frame(Frame([offset, offset, 0], [-1,0,0], [0,-1,0])),
-    Transformation.from_frame(Frame([-offset, offset, 0], [0,-1,0], [1,0,0])),
-]
+# xforms_columnhead = [
+#     Transformation.from_frame(Frame([-offset, -offset, 0], [1,0,0], [0,1,0])),
+#     Transformation.from_frame(Frame([offset, -offset, 0], [0,1,0], [-1,0,0])),
+#     Transformation.from_frame(Frame([offset, offset, 0], [-1,0,0], [0,-1,0])),
+#     Transformation.from_frame(Frame([-offset, offset, 0], [0,-1,0], [1,0,0])),
+# ]
 
-for i, xform in enumerate(xforms_columnhead):
-    column = columns[i]
+# for i, xform in enumerate(xforms_columnhead):
+#     column = columns[i]
 
-    # Create corner group (use Group directly for nested groups)
-    corner_group = Group(name=f"corner_{i}")
-    model.add_element(corner_group, parent=column_heads_group)
+#     # Create corner group (use Group directly for nested groups)
+#     corner_group = Group(name=f"corner_{i}")
+#     model.add_element(corner_group, parent=column_heads_group)
 
-    # Build column head components
-    head_element, top_element, connections, interactions, modifiers = ColumnHeadElement.build(builder, column_element=column)
-    head_element.transformation = xform
-    top_element.transformation = xform
-    head_element.name = "head"
-    top_element.name = "top"
+#     # Build column head components
+#     head_element, top_element, connections, interactions, modifiers = ColumnHeadElement.build(builder, column_element=column)
+#     head_element.transformation = xform
+#     top_element.transformation = xform
+#     head_element.name = "head"
+#     top_element.name = "top"
 
-    model.add_element(head_element, parent=corner_group)
-    model.add_element(top_element, parent=corner_group)
+#     model.add_element(head_element, parent=corner_group)
+#     model.add_element(top_element, parent=corner_group)
 
-    # Create connectors group and add connectors
-    connectors_group = Group(name="connectors")
-    model.add_element(connectors_group, parent=corner_group)
+#     # Create connectors group and add connectors
+#     connectors_group = Group(name="connectors")
+#     model.add_element(connectors_group, parent=corner_group)
 
-    for j, connector in enumerate(connections):
-        connector.transformation = xform * connector.transformation
-        connector.name = f"connector_{j}"
-        model.add_element(connector, parent=connectors_group)
+#     for j, connector in enumerate(connections):
+#         connector.transformation = xform * connector.transformation
+#         connector.name = f"connector_{j}"
+#         model.add_element(connector, parent=connectors_group)
 
-    # Add interactions (connector-element relationships)
-    for connector, element in interactions:
-        model.add_interaction(connector, element)
+#     # Add interactions (connector-element relationships)
+#     for connector, element in interactions:
+#         model.add_interaction(connector, element)
 
-    # Add modifiers (boolean operations)
-    for connector, element in modifiers:
-        model.add_modifier(connector, element, SolidDifferenceModifier())
+#     # Add modifiers (boolean operations)
+#     for connector, element in modifiers:
+#         model.add_modifier(connector, element, SolidDifferenceModifier())
 
 
 # 5. Build edge beam elements
@@ -395,5 +396,13 @@ model_filepath = os.path.join(os.path.dirname(__file__), "model.json")
 with open(model_filepath, "w") as f:
     f.write(json_dumps(model, pretty=True))
 print(f"Exported Model to {model_filepath}")
+
+# Visualize cut planes from builder
+from compas.geometry import Plane
+from compas_tf.geometry import PlaneIntersect
+for plane in builder.cut_planes:
+    polygon, normal_line = PlaneIntersect.plane_rectangle(plane, scale=100)
+    viewer.scene.add(polygon, name="cut_plane", color=(0.9, 0.6, 0.0), opacity=0.3)
+    viewer.scene.add(normal_line, name="cut_plane_normal", color=(1.0, 0.0, 0.0))
 
 viewer.show()

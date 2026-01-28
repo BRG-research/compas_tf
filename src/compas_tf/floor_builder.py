@@ -139,6 +139,7 @@ class FloorBuilder:
                 bezier = BezierCurve.quadratic_points(p0, p1, p2, divisions)
                 # self.head_h = abs(bezier[-2][2]) * 0.845 - 3.5
                 self.head_h = abs(bezier[-2][2]) * 0.84 - 3.5
+                self.head_h = 500
                 
                 # self.head_h += 100
                 
@@ -222,10 +223,10 @@ class FloorBuilder:
 
             # Build cut planes: 3 boundary offsets + 3 corner planes
             boundary_planes = [Plane(self.axes[j].midpoint, Vector.Zaxis().cross(self.axes[j].direction)) for j in range(3, len(self.axes) - 1)]
-            offset_planes = [plane.offset(self.thick * 0.5) for plane in boundary_planes]
+            offset_boundary_planes = [plane.offset(self.thick * 0.5) for plane in boundary_planes]
             normals = [-(pts[i + 1] - pts[i]).cross(pts_offset[i] - pts[i]) for i in range(3)]
-            corner_planes = [Plane((pts[i] + pts[i + 1]) * 0.5, normals[i]) for i in range(3)]
-            self._cut_planes = offset_planes + corner_planes
+            corner_planes = [Plane(( pts[i] + pts[i + 1]) * 0.5, normals[i]) for i in range(3)]
+            self._cut_planes = offset_boundary_planes + corner_planes
 
         return self._cut_planes
     

@@ -158,11 +158,13 @@ def _build_ribs(builder):
     """
     # Rib configuration: (axis_idx, parabola_idx, target_plane_idx, boundary_cut_idx, rib_cut_idx)
     rib_configs = [
-        (0, 0, 0, 0, 0),  # axis 0: parabola[0], target[0], boundary_cut[0], rib_cut[0+3]
-        (1, 1, 1, 0, 1),  # axis 1: parabola[1], target[1], boundary_cut[0], rib_cut[1+3]
-        (2, 2, 2, 2, 1),  # axis 2: parabola[2], target[2], boundary_cut[2], rib_cut[1+3]
-        (6, 3, 3, 2, 2),  # axis 6: parabola[3], target[3], boundary_cut[2], rib_cut[2+3]
+        (0, 0, 0, 0, 0, 0),  # axis 0: parabola[0], target[0], boundary_cut[0], rib_cut[0+3], end_plane[0]
+        (1, 1, 1, 0, 1, 1),  # axis 1: parabola[1], target[1], boundary_cut[0], rib_cut[1+3], end_plane[1]
+        (2, 2, 2, 2, 1, 1),  # axis 2: parabola[2], target[2], boundary_cut[2], rib_cut[1+3], end_plane[1]
+        (6, 3, 3, 2, 2, 2),  # axis 6: parabola[3], target[3], boundary_cut[2], rib_cut[2+3], end_plane[2]
     ]
+
+
 
     rib_parabolas = builder.rib_parabolas
     target_planes = builder.target_planes
@@ -170,13 +172,23 @@ def _build_ribs(builder):
     thick = builder.thick
     head_h = builder.head_h
 
+    
+    end_plane0 = builder.end_planes[0]
+    end_plane1 = Plane( (builder.end_planes[1].point+builder.end_planes[2].point)*0.5 , builder.end_planes[1].normal+builder.end_planes[2].normal)
+    end_plane2 = builder.end_planes[3]
+    end_planes = [end_plane0, end_plane1, end_plane2]
+
+    # end_planes = [builder.cut_planes[3], builder.cut_planes[4], builder.cut_planes[5]]
+
+
     quarter_meshes = {}
     list_rib_polylines = {}
     polyline_pairs = {}
 
-    for axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx in rib_configs:
+    for axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx in rib_configs:
         offset0, offset1 = 0.5, -0.5
         end_plane = builder.end_diagonal_plane.offset(-builder.thick)
+        end_plane = end_planes[end_plane_idx].offset(500)
 
         cut_boundary = cut_planes[boundary_cut_idx]
         cut_rib = cut_planes[rib_cut_idx + 3]
