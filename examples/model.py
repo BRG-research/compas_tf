@@ -383,7 +383,7 @@ for connector, element in oculus_result.interactions:
 config = Config()
 config.unit = "mm"
 viewer = Viewer(config)
-viewer.renderer.rendermode = "ghosted"
+viewer.renderer.rendermode = "lighted"
 
 # Add model to viewer using hierarchy traversal
 add_model_to_viewer(model, viewer)
