@@ -18,6 +18,7 @@ from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
 from compas_tf.geometry import PolylineLoft
+from compas_tf.geometry import PlaneIntersect
 
 
 class ColumnHeadFeature(Feature):
@@ -107,7 +108,7 @@ class ColumnHeadElement(Element):
         return frame
 
     @staticmethod
-    def build(builder, column_element=None):
+    def build(builder, column_element=None, block_height=100):
         """Build column head geometry from FloorBuilder data.
 
         Parameters
@@ -137,49 +138,34 @@ class ColumnHeadElement(Element):
         beam_w = builder.beam_w
         height = builder.height
 
-        # Column head the bottom height is the intersection between parabola and the cut plane
-        parabola = builder.rib_parabolas[0]  # First boundary parabola
-        cut_plane = builder.cut_planes[3]  # First cut plane
-        result = intersection_polyline_plane(parabola,cut_plane, 1)
-        head_bottom = result[0][2]
 
 
-        plane_top = Plane([0, 0, -head_h], Vector.Zaxis())
-        plane_bottom = Plane([0, 0, head_bottom], Vector.Zaxis())
+        corner_end_plane0 = Plane(builder.end_planes[3].point, Vector.Zaxis().cross(builder.end_planes[3].normal)).offset(builder.thick*-1.5)
+        corner_end_plane1 = Plane(builder.end_planes[0].point, Vector.Zaxis().cross(builder.end_planes[0].normal)).offset(builder.thick*1.5)
+        cut_planes = [corner_end_plane1] + builder.compute_cut_planes(scale=100, inclination=0)[3:6] + [corner_end_plane0] + builder.compute_cut_planes()[3:6][::-1] + [corner_end_plane1]
+        top = Polyline(PlaneIntersect.intersect_consecutive_planes(cut_planes, Plane.worldXY())).translated(Vector(0, 0, -builder.head_h))
+        bottom = top.translated(Vector(0, 0, -builder.head_b ))
 
-        top_pts = [Point(*intersection_line_plane(Line(pts[i], pts_offset[i]), plane_top)) for i in range(4)]
-        bottom_pts = [Point(*intersection_line_plane(Line(pts[i], pts_offset[i]), plane_bottom)) for i in range(4)]
 
-        polyline_top = Polyline(top_pts).extended([beam_w, beam_w])
-        polyline_bottom = Polyline(bottom_pts).extended([beam_w, beam_w])
-
-        direction = -polyline_top.lines[0].direction * beam_w + polyline_bottom.lines[-1].direction * beam_w
-        corner = direction + corner
-
-        for poly, z_off in [(polyline_top, -head_h), (polyline_bottom, head_bottom)]:
-            poly.append(Vector(0, 0, z_off) + corner)
-            poly.points = poly.points[-1:] + poly.points[:-1]
-            poly.append(poly[0])
-
-        # Bottom rectangle
-        taper = polyline_bottom.translated(Vector(0, 0, -(height + head_bottom)))
-        xaxis = taper.lines[0].direction * beam_w
-        yaxis = taper.lines[-1].direction * beam_w
-        center = taper[0]
-        taper = Polyline([center, center + xaxis, center + xaxis - yaxis * 0.99, center + xaxis * 0.99 - yaxis, center - yaxis, center])
-
-        head_mesh = PolylineLoft.multiple_to_mesh([taper, polyline_bottom, polyline_top])
+        # top = Polyline(builder.top_corner_block_points + [builder.top_corner_block_points[0]])
+        
+        head_mesh = PolylineLoft.to_mesh(bottom, top, True)
         head_mesh.transform(xform)
         # Transform polylines for PlateElement
-        _head_top_polyline = polyline_top.transformed(xform)  # noqa: F841
-        _head_bottom_polyline = taper.transformed(xform)  # noqa: F841
+        _head_top_polyline = top.transformed(xform)  # noqa: F841
+        _head_bottom_polyline = bottom.transformed(xform)  # noqa: F841
 
         #############################################################################################
         # Top block
         #############################################################################################
+        corner_end_plane0 = Plane(builder.end_planes[3].point, Vector.Zaxis().cross(builder.end_planes[3].normal)).offset(builder.thick*-1.5)
+        corner_end_plane1 = Plane(builder.end_planes[0].point, Vector.Zaxis().cross(builder.end_planes[0].normal)).offset(builder.thick*1.5)
+        cut_planes = [corner_end_plane1] + builder.compute_cut_planes(scale=100, inclination=0)[3:6] + [corner_end_plane0, corner_end_plane1]
+        top = Polyline(PlaneIntersect.intersect_consecutive_planes(cut_planes, Plane.worldXY()))
 
-        top = Polyline(builder.top_corner_block_points + [builder.top_corner_block_points[0]])
-        bottom = top.translated(Vector(0, 0, -head_h))
+
+        # top = Polyline(builder.top_corner_block_points + [builder.top_corner_block_points[0]])
+        bottom = top.translated(Vector(0, 0, -builder.head_h-builder.head_b))
         top_mesh = PolylineLoft.to_mesh(bottom, top, True)
         top_mesh.transform(xform)
         # Transform polylines for PlateElement
@@ -203,27 +189,27 @@ class ColumnHeadElement(Element):
             screw_frames.append(frame)
 
         # 4x inclined screws - within column-head-bottom (along taper edge)
-        taper_point0 = taper[1]
-        taper_point1 = polyline_bottom[1]
-        taper_point_025 = taper_point0 + 0.2 * (taper_point1 - taper_point0)
-        taper_point_075 = taper_point0 + 0.8 * (taper_point1 - taper_point0)
+        # taper_point0 = taper[1]
+        # taper_point1 = polyline_bottom[1]
+        # taper_point_025 = taper_point0 + 0.2 * (taper_point1 - taper_point0)
+        # taper_point_075 = taper_point0 + 0.8 * (taper_point1 - taper_point0)
 
-        frame0 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_025, taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
-        screw_frames.append(frame0)
-        frame1 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075, taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
-        screw_frames.append(frame1)
+        # frame0 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_025, taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
+        # screw_frames.append(frame0)
+        # frame1 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075, taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
+        # screw_frames.append(frame1)
         # OPTIONAL
         # frame2 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075 + Vector.Yaxis()*(builder.beam_w+builder.thick),  # noqa: E501
         #     taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
         # screw_frames.append(frame2)
 
-        diagonal_plane = Plane(origin, Vector(1, -1, 0))
-        reflection = Reflection.from_plane(diagonal_plane)
-        frame0_reflected = frame0.transformed(reflection)
-        frame1_reflected = frame1.transformed(reflection)
+        # diagonal_plane = Plane(origin, Vector(1, -1, 0))
+        # reflection = Reflection.from_plane(diagonal_plane)
+        # frame0_reflected = frame0.transformed(reflection)
+        # frame1_reflected = frame1.transformed(reflection)
         
-        screw_frames.append(Frame(frame0_reflected.point, -frame0_reflected.xaxis, frame0_reflected.yaxis))
-        screw_frames.append(Frame(frame1_reflected.point, -frame1_reflected.xaxis, frame1_reflected.yaxis))
+        # screw_frames.append(Frame(frame0_reflected.point, -frame0_reflected.xaxis, frame0_reflected.yaxis))
+        # screw_frames.append(Frame(frame1_reflected.point, -frame1_reflected.xaxis, frame1_reflected.yaxis))
         # OPTIONAL
         # frame2_reflected = frame2.transformed(reflection)
         # frame2_reflected_flipped = Frame(frame2_reflected.point, -frame2_reflected.xaxis, frame2_reflected.yaxis)
@@ -235,14 +221,11 @@ class ColumnHeadElement(Element):
         # avg_frame = Frame(avg_origin, Vector.Xaxis(), Vector.Yaxis())
         # screw_frames.append(avg_frame)
 
-        # 1x connector - collumn-head-bottom - collumn-head-top
-        connector_frame = Frame(origin)
-
-        # 1x screw - collumn-head-bottom - connector
+        # 1x screw - collumn-head-bottom
         origin = Point(-builder.size - builder.beam_w / 2, -builder.size - builder.beam_w / 2, -builder.height)
         screw_frames.append(Frame(origin, Vector.Xaxis(), Vector.Yaxis()))
 
-        # 2x screws - column-head-top - connector
+        # 2x screws - column-head-top
         screw_diameter = 8
         origin_side = Point(-builder.size - builder.beam_w, -builder.size - builder.beam_w/2 - screw_diameter, -builder.head_h+40-screw_diameter)
         screw_frames.append(Frame(origin_side, -Vector.Zaxis(), Vector.Yaxis()))
@@ -268,7 +251,6 @@ class ColumnHeadElement(Element):
         head_element = ColumnHeadElement(mesh=head_mesh, name="column_head")
         top_element = ColumnHeadElement(mesh=top_mesh, name="column_head_top")
 
-        from compas_tf.joint_connector import ConnectorElement
         from compas_tf.joint_screw import ScrewElement
         from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 
@@ -279,29 +261,25 @@ class ColumnHeadElement(Element):
             for i, frame in enumerate(screw_frames)
         ]
         
-        connector = ConnectorElement(transformation=xform * Transformation.from_frame(connector_frame), name="connector_columnhead")
-        
         sherpas = []
         for i, frame in enumerate(sherpa_frames):
             sherpa = SherpaXL120Element(transformation=xform * Transformation.from_frame(frame), name=f"sherpaxl120_columnhead_{i}")
             sherpas.append(sherpa)
 
-        connections = screws + [connector] + sherpas
+        connections = screws + sherpas
 
         #############################################################################################
         # Create interactions
         #############################################################################################
         interactions = []
-        interactions.append((connector, head_element))
-        interactions.append((connector, top_element))
         for sherpa in sherpas:
             interactions.append((sherpa, top_element))
 
         # Screw interactions by index ranges
         SCREWS_HEAD_COLUMN = slice(0, 4)       # 4x screws column-head-bottom - column
         SCREWS_HEAD_INCLINED = slice(4, 8)     # 4x inclined screws within column-head-bottom
-        SCREW_HEAD_CONNECTOR = 8               # 1x screw column-head-bottom - connector
-        SCREWS_TOP_CONNECTOR = slice(9, 11)    # 2x screws column-head-top - connector
+        SCREW_HEAD_CONNECTOR = 8               # 1x screw column-head-bottom
+        SCREWS_TOP_CONNECTOR = slice(9, 11)    # 2x screws column-head-top
 
         for screw in screws[SCREWS_HEAD_COLUMN]:
             interactions.append((screw, head_element))
@@ -313,13 +291,8 @@ class ColumnHeadElement(Element):
             # Note: These screws are entirely within head_element (along taper edge),
             # they do NOT connect to top_element
 
-        # Screw-connector interactions (previously modifiers)
-        interactions.append((screws[SCREW_HEAD_CONNECTOR], head_element))
-        interactions.append((screws[SCREW_HEAD_CONNECTOR], connector))
-
         for screw in screws[SCREWS_TOP_CONNECTOR]:
             interactions.append((screw, top_element))
-            interactions.append((screw, connector))
 
         modifiers = []
 

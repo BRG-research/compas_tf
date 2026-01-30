@@ -172,14 +172,7 @@ def _build_ribs(builder):
     thick = builder.thick
     head_h = builder.head_h
 
-    
-    end_plane0 = builder.end_planes[0]
-    end_plane1 = Plane( (builder.end_planes[1].point+builder.end_planes[2].point)*0.5 , builder.end_planes[1].normal+builder.end_planes[2].normal)
-    end_plane2 = builder.end_planes[3]
-    end_planes = [end_plane0, end_plane1, end_plane2]
-
-    # end_planes = [builder.cut_planes[3], builder.cut_planes[4], builder.cut_planes[5]]
-    end_planes = builder.compute_cut_planes(scale=100, inclination=0)[3:6]
+    end_planes = builder.compute_cut_planes(scale=150, inclination=0)[3:6]
 
 
     quarter_meshes = {}
@@ -188,7 +181,7 @@ def _build_ribs(builder):
 
     for axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx in rib_configs:
         offset0, offset1 = 0.5, -0.5
-        end_plane = builder.end_diagonal_plane.offset(-builder.thick)
+        # end_plane = builder.end_diagonal_plane.offset(-builder.thick)
         end_plane = Plane(end_planes[end_plane_idx].point, -end_planes[end_plane_idx].normal)
 
         cut_boundary = cut_planes[boundary_cut_idx]

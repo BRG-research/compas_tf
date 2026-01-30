@@ -177,7 +177,7 @@ class EdgeBeamElement(Element):
 
         # Extend and cut by end plane
         # line = PolylineCut.cut_by_plane(Polyline([cut[0], cut[-1]]).extended([1000, 0]), builder.top_end_planes[0], flip=True)
-        end_planes = builder.compute_cut_planes(scale=100, inclination=0)[3:6]
+        end_planes = builder.compute_cut_planes(scale=150, inclination=0)[3:6]
         end_plane = Plane(end_planes[0].point, -end_planes[0].normal)
         line = PolylineCut.cut_by_plane(Polyline([cut[0], cut[-1]]).extended([1000, 0]), end_plane, flip=True)
 

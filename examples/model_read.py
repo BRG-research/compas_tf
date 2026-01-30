@@ -24,11 +24,10 @@ from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
-from compas_tf.joint_connector import ConnectorElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 # Connector types for identification
-CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element, ConnectorElement)
+CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element)
 
 # Colors for different connector types (RGB tuples 0-255)
 CONNECTOR_COLORS = {
@@ -36,7 +35,6 @@ CONNECTOR_COLORS = {
     DowelElement: (0, 0, 255),          # Blue - dowels
     AlignmentStripElement: (0, 255, 0), # Green - strips
     SherpaXL120Element: (255, 165, 0),  # Orange - sherpa connectors
-    ConnectorElement: (128, 0, 128),    # Purple - generic connectors
 }
 
 
