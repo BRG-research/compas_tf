@@ -213,6 +213,7 @@ floor_thickness = 650.0
 thick = 40.0
 corner_block_height0 = 500  # Extra height below column head
 corner_block_height1 = 100  # Extra height below column head
+corner_block_offset = 141
 builder = FloorBuilder(
     size=3000, 
     height=650, 
@@ -223,7 +224,8 @@ builder = FloorBuilder(
     column_head_scale=250, 
     column_head_inclination=0, 
     head_h=corner_block_height0,
-    head_b=corner_block_height1 )
+    head_b=corner_block_height1,
+    head_o=corner_block_offset )
 box = Box(grid_size-(column_size*0.5-thick)*2, grid_size-(column_size*0.5-thick)*2, height+floor_thickness, Frame([0,0,-(height+floor_thickness)*0.5]))
 
 # Model with hierarchical groups

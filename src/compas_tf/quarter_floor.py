@@ -172,7 +172,7 @@ def _build_ribs(builder):
     thick = builder.thick
     head_h = builder.head_h
 
-    end_planes = builder.compute_cut_planes(scale=150, inclination=0)[3:6]
+    end_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
 
 
     quarter_meshes = {}
@@ -623,21 +623,21 @@ class QuarterFloorElement(Element):
         # -----------------------------------------------------------------------
         # Corner strips at column head - connect to axis[7]
         # -----------------------------------------------------------------------
-        axis_corner = Line(builder.end_diagonal_plane.point, builder.end_diagonal_plane.point + Vector.Zaxis().cross(builder.end_diagonal_plane.normal))
-        axis_to_element = {
-            0: axis_elements[0],  # axis 0
-            6: axis_elements[6],  # axis 6
-            1: axis_elements[1],  # axis 1
-            2: axis_elements[2],  # axis 2
-        }
-        for axis, element in axis_to_element.items():
-            intersect_line = LineOffset.offset_xy(axis_corner, builder.thick * -1)
-            strip_point = Point(*intersection_line_line(builder.axes[axis], intersect_line)[0])
-            strip_line = Line(strip_point, strip_point + builder.axes[axis].direction).translated(Vector.Zaxis() * -builder.head_h * 0.5)
-            strip = apply_rotation(_line_to_strip(strip_line, builder.head_h))
-            strips.append(strip)
-            interactions.append((strip, element))
-            # interactions.append((strip, axis_elements[7]))
+        # axis_corner = Line(builder.end_diagonal_plane.point, builder.end_diagonal_plane.point + Vector.Zaxis().cross(builder.end_diagonal_plane.normal))
+        # axis_to_element = {
+        #     0: axis_elements[0],  # axis 0
+        #     6: axis_elements[6],  # axis 6
+        #     1: axis_elements[1],  # axis 1
+        #     2: axis_elements[2],  # axis 2
+        # }
+        # for axis, element in axis_to_element.items():
+        #     intersect_line = LineOffset.offset_xy(axis_corner, builder.thick * -1)
+        #     strip_point = Point(*intersection_line_line(builder.axes[axis], intersect_line)[0])
+        #     strip_line = Line(strip_point, strip_point + builder.axes[axis].direction).translated(Vector.Zaxis() * -builder.head_h * 0.5)
+        #     strip = apply_rotation(_line_to_strip(strip_line, builder.head_h))
+        #     strips.append(strip)
+        #     interactions.append((strip, element))
+        #     # interactions.append((strip, axis_elements[7]))
 
         # -----------------------------------------------------------------------
         # Corner screws - near oculus (belong to axis[4])

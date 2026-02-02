@@ -17,7 +17,7 @@ from compas_tf.geometry import PolylineOffset
 class FloorBuilder:
     """Provides geometry parameters for building column heads and edge beams."""
 
-    def __init__(self, size=3000, height=650, rise=453, oculus=1000, thick=40, beam_w=200, column_head_scale=460, column_head_inclination=180, head_h=500, head_b=100):
+    def __init__(self, size=3000, height=650, rise=453, oculus=1000, thick=40, beam_w=200, column_head_scale=460, column_head_inclination=180, head_h=500, head_b=100, head_o=150):
         self.size = size
         self.height = height
         self.rise = rise
@@ -27,6 +27,7 @@ class FloorBuilder:
         self.thick = thick
         self.head_h = head_h
         self.head_b = head_b
+        self.head_o = head_o
         self._oculus_pts = None
         self._q1_poly = None
         self._axes = None

@@ -108,7 +108,7 @@ class ColumnHeadElement(Element):
         return frame
 
     @staticmethod
-    def build(builder, column_element=None, block_height=100):
+    def build(builder, column_element=None, block_height=100, connection_width=20):
         """Build column head geometry from FloorBuilder data.
 
         Parameters
@@ -142,7 +142,10 @@ class ColumnHeadElement(Element):
 
         corner_end_plane0 = Plane(builder.end_planes[3].point, Vector.Zaxis().cross(builder.end_planes[3].normal)).offset(builder.thick*-1.5)
         corner_end_plane1 = Plane(builder.end_planes[0].point, Vector.Zaxis().cross(builder.end_planes[0].normal)).offset(builder.thick*1.5)
-        cut_planes = [corner_end_plane1] + builder.compute_cut_planes(scale=100, inclination=0)[3:6] + [corner_end_plane0] + builder.compute_cut_planes()[3:6][::-1] + [corner_end_plane1]
+        offset_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
+        for i in range(len(offset_planes)):
+            offset_planes[i] = offset_planes[i].offset(-connection_width)
+        cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0] + builder.compute_cut_planes()[3:6][::-1] + [corner_end_plane1]
         top = Polyline(PlaneIntersect.intersect_consecutive_planes(cut_planes, Plane.worldXY())).translated(Vector(0, 0, -builder.head_h))
         bottom = top.translated(Vector(0, 0, -builder.head_b ))
 
@@ -160,7 +163,10 @@ class ColumnHeadElement(Element):
         #############################################################################################
         corner_end_plane0 = Plane(builder.end_planes[3].point, Vector.Zaxis().cross(builder.end_planes[3].normal)).offset(builder.thick*-1.5)
         corner_end_plane1 = Plane(builder.end_planes[0].point, Vector.Zaxis().cross(builder.end_planes[0].normal)).offset(builder.thick*1.5)
-        cut_planes = [corner_end_plane1] + builder.compute_cut_planes(scale=100, inclination=0)[3:6] + [corner_end_plane0, corner_end_plane1]
+        offset_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
+        for i in range(len(offset_planes)):
+            offset_planes[i] = offset_planes[i].offset(-connection_width)
+        cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0, corner_end_plane1]
         top = Polyline(PlaneIntersect.intersect_consecutive_planes(cut_planes, Plane.worldXY()))
 
 
@@ -236,7 +242,20 @@ class ColumnHeadElement(Element):
         for i in range(3):
             p1 = top[i+1]
             p0 = top[i]
-            frame = Frame((p0+p1)*0.5, p1 - p0, Vector.Zaxis().cross(p1 - p0))
+            midpoint = (p0 + p1) * 0.5
+
+            if i == 0 or i == 2:
+                direction = (p1 - p0).unitized()
+                length = (p1 - p0).length*0.5 - 80*0.5
+                direction = direction * length if i == 2 else direction * -length
+                midpoint = direction + midpoint 
+
+
+
+            frame = Frame(midpoint, p0 - p1, -Vector.Zaxis().cross(p1 - p0))
+            # frame = Frame(midpoint, p1 - p0, Vector.Zaxis().cross(p1 - p0))
+
+            # frame.translate(Vector(0, 0, -15))
             sherpa_frames.append(frame)
 
 
@@ -260,10 +279,12 @@ class ColumnHeadElement(Element):
             ScrewElement(transformation=xform * Transformation.from_frame(frame), name=f"screw_columnhead_{i}")
             for i, frame in enumerate(screw_frames)
         ]
+        screws = []
         
         sherpas = []
         for i, frame in enumerate(sherpa_frames):
-            sherpa = SherpaXL120Element(transformation=xform * Transformation.from_frame(frame), name=f"sherpaxl120_columnhead_{i}")
+            depth = 120 if i == 1 else 80
+            sherpa = SherpaXL120Element(depth=depth, transformation=xform * Transformation.from_frame(frame), name=f"sherpaxl120_columnhead_{i}")
             sherpas.append(sherpa)
 
         connections = screws + sherpas
@@ -276,23 +297,23 @@ class ColumnHeadElement(Element):
             interactions.append((sherpa, top_element))
 
         # Screw interactions by index ranges
-        SCREWS_HEAD_COLUMN = slice(0, 4)       # 4x screws column-head-bottom - column
-        SCREWS_HEAD_INCLINED = slice(4, 8)     # 4x inclined screws within column-head-bottom
-        SCREW_HEAD_CONNECTOR = 8               # 1x screw column-head-bottom
-        SCREWS_TOP_CONNECTOR = slice(9, 11)    # 2x screws column-head-top
+        # SCREWS_HEAD_COLUMN = slice(0, 4)       # 4x screws column-head-bottom - column
+        # SCREWS_HEAD_INCLINED = slice(4, 8)     # 4x inclined screws within column-head-bottom
+        # SCREW_HEAD_CONNECTOR = 8               # 1x screw column-head-bottom
+        # SCREWS_TOP_CONNECTOR = slice(9, 11)    # 2x screws column-head-top
 
-        for screw in screws[SCREWS_HEAD_COLUMN]:
-            interactions.append((screw, head_element))
-            if column_element is not None:
-                interactions.append((screw, column_element))
+        # for screw in screws[SCREWS_HEAD_COLUMN]:
+        #     interactions.append((screw, head_element))
+        #     if column_element is not None:
+        #         interactions.append((screw, column_element))
 
-        for screw in screws[SCREWS_HEAD_INCLINED]:
-            interactions.append((screw, head_element))
-            # Note: These screws are entirely within head_element (along taper edge),
-            # they do NOT connect to top_element
+        # for screw in screws[SCREWS_HEAD_INCLINED]:
+        #     interactions.append((screw, head_element))
+        #     # Note: These screws are entirely within head_element (along taper edge),
+        #     # they do NOT connect to top_element
 
-        for screw in screws[SCREWS_TOP_CONNECTOR]:
-            interactions.append((screw, top_element))
+        # for screw in screws[SCREWS_TOP_CONNECTOR]:
+        #     interactions.append((screw, top_element))
 
         modifiers = []
 
