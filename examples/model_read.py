@@ -25,6 +25,7 @@ from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
+from compas_tf.solid_union_modifier import SolidUnionModifier
 
 # Connector types for identification
 CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element)
@@ -49,6 +50,25 @@ def get_connector_color(element):
 def is_connector(element):
     """Check if element is a connector type."""
     return isinstance(element, CONNECTOR_TYPES)
+
+
+def get_union_source_elements(model):
+    """Get elements whose geometry has been absorbed into another element via SolidUnionModifier.
+
+    Inspects graph edges for SolidUnionModifier and returns the set of source elements
+    that should not be drawn separately (their geometry is merged into the target).
+    """
+    sources = set()
+    for edge in model.graph.edges():
+        modifiers = model.graph.edge_attribute(edge, name="modifiers")
+        if not modifiers:
+            continue
+        for modifier in modifiers:
+            if isinstance(modifier, SolidUnionModifier):
+                u, v = edge
+                source = model.graph.node_element(u)
+                sources.add(source)
+    return sources
 
 
 def get_element_connectors(model, element):
@@ -206,11 +226,16 @@ def load_model_to_rhino(model_filepath, create_groups=True, convert_to_brep=True
     model = json_load(model_filepath)
     print(f"Loaded model: {model.name}")
 
+    # Find elements absorbed by boolean union (their geometry is merged into targets)
+    union_sources = get_union_source_elements(model)
+
     # Build element -> connectors mapping from interaction graph
     # Store ALL non-connector elements, even those without connectors
     element_connectors = {}
     for element in model.elements():
         if isinstance(element, Group) or is_connector(element):
+            continue
+        if element in union_sources:
             continue
         connectors = get_element_connectors(model, element)
         element_connectors[element] = connectors  # Store even if empty
@@ -576,10 +601,13 @@ def draw_single_element_to_rhino(model, element_name, create_group=True, convert
 
 def list_elements(model):
     """Print all element names in the model for reference."""
+    union_sources = get_union_source_elements(model)
     print("\nAvailable elements:")
     print("-" * 50)
     for element in model.elements():
         if isinstance(element, Group):
+            continue
+        if element in union_sources:
             continue
         layer_path = get_layer_path(element, model)
         print(f"  {element.name:20s} -> {layer_path}")

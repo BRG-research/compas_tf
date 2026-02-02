@@ -140,19 +140,33 @@ class PlateElement(Element):
         if top_polyline is not None and bottom_polyline is not None:
             # Create best-fit planes for both polylines
             # Use polygon centroid for closed polylines, bestfit centroid for open
-            bottom_plane_data = bestfit_plane(bottom_polyline.points)
-            top_plane_data = bestfit_plane(top_polyline.points)
+            # bestfit_plane fails when all points are coplanar at constant Z,
+            # so fall back to a horizontal plane in that case.
+            def _safe_bestfit_plane(points):
+                zvals = [p.z for p in points]
+                if max(zvals) - min(zvals) < 1e-6:
+                    centroid = Point(
+                        sum(p.x for p in points) / len(points),
+                        sum(p.y for p in points) / len(points),
+                        zvals[0],
+                    )
+                    return (centroid, (0, 0, 1))
+                return bestfit_plane(points)
+
+            bottom_plane_data = _safe_bestfit_plane(bottom_polyline.points)
+            top_plane_data = _safe_bestfit_plane(top_polyline.points)
 
             # Get centroid - use polygon centroid for closed polylines (more accurate)
-            if bottom_polyline.is_closed:
-                bottom_centroid = Point(*Polygon(bottom_polyline.points[:-1]).centroid)
-            else:
-                bottom_centroid = Point(*bottom_plane_data[0])
+            # Fall back to bestfit centroid if polygon has too few unique points
+            def _safe_centroid(polyline, plane_data):
+                if polyline.is_closed:
+                    unique_pts = polyline.points[:-1]
+                    if len(unique_pts) >= 3:
+                        return Point(*Polygon(unique_pts).centroid)
+                return Point(*plane_data[0])
 
-            if top_polyline.is_closed:
-                top_centroid = Point(*Polygon(top_polyline.points[:-1]).centroid)
-            else:
-                top_centroid = Point(*top_plane_data[0])
+            bottom_centroid = _safe_centroid(bottom_polyline, bottom_plane_data)
+            top_centroid = _safe_centroid(top_polyline, top_plane_data)
 
             bottom_plane = Plane(bottom_centroid, Vector(*bottom_plane_data[1]))
             top_plane = Plane(top_centroid, Vector(*top_plane_data[1]))

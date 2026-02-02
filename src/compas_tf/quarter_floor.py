@@ -78,6 +78,7 @@ class QuarterResult:
     axis_polys: dict[int, list[Polyline]]
     tsection_elements: list
     surface_elements: list
+    corner_block_elements: list
     surface_edge_polys: list
     screws: list
     dowels: list
@@ -319,6 +320,57 @@ def _build_surfaces(builder, axis_planes, lofted_lines, continuous=False):
 
     return quarter_meshes, quarter_edge_polylines, polyline_pairs
 
+def _build_corners_blocks(builder, axis_planes, offset_axes):
+    """Build 3 corner blocks filling the gap between ribs at the column head.
+
+    Each block is a vertical quad extruded from z=0 to z=-head_h,
+    using the XY footprint of the trimmed lofted lines between adjacent ribs.
+
+    Returns
+    -------
+    tuple[list[Mesh], list[tuple[Polyline, Polyline]]]
+        (meshes, polyline_pairs) where polyline_pairs is [(top, bottom), ...]
+    """
+    rib_parabolas = builder.rib_parabolas
+    cut_planes0 = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
+    cut_planes1 = builder.compute_cut_planes()[3:6]
+    cut_planes1 = [Plane(cp.point, -cp.normal) for cp in cut_planes1]
+    thick = builder.thick
+
+    meshes = []
+    polyline_pairs = []
+
+    for k in range(3):
+        # Loft lines between adjacent ribs
+        bottom_lines = PolylineLoft.to_lines(offset_axes[k][0], offset_axes[k + 1][0])
+        top_lines = PolylineLoft.to_lines(offset_axes[k][1], offset_axes[k + 1][1])
+
+        # Rib offset planes
+        left_plane = Plane(axis_planes[k].point + axis_planes[k].normal * thick * 0.5, axis_planes[k].normal)
+        right_plane = Plane(axis_planes[k + 1].point - axis_planes[k + 1].normal * thick * 0.5, axis_planes[k + 1].normal)
+
+        # Cut lofted lines by rib planes
+        bl = PolylineCut.cut_lines_by_plane(bottom_lines, left_plane)
+        tl = PolylineCut.cut_lines_by_plane(top_lines, left_plane)
+        br = PolylineCut.cut_lines_by_plane(bottom_lines, right_plane)
+        tr = PolylineCut.cut_lines_by_plane(top_lines, right_plane)
+
+        # Trim by column head cut planes
+        for tp in [cut_planes0[k], cut_planes1[k]]:
+            bl = PolylineCut.cut_by_plane(bl, tp)
+            tl = PolylineCut.cut_by_plane(tl, tp)
+            br = PolylineCut.cut_by_plane(br, tp)
+            tr = PolylineCut.cut_by_plane(tr, tp)
+
+        # Project XY footprint to z=0 (top) and z=-head_h (bottom)
+        top = Polyline([Point(p.x, p.y, 0) for p in [bl[0], bl[1], br[1], br[0], bl[0]]])
+        bottom = Polyline([Point(p.x, p.y, -builder.head_h) for p in [tl[0], tl[1], tr[1], tr[0], tl[0]]])
+
+        meshes.append(PolylineLoft.to_mesh(top, bottom, True))
+        polyline_pairs.append((top, bottom))
+
+    return meshes, polyline_pairs
+
 
 def _build_boundaries(builder, surface_edge_polys):
     """Compute boundary beam meshes and polyline pairs for quarter 1.
@@ -490,6 +542,8 @@ class QuarterFloorElement(Element):
         tsection_meshes, tsection_polyline_pairs = _build_tsections(builder, axis_planes, lofted_lines)
         surface_meshes, surface_edge_polys, surface_polyline_pairs = _build_surfaces(builder, axis_planes, lofted_lines)
         boundary_beam_meshes, boundary_polyline_pairs = _build_boundaries(builder, surface_edge_polys)
+        corner_block_meshes, corner_block_polyline_pairs = _build_corners_blocks(builder, axis_planes, offset_axes)
+
 
         # Apply rotation to polylines if needed (dicts for ribs/boundaries, lists for others)
         if rotation_xform:
@@ -502,7 +556,7 @@ class QuarterFloorElement(Element):
             tsection_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in tsection_polyline_pairs]
             surface_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in surface_polyline_pairs]
             boundary_polyline_pairs = {axis_idx: (p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for axis_idx, (p0, p1) in boundary_polyline_pairs.items()}
-
+            corner_block_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in corner_block_polyline_pairs]
         # Create PlateElements with polylines - unified axis_elements dict
         axis_elements = {}
         axis_polys = {}
@@ -536,6 +590,16 @@ class QuarterFloorElement(Element):
             PlateElement(top_polyline=surface_polyline_pairs[i][0], bottom_polyline=surface_polyline_pairs[i][1],
                         mesh=m.transformed(rotation_xform) if rotation_xform else m, name=f"surface_{i}")
             for i, m in enumerate(surface_meshes)
+        ]
+
+        corner_block_elements = [
+            PlateElement(
+                top_polyline=corner_block_polyline_pairs[i][0].transformed(rotation_xform) if rotation_xform else corner_block_polyline_pairs[i][0],
+                bottom_polyline=corner_block_polyline_pairs[i][1].transformed(rotation_xform) if rotation_xform else corner_block_polyline_pairs[i][1],
+                mesh=m.transformed(rotation_xform) if rotation_xform else m,
+                name=f"corner_block_{i}",
+            )
+            for i, m in enumerate(corner_block_meshes)
         ]
 
         # =======================================================================
@@ -714,9 +778,11 @@ class QuarterFloorElement(Element):
             axis_polys=axis_polys,
             tsection_elements=tsection_elements,
             surface_elements=surface_elements,
+            corner_block_elements=corner_block_elements,
             surface_edge_polys=surface_edge_polys,
             screws=screws,
             dowels=dowels,
             strips=strips,
             interactions=interactions,
+
         )

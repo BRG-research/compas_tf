@@ -13,6 +13,7 @@ from compas_tf.edge_beam import EdgeBeamElement
 from compas_tf.quarter_floor import QuarterFloorElement
 from compas_tf.oculus import OculusElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
+from compas_tf.solid_union_modifier import SolidUnionModifier
 from compas_tf.plate import PlateElement
 from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_dowel import DowelElement
@@ -166,6 +167,9 @@ def add_model_to_viewer(model, viewer):
                 child_group = viewer.scene.add_group(child.name or "group", parent=viewer_parent)
                 traverse_element(child, child_group)
             else:
+                # Skip elements hidden by boolean union modifiers
+                if getattr(child, '_hidden', False):
+                    continue
                 # Add element geometry and get its viewer group
                 color = get_color_for_element(child)
                 child_viewer_group = add_element_to_viewer(viewer, viewer_parent, child, color)
@@ -213,7 +217,7 @@ floor_thickness = 650.0
 thick = 40.0
 corner_block_height0 = 500  # Extra height below column head
 corner_block_height1 = 100  # Extra height below column head
-corner_block_offset = 141
+corner_block_offset = 141#141
 builder = FloorBuilder(
     size=3000, 
     height=650, 
@@ -266,9 +270,9 @@ pts, pts_offset = builder.column_head_points
 offset = builder.size + builder.beam_w * 0.5
 xforms_columnhead = [
     Transformation.from_frame(Frame([-offset, -offset, 0], [1,0,0], [0,1,0])),
-    Transformation.from_frame(Frame([offset, -offset, 0], [0,1,0], [-1,0,0])),
-    Transformation.from_frame(Frame([offset, offset, 0], [-1,0,0], [0,-1,0])),
     Transformation.from_frame(Frame([-offset, offset, 0], [0,-1,0], [1,0,0])),
+    Transformation.from_frame(Frame([offset, offset, 0], [-1,0,0], [0,-1,0])),
+    Transformation.from_frame(Frame([offset, -offset, 0], [0,1,0], [-1,0,0])),
 ]
 
 
@@ -302,9 +306,10 @@ for i, xform in enumerate(xforms_columnhead):
     for connector, element in interactions:
         model.add_interaction(connector, element)
 
-    # Add modifiers (boolean operations)
-    for connector, element in modifiers:
-        model.add_modifier(connector, element, SolidDifferenceModifier())
+    # Add modifiers (boolean union: source geometry merged into target, source hidden)
+    for source, target in modifiers:
+        model.add_modifier(source, target, SolidUnionModifier())
+        source._hidden = True
 
 
 # 5. Build edge beam elements
@@ -350,6 +355,13 @@ for q_idx in range(4):
     for i, element in enumerate(quarter_result.surface_elements):
         element.name = f"surface_{i}"
         model.add_element(element, parent=surfaces_group)
+
+    # Corner block elements group
+    corner_blocks_group = Group(name="corner_blocks")
+    model.add_element(corner_blocks_group, parent=quarter_group)
+    for i, element in enumerate(quarter_result.corner_block_elements):
+        element.name = f"corner_block_{i}"
+        model.add_element(element, parent=corner_blocks_group)
 
     # Build element -> connectors mapping from interactions
     # A connector may interact with multiple elements, so pick the first as parent

@@ -293,8 +293,9 @@ class ColumnHeadElement(Element):
         # Create interactions
         #############################################################################################
         interactions = []
-        for sherpa in sherpas:
-            interactions.append((sherpa, top_element))
+        if column_element is not None:
+            for sherpa in sherpas:
+                interactions.append((sherpa, column_element))
 
         # Screw interactions by index ranges
         # SCREWS_HEAD_COLUMN = slice(0, 4)       # 4x screws column-head-bottom - column
@@ -316,5 +317,7 @@ class ColumnHeadElement(Element):
         #     interactions.append((screw, top_element))
 
         modifiers = []
+        if column_element is not None:
+            modifiers.append((top_element, column_element))
 
         return head_element, top_element, connections, interactions, modifiers
