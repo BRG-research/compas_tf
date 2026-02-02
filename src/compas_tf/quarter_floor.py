@@ -79,6 +79,7 @@ class QuarterResult:
     tsection_elements: list
     surface_elements: list
     corner_block_elements: list
+    edge_beam_elements: list  # 2 PlateElements per quarter (axis 0 and axis 6 edge beams)
     surface_edge_polys: list
     screws: list
     dowels: list
@@ -372,6 +373,74 @@ def _build_corners_blocks(builder, axis_planes, offset_axes):
     return meshes, polyline_pairs
 
 
+def _build_edge_beams(builder):
+    """Build 2 edge beam PlateElements using the rib construction pattern.
+
+    Uses rib configs for axis 0 (boundary_parabolas[0]) and axis 6 (boundary_parabolas[1]).
+    Each beam has the 3-level step profile: top@z=0, mid@z=-head_h, parabolic curve.
+
+    Returns
+    -------
+    tuple[list[Mesh], list[tuple[Polyline, Polyline]]]
+        (meshes, polyline_pairs)
+    """
+    # (parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx, outward_sign)
+    # outward_sign: direction to offset both faces outward from the quarter polygon edge
+    #   axis 0: target normal points inward (+Y), so outward = -1
+    #   axis 6: target normal points outward (-X), so outward = +1
+    edge_configs = [
+        (0, 0, 0, 0, 0, -1),
+        (3, 3, 2, 2, 2, +1),
+    ]
+
+    rib_parabolas = builder.rib_parabolas
+    target_planes = builder.target_planes
+    cut_planes = builder.cut_planes
+    thick = builder.thick
+    beam_w = builder.beam_w
+    head_h = builder.head_h
+
+    end_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
+
+    meshes = []
+    polyline_pairs = []
+
+    for parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx, outward_sign in edge_configs:
+        offset0 = outward_sign * 0.5
+        offset1 = outward_sign * (0.5 + beam_w / thick)
+        end_plane = Plane(end_planes[end_plane_idx].point, -end_planes[end_plane_idx].normal)
+
+        cut_boundary = cut_planes[boundary_cut_idx]
+        cut_rib = cut_planes[rib_cut_idx + 3]
+
+        proj0 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset0)
+        proj1 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset1)
+
+        cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj0, cut_rib), cut_boundary)
+        cut1 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj1, cut_rib), cut_boundary)
+
+        extension = 600
+        line0 = PolylineCut.cut_by_plane(Polyline([cut0[0], cut0[-1]]).extended([extension, 0]), end_plane, flip=True)
+        line1 = PolylineCut.cut_by_plane(Polyline([cut1[0], cut1[-1]]).extended([extension, 0]), end_plane, flip=True)
+
+        xy_proj = Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis())
+        mid_proj = Projection.from_plane_and_direction(Plane([0, 0, -head_h], [0, 0, 1]), Vector.Zaxis())
+
+        top0, top1 = line0.transformed(xy_proj), line1.transformed(xy_proj)
+        mid0 = PolylineCut.cut_by_plane(line0.transformed(mid_proj), cut_rib, flip=True)
+        mid1 = PolylineCut.cut_by_plane(line1.transformed(mid_proj), cut_rib, flip=True)
+
+        joined0 = Polyline(list(reversed(top0.points)) + mid0.points + cut0.points)
+        joined1 = Polyline(list(reversed(top1.points)) + mid1.points + cut1.points)
+        joined0.append(joined0.points[0])
+        joined1.append(joined1.points[0])
+
+        meshes.append(PolylineLoft.to_mesh(joined0, joined1))
+        polyline_pairs.append((joined0, joined1))
+
+    return meshes, polyline_pairs
+
+
 def _build_boundaries(builder, surface_edge_polys):
     """Compute boundary beam meshes and polyline pairs for quarter 1.
 
@@ -543,7 +612,7 @@ class QuarterFloorElement(Element):
         surface_meshes, surface_edge_polys, surface_polyline_pairs = _build_surfaces(builder, axis_planes, lofted_lines)
         boundary_beam_meshes, boundary_polyline_pairs = _build_boundaries(builder, surface_edge_polys)
         corner_block_meshes, corner_block_polyline_pairs = _build_corners_blocks(builder, axis_planes, offset_axes)
-
+        edge_beam_meshes, edge_beam_polyline_pairs = _build_edge_beams(builder)
 
         # Apply rotation to polylines if needed (dicts for ribs/boundaries, lists for others)
         if rotation_xform:
@@ -557,6 +626,7 @@ class QuarterFloorElement(Element):
             surface_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in surface_polyline_pairs]
             boundary_polyline_pairs = {axis_idx: (p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for axis_idx, (p0, p1) in boundary_polyline_pairs.items()}
             corner_block_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in corner_block_polyline_pairs]
+            edge_beam_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in edge_beam_polyline_pairs]
         # Create PlateElements with polylines - unified axis_elements dict
         axis_elements = {}
         axis_polys = {}
@@ -600,6 +670,16 @@ class QuarterFloorElement(Element):
                 name=f"corner_block_{i}",
             )
             for i, m in enumerate(corner_block_meshes)
+        ]
+
+        edge_beam_elements = [
+            PlateElement(
+                top_polyline=edge_beam_polyline_pairs[i][0],
+                bottom_polyline=edge_beam_polyline_pairs[i][1],
+                mesh=m.transformed(rotation_xform) if rotation_xform else m,
+                name=f"edge_beam_{i}",
+            )
+            for i, m in enumerate(edge_beam_meshes)
         ]
 
         # =======================================================================
@@ -779,10 +859,10 @@ class QuarterFloorElement(Element):
             tsection_elements=tsection_elements,
             surface_elements=surface_elements,
             corner_block_elements=corner_block_elements,
+            edge_beam_elements=edge_beam_elements,
             surface_edge_polys=surface_edge_polys,
             screws=screws,
             dowels=dowels,
             strips=strips,
             interactions=interactions,
-
         )

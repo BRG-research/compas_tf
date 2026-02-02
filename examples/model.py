@@ -9,7 +9,6 @@ from compas_viewer.viewer import Viewer
 from compas_tf.support import SupportElement
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.column_head import ColumnHeadElement
-from compas_tf.edge_beam import EdgeBeamElement
 from compas_tf.quarter_floor import QuarterFloorElement
 from compas_tf.oculus import OculusElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
@@ -96,8 +95,8 @@ def add_element_to_viewer(viewer, viewer_parent, element, color):
     # Add mesh
     element_group.add(mesh, name="mesh", hide_coplanaredges=True, color=color)
 
-    # Add top/bottom polylines for PlateElement, EdgeBeamElement
-    if isinstance(element, (PlateElement, EdgeBeamElement)):
+    # Add top/bottom polylines for PlateElement
+    if isinstance(element, PlateElement):
         if element.top_polyline is not None or element.bottom_polyline is not None:
             polylines_group = viewer.scene.add_group("polylines", parent=element_group)
             if element.top_polyline is not None:
@@ -239,7 +238,6 @@ model = Model(name="Example Model")
 supports_group = model.add_group("supports")
 columns_group = model.add_group("columns")
 column_heads_group = model.add_group("column_heads")
-edge_beams_group = model.add_group("edge_beams")
 quarters_group = model.add_group("quarters")
 oculus_group = model.add_group("oculus")
 
@@ -312,22 +310,7 @@ for i, xform in enumerate(xforms_columnhead):
         source._hidden = True
 
 
-# 5. Build edge beam elements
-xforms_beams = [
-    Transformation.from_frame(Frame([0, -offset, 0], [1,0,0], [0,1,0])),
-    Transformation.from_frame(Frame([offset, 0, 0], [0,1,0], [-1,0,0])),
-    Transformation.from_frame(Frame([0, offset, 0], [-1,0,0], [0,-1,0])),
-    Transformation.from_frame(Frame([-offset, 0, 0], [0,-1,0], [1,0,0])),
-]
-
-for i, xform in enumerate(xforms_beams):
-    edge_beam = EdgeBeamElement.build(builder)
-    edge_beam.transformation = xform
-    edge_beam.name = f"edge_beam_{i}"
-    model.add_element(edge_beam, parent=edge_beams_group)
-
-
-# 6. Build quarter floor elements
+# 5. Build quarter floor elements
 for q_idx in range(4):
     quarter_result = QuarterFloorElement.build(builder, q_idx * 90)
 
@@ -362,6 +345,13 @@ for q_idx in range(4):
     for i, element in enumerate(quarter_result.corner_block_elements):
         element.name = f"corner_block_{i}"
         model.add_element(element, parent=corner_blocks_group)
+
+    # Edge beam elements group
+    edge_beams_group = Group(name="edge_beams")
+    model.add_element(edge_beams_group, parent=quarter_group)
+    for i, element in enumerate(quarter_result.edge_beam_elements):
+        element.name = f"edge_beam_{i}"
+        model.add_element(element, parent=edge_beams_group)
 
     # Build element -> connectors mapping from interactions
     # A connector may interact with multiple elements, so pick the first as parent
