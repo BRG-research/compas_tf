@@ -24,6 +24,7 @@ from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PolylineOffset
 from compas_tf.joint_dowel import DowelElement
+from compas_tf.joint_hilti import HiltiElement
 from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.plate import PlateElement
@@ -54,6 +55,30 @@ def _line_to_strip(line: Line, height: float) -> AlignmentStripElement:
     return AlignmentStripElement(height=height, transformation=xform)
 
 
+def _create_hilti(origin: Point, rib_dir: Vector, boundary_dir: Vector, profile: str, height: float = 80.0) -> HiltiElement:
+    """Create a HiltiElement positioned at the rib-boundary interface.
+
+    Parameters
+    ----------
+    origin : :class:`compas.geometry.Point`
+        Placement point (edge midpoint at mid-height of the rib).
+    rib_dir : :class:`compas.geometry.Vector`
+        Direction along the rib (maps to local X of the profile).
+    boundary_dir : :class:`compas.geometry.Vector`
+        Direction along the boundary beam (maps to local Z / extrusion).
+    profile : str
+        ``"A"`` or ``"B"``.
+    height : float
+        Extrusion depth of the connector plate.
+    """
+    xaxis = rib_dir.unitized()
+    yaxis = Vector(0, 0, -1)
+    # zaxis is computed by Frame as xaxis x yaxis -> points along boundary
+    frame = Frame(origin, xaxis, yaxis)
+    xform = Transformation.from_frame(frame)
+    return HiltiElement(profile=profile, height=height, transformation=xform)
+
+
 # ==========================================================================
 # Result Container
 # ==========================================================================
@@ -79,11 +104,11 @@ class QuarterResult:
     tsection_elements: list
     surface_elements: list
     corner_block_elements: list
-    edge_beam_elements: list  # 2 PlateElements per quarter (axis 0 and axis 6 edge beams)
     surface_edge_polys: list
     screws: list
     dowels: list
     strips: list
+    hilti_joints: list
     interactions: list  # List of (connector, element) tuples for model.add_interaction()
 
 
@@ -182,12 +207,22 @@ def _build_ribs(builder):
     polyline_pairs = {}
 
     for axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx in rib_configs:
-        offset0, offset1 = 0.5, -0.5
+        # Boundary ribs (axis 0 and 6) are double thick, extended outward
+        if axis_idx == 0:
+            offset0, offset1 = 0.5, -1.5  # outward is negative (outward_sign=-1)
+        elif axis_idx == 6:
+            offset0, offset1 = 1.5, -0.5  # outward is positive (outward_sign=+1)
+        else:
+            offset0, offset1 = 0.5, -0.5
         # end_plane = builder.end_diagonal_plane.offset(-builder.thick)
         end_plane = Plane(end_planes[end_plane_idx].point, -end_planes[end_plane_idx].normal)
 
         cut_boundary = cut_planes[boundary_cut_idx]
         cut_rib = cut_planes[rib_cut_idx + 3]
+
+        # Extend boundary cut plane for double-thick boundary ribs
+        if axis_idx in (0, 6):
+            cut_boundary = cut_boundary.offset(-thick)
 
         proj0 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset0)
         proj1 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset1)
@@ -373,74 +408,6 @@ def _build_corners_blocks(builder, axis_planes, offset_axes):
     return meshes, polyline_pairs
 
 
-def _build_edge_beams(builder):
-    """Build 2 edge beam PlateElements using the rib construction pattern.
-
-    Uses rib configs for axis 0 (boundary_parabolas[0]) and axis 6 (boundary_parabolas[1]).
-    Each beam has the 3-level step profile: top@z=0, mid@z=-head_h, parabolic curve.
-
-    Returns
-    -------
-    tuple[list[Mesh], list[tuple[Polyline, Polyline]]]
-        (meshes, polyline_pairs)
-    """
-    # (parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx, outward_sign)
-    # outward_sign: direction to offset both faces outward from the quarter polygon edge
-    #   axis 0: target normal points inward (+Y), so outward = -1
-    #   axis 6: target normal points outward (-X), so outward = +1
-    edge_configs = [
-        (0, 0, 0, 0, 0, -1),
-        (3, 3, 2, 2, 2, +1),
-    ]
-
-    rib_parabolas = builder.rib_parabolas
-    target_planes = builder.target_planes
-    cut_planes = builder.cut_planes
-    thick = builder.thick
-    beam_w = builder.beam_w
-    head_h = builder.head_h
-
-    end_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
-
-    meshes = []
-    polyline_pairs = []
-
-    for parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx, outward_sign in edge_configs:
-        offset0 = outward_sign * 0.5
-        offset1 = outward_sign * (0.5 + beam_w / thick)
-        end_plane = Plane(end_planes[end_plane_idx].point, -end_planes[end_plane_idx].normal)
-
-        cut_boundary = cut_planes[boundary_cut_idx]
-        cut_rib = cut_planes[rib_cut_idx + 3]
-
-        proj0 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset0)
-        proj1 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset1)
-
-        cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj0, cut_rib), cut_boundary)
-        cut1 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj1, cut_rib), cut_boundary)
-
-        extension = 600
-        line0 = PolylineCut.cut_by_plane(Polyline([cut0[0], cut0[-1]]).extended([extension, 0]), end_plane, flip=True)
-        line1 = PolylineCut.cut_by_plane(Polyline([cut1[0], cut1[-1]]).extended([extension, 0]), end_plane, flip=True)
-
-        xy_proj = Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis())
-        mid_proj = Projection.from_plane_and_direction(Plane([0, 0, -head_h], [0, 0, 1]), Vector.Zaxis())
-
-        top0, top1 = line0.transformed(xy_proj), line1.transformed(xy_proj)
-        mid0 = PolylineCut.cut_by_plane(line0.transformed(mid_proj), cut_rib, flip=True)
-        mid1 = PolylineCut.cut_by_plane(line1.transformed(mid_proj), cut_rib, flip=True)
-
-        joined0 = Polyline(list(reversed(top0.points)) + mid0.points + cut0.points)
-        joined1 = Polyline(list(reversed(top1.points)) + mid1.points + cut1.points)
-        joined0.append(joined0.points[0])
-        joined1.append(joined1.points[0])
-
-        meshes.append(PolylineLoft.to_mesh(joined0, joined1))
-        polyline_pairs.append((joined0, joined1))
-
-    return meshes, polyline_pairs
-
-
 def _build_boundaries(builder, surface_edge_polys):
     """Compute boundary beam meshes and polyline pairs for quarter 1.
 
@@ -467,6 +434,7 @@ def _build_boundaries(builder, surface_edge_polys):
 
     meshes = {}
     polyline_pairs = {}
+    edge_midpoints = {}  # {axis_idx: midpoint of contracted edge}
     dist = height - rise
 
     # j=0 -> axis 3, j=1 -> axis 4, j=2 -> axis 5
@@ -474,7 +442,23 @@ def _build_boundaries(builder, surface_edge_polys):
         axis_idx = j + 3  # Map j to axis index
         # Main beam - use vertical sides (inner and outer faces)
         # s0: inner vertical face, s1: outer vertical face
-        inner_pts = poly1_r_list[j].points
+        inner_pts = list(poly1_r_list[j].points)
+
+        # Contract boundary plates on the side meeting double-thick ribs
+        if j == 0:
+            # axis 3 meets axis 0: contract the start side (pts 0,3) by thick
+            dir03 = Vector.from_start_end(inner_pts[0], inner_pts[1]).unitized() * thick
+            inner_pts[0] = inner_pts[0] + dir03
+            dir30 = Vector.from_start_end(inner_pts[3], inner_pts[2]).unitized() * thick
+            inner_pts[3] = inner_pts[3] + dir30
+            edge_midpoints[3] = (inner_pts[0] + inner_pts[3]) * 0.5
+        elif j == 2:
+            # axis 5 meets axis 6: contract the start side (pts 0,3) by thick
+            dir01 = Vector.from_start_end(inner_pts[0], inner_pts[1]).unitized() * thick
+            inner_pts[0] = inner_pts[0] + dir01
+            dir32 = Vector.from_start_end(inner_pts[3], inner_pts[2]).unitized() * thick
+            inner_pts[3] = inner_pts[3] + dir32
+            edge_midpoints[5] = (inner_pts[0] + inner_pts[3]) * 0.5
         # First two boundaries (j=0,1) need reversed winding
         if j < 2:
             s0 = Polyline([inner_pts[0], inner_pts[0] + Vector(0, 0, -dist), inner_pts[1] + Vector(0, 0, -dist), inner_pts[1], inner_pts[0]])
@@ -519,7 +503,7 @@ def _build_boundaries(builder, surface_edge_polys):
     # meshes[7] = PolylineLoft.to_mesh(result0, result1)
     # polyline_pairs[7] = (result0, result1)
 
-    return meshes, polyline_pairs
+    return meshes, polyline_pairs, edge_midpoints
 
 
 # ==========================================================================
@@ -610,9 +594,8 @@ class QuarterFloorElement(Element):
         rib_meshes, rib_polys, rib_polyline_pairs = _build_ribs(builder)
         tsection_meshes, tsection_polyline_pairs = _build_tsections(builder, axis_planes, lofted_lines)
         surface_meshes, surface_edge_polys, surface_polyline_pairs = _build_surfaces(builder, axis_planes, lofted_lines)
-        boundary_beam_meshes, boundary_polyline_pairs = _build_boundaries(builder, surface_edge_polys)
+        boundary_beam_meshes, boundary_polyline_pairs, boundary_edge_midpoints = _build_boundaries(builder, surface_edge_polys)
         corner_block_meshes, corner_block_polyline_pairs = _build_corners_blocks(builder, axis_planes, offset_axes)
-        edge_beam_meshes, edge_beam_polyline_pairs = _build_edge_beams(builder)
 
         # Apply rotation to polylines if needed (dicts for ribs/boundaries, lists for others)
         if rotation_xform:
@@ -626,7 +609,6 @@ class QuarterFloorElement(Element):
             surface_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in surface_polyline_pairs]
             boundary_polyline_pairs = {axis_idx: (p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for axis_idx, (p0, p1) in boundary_polyline_pairs.items()}
             corner_block_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in corner_block_polyline_pairs]
-            edge_beam_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in edge_beam_polyline_pairs]
         # Create PlateElements with polylines - unified axis_elements dict
         axis_elements = {}
         axis_polys = {}
@@ -672,16 +654,6 @@ class QuarterFloorElement(Element):
             for i, m in enumerate(corner_block_meshes)
         ]
 
-        edge_beam_elements = [
-            PlateElement(
-                top_polyline=edge_beam_polyline_pairs[i][0],
-                bottom_polyline=edge_beam_polyline_pairs[i][1],
-                mesh=m.transformed(rotation_xform) if rotation_xform else m,
-                name=f"edge_beam_{i}",
-            )
-            for i, m in enumerate(edge_beam_meshes)
-        ]
-
         # =======================================================================
         # Build connectors directly referencing elements
         # =======================================================================
@@ -714,7 +686,11 @@ class QuarterFloorElement(Element):
             (5, 2): axis_elements[5],  # axis 5
         }
         for (offset_axis, intersect_axis), boundary_element in axis_pairs_02_to_boundary.items():
-            line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
+            if intersect_axis in (0, 6):
+                # Double-thick ribs: swap axes to rotate screw 90°, half thick longer on both sides
+                line = LineOffset.offset_intersect(builder.axes[intersect_axis], builder.axes[offset_axis], builder.thick * 1.5)
+            else:
+                line = LineOffset.offset_intersect(builder.axes[offset_axis], builder.axes[intersect_axis], builder.thick * 0.5)
             for j in range(0, divisions):
                 if j % 2 == 0:
                     continue
@@ -749,39 +725,86 @@ class QuarterFloorElement(Element):
         # -----------------------------------------------------------------------
         # Strips at axis corners
         # -----------------------------------------------------------------------
-        axis_strip_to_elements = {
-            (0, 3): [axis_elements[0], axis_elements[3]],  # axis 0
-            (6, 5): [axis_elements[6], axis_elements[5]],  # axis 6
-            (1, 3): [axis_elements[1], axis_elements[3]],  # axis 1
-            (2, 5): [axis_elements[2], axis_elements[5]],  # axis 2
+        # Double-thick boundary rib strips from contracted edge midpoints
+        boundary_strip_configs = [
+            (3, [axis_elements[0], axis_elements[3]]),
+            (5, [axis_elements[6], axis_elements[5]]),
+        ]
+        for boundary_axis, connected_elements in boundary_strip_configs:
+            strip_point = Point(*boundary_edge_midpoints[boundary_axis])
+            strip_dir = builder.axes[boundary_axis].direction
+            strip_line = Line(strip_point, strip_point + strip_dir).translated(Vector.Zaxis() * -height_middle)
+            strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
+            strips.append(strip)
+            for element in connected_elements:
+                interactions.append((strip, element))
+
+        # Single-thick rib strips
+        axis_strip_single = {
+            (1, 3): [axis_elements[1], axis_elements[3]],
+            (2, 5): [axis_elements[2], axis_elements[5]],
         }
-        for (offset_axis, intersect_axis), connected_elements in axis_strip_to_elements.items():
+        for (offset_axis, intersect_axis), connected_elements in axis_strip_single.items():
             intersect_line = LineOffset.offset_xy(builder.axes[intersect_axis], builder.thick * -0.5)
             strip_point = Point(*intersection_line_line(builder.axes[offset_axis], intersect_line)[0])
-            strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction).translated(Vector.Zaxis() * -height_middle)
+            strip_dir = builder.axes[offset_axis].direction
+            strip_line = Line(strip_point, strip_point + strip_dir).translated(Vector.Zaxis() * -height_middle)
             strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
             strips.append(strip)
             for element in connected_elements:
                 interactions.append((strip, element))
 
         # -----------------------------------------------------------------------
-        # Corner strips at column head - connect to axis[7]
+        # Corner block strips at column head - from wedge edges
         # -----------------------------------------------------------------------
-        # axis_corner = Line(builder.end_diagonal_plane.point, builder.end_diagonal_plane.point + Vector.Zaxis().cross(builder.end_diagonal_plane.normal))
-        # axis_to_element = {
-        #     0: axis_elements[0],  # axis 0
-        #     6: axis_elements[6],  # axis 6
-        #     1: axis_elements[1],  # axis 1
-        #     2: axis_elements[2],  # axis 2
-        # }
-        # for axis, element in axis_to_element.items():
-        #     intersect_line = LineOffset.offset_xy(axis_corner, builder.thick * -1)
-        #     strip_point = Point(*intersection_line_line(builder.axes[axis], intersect_line)[0])
-        #     strip_line = Line(strip_point, strip_point + builder.axes[axis].direction).translated(Vector.Zaxis() * -builder.head_h * 0.5)
-        #     strip = apply_rotation(_line_to_strip(strip_line, builder.head_h))
-        #     strips.append(strip)
-        #     interactions.append((strip, element))
-        #     # interactions.append((strip, axis_elements[7]))
+        # Each corner block k: left rib axis [0,1,2], right rib axis [1,2,6]
+        # top_poly = [bl0, bl1, br1, br0, bl0]
+        # Left rib face edge: top[0]→top[1] (bl side), Right rib face edge: top[3]→top[2] (br side)
+        corner_rib_axes = [(0, 1), (1, 2), (2, 6)]
+        for k in range(len(corner_block_elements)):
+            top_poly = corner_block_polyline_pairs[k][0]
+            left_axis, right_axis = corner_rib_axes[k]
+
+            # Left rib face: edge top[0]→top[1], strip at midpoint, rotated 90°, normal flipped
+            left_mid = (top_poly[0] + top_poly[1]) * 0.5
+            left_dir = -Vector.Zaxis().cross(Vector.from_start_end(top_poly[0], top_poly[1]))
+            left_point = Point(left_mid.x, left_mid.y, -builder.head_h * 0.5)
+            left_line = Line(left_point, left_point + left_dir)
+            left_strip = apply_rotation(_line_to_strip(left_line, builder.thick * 2))
+            strips.append(left_strip)
+            interactions.append((left_strip, corner_block_elements[k]))
+            interactions.append((left_strip, axis_elements[left_axis]))
+
+            # Right rib face: edge top[3]→top[2], strip at midpoint, rotated 90°, normal flipped
+            right_mid = (top_poly[3] + top_poly[2]) * 0.5
+            right_dir = -Vector.Zaxis().cross(Vector.from_start_end(top_poly[3], top_poly[2]))
+            right_point = Point(right_mid.x, right_mid.y, -builder.head_h * 0.5)
+            right_line = Line(right_point, right_point + right_dir)
+            right_strip = apply_rotation(_line_to_strip(right_line, builder.thick * 2))
+            strips.append(right_strip)
+            interactions.append((right_strip, corner_block_elements[k]))
+            interactions.append((right_strip, axis_elements[right_axis]))
+
+        # -----------------------------------------------------------------------
+        # Hilti joints at 2x-thick rib / boundary interfaces
+        # -----------------------------------------------------------------------
+        # Axis 0 (2x thick rib) meets boundary axis 3 -> profile A
+        # Axis 6 (2x thick rib) meets boundary axis 5 -> profile B
+        hilti_joints = []
+        hilti_configs = [
+            (3, 0, "A"),  # boundary axis 3, rib axis 0, profile A
+            (5, 6, "B"),  # boundary axis 5, rib axis 6, profile B
+        ]
+        for boundary_axis, rib_axis, profile in hilti_configs:
+            edge_mid = boundary_edge_midpoints[boundary_axis]
+            rib_dir = builder.axes[rib_axis].direction
+            boundary_dir = builder.axes[boundary_axis].direction
+            origin = Point(edge_mid.x, edge_mid.y, -height_middle)
+            hilti = _create_hilti(origin, rib_dir, boundary_dir, profile, height=builder.thick)
+            hilti = apply_rotation(hilti)
+            hilti_joints.append(hilti)
+            interactions.append((hilti, axis_elements[rib_axis]))
+            interactions.append((hilti, axis_elements[boundary_axis]))
 
         # -----------------------------------------------------------------------
         # Corner screws - near oculus (belong to axis[4])
@@ -859,10 +882,10 @@ class QuarterFloorElement(Element):
             tsection_elements=tsection_elements,
             surface_elements=surface_elements,
             corner_block_elements=corner_block_elements,
-            edge_beam_elements=edge_beam_elements,
             surface_edge_polys=surface_edge_polys,
             screws=screws,
             dowels=dowels,
             strips=strips,
+            hilti_joints=hilti_joints,
             interactions=interactions,
         )

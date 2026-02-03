@@ -10,7 +10,6 @@ from compas_tf.geometry import (
     PolylineLoft,
     PlaneIntersect,
 )
-from compas_tf.edge_beam import EdgeBeamElement, EdgeBeamFeature
 from compas_tf.column_head import ColumnHeadElement, ColumnHeadFeature
 from compas_tf.quarter_floor import QuarterFloorElement, QuarterFloorFeature, QuarterResult
 from compas_tf.oculus import OculusElement, OculusFeature
@@ -22,15 +21,14 @@ from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.joint_hilti import HiltiElement
 
 __all__ = [
     "PolylineOffset",
     "PolylineCut",
     "PolylineLoft",
     "PlaneIntersect",
-    "EdgeBeamElement",
-    "EdgeBeamFeature",
-    "ColumnHeadElement",
+"ColumnHeadElement",
     "ColumnHeadFeature",
     "QuarterFloorElement",
     "QuarterFloorFeature",
@@ -43,4 +41,5 @@ __all__ = [
     "DowelElement",
     "AlignmentStripElement",
     "SherpaXL120Element",
+    "HiltiElement",
 ]

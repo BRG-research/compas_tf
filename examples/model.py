@@ -18,9 +18,10 @@ from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.joint_hilti import HiltiElement
 
 # Connector types for identification
-CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element)
+CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element, HiltiElement)
 
 # Colors
 ELEMENT_COLOR = (0.6, 0.6, 0.6)
@@ -345,13 +346,6 @@ for q_idx in range(4):
     for i, element in enumerate(quarter_result.corner_block_elements):
         element.name = f"corner_block_{i}"
         model.add_element(element, parent=corner_blocks_group)
-
-    # Edge beam elements group
-    edge_beams_group = Group(name="edge_beams")
-    model.add_element(edge_beams_group, parent=quarter_group)
-    for i, element in enumerate(quarter_result.edge_beam_elements):
-        element.name = f"edge_beam_{i}"
-        model.add_element(element, parent=edge_beams_group)
 
     # Build element -> connectors mapping from interactions
     # A connector may interact with multiple elements, so pick the first as parent
