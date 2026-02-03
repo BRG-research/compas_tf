@@ -158,6 +158,8 @@ def add_model_to_viewer(model, viewer):
     # Build map of element -> all its connectors (from interactions)
     element_connectors = build_element_connectors_map(model)
 
+    added_elements = set()
+
     def traverse_element(element, viewer_parent):
         """Recursively traverse element children and add to viewer."""
         # element.children returns actual elements (not nodes)
@@ -173,14 +175,18 @@ def add_model_to_viewer(model, viewer):
                 # Add element geometry and get its viewer group
                 color = get_color_for_element(child)
                 child_viewer_group = add_element_to_viewer(viewer, viewer_parent, child, color)
+                added_elements.add(id(child))
 
                 if child_viewer_group is not None:
                     # Add connectors from interactions (not just tree children)
                     if child in element_connectors:
                         connectors_group = viewer.scene.add_group("connectors", parent=child_viewer_group)
                         for connector in element_connectors[child]:
+                            if id(connector) in added_elements:
+                                continue
                             conn_color = get_color_for_element(connector)
                             add_element_to_viewer(viewer, connectors_group, connector, conn_color)
+                            added_elements.add(id(connector))
 
                     # Still recurse for any non-connector children (e.g., nested groups)
                     for grandchild in child.children:
@@ -364,6 +370,10 @@ for q_idx in range(4):
     # Add interactions
     for connector, element in quarter_result.interactions:
         model.add_interaction(connector, element)
+
+    # Add modifiers (boolean difference: hilti cuts into rib/boundary elements)
+    for source, target, modifier in quarter_result.modifiers:
+        model.add_modifier(source, target, modifier)
 
 
 # 7. Build oculus element

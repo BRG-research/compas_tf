@@ -115,7 +115,8 @@ def get_element_geometry_with_cuts(element, connectors):
 
     return geom
 
-MODEL_FILEPATH = Path(r"C:\brg\code_python\compas_tf\examples\model.json")
+# MODEL_FILEPATH = Path(r"C:\brg\code_python\compas_tf\examples\model.json")
+MODEL_FILEPATH = Path(r"C:\brg\compas_tf\examples\model.json")
 
 
 def convert_meshes_to_breps(guids, merge_coplanar=True, tolerance=None):

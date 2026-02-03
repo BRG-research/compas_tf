@@ -14,6 +14,7 @@ from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
 from compas.geometry import intersection_line_line
+from compas.geometry import intersection_line_plane
 from compas.geometry import intersection_plane_plane_plane
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
@@ -28,6 +29,7 @@ from compas_tf.joint_hilti import HiltiElement
 from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.plate import PlateElement
+from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 # ==========================================================================
 # Connector Helper Functions
@@ -55,7 +57,7 @@ def _line_to_strip(line: Line, height: float) -> AlignmentStripElement:
     return AlignmentStripElement(height=height, transformation=xform)
 
 
-def _create_hilti(origin: Point, rib_dir: Vector, boundary_dir: Vector, profile: str, height: float = 80.0) -> HiltiElement:
+def _create_hilti(origin: Point, rib_dir: Vector, boundary_dir: Vector, height: float = 120.0) -> HiltiElement:
     """Create a HiltiElement positioned at the rib-boundary interface.
 
     Parameters
@@ -66,17 +68,15 @@ def _create_hilti(origin: Point, rib_dir: Vector, boundary_dir: Vector, profile:
         Direction along the rib (maps to local X of the profile).
     boundary_dir : :class:`compas.geometry.Vector`
         Direction along the boundary beam (maps to local Z / extrusion).
-    profile : str
-        ``"A"`` or ``"B"``.
     height : float
         Extrusion depth of the connector plate.
     """
     xaxis = rib_dir.unitized()
-    yaxis = Vector(0, 0, -1)
+    yaxis = Vector(0, 0, 1)
     # zaxis is computed by Frame as xaxis x yaxis -> points along boundary
     frame = Frame(origin, xaxis, yaxis)
     xform = Transformation.from_frame(frame)
-    return HiltiElement(profile=profile, height=height, transformation=xform)
+    return HiltiElement(height=height, transformation=xform)
 
 
 # ==========================================================================
@@ -110,6 +110,7 @@ class QuarterResult:
     strips: list
     hilti_joints: list
     interactions: list  # List of (connector, element) tuples for model.add_interaction()
+    modifiers: list  # List of (source, target, modifier) tuples for model.add_modifier()
 
 
 # ==========================================================================
@@ -788,23 +789,33 @@ class QuarterFloorElement(Element):
         # -----------------------------------------------------------------------
         # Hilti joints at 2x-thick rib / boundary interfaces
         # -----------------------------------------------------------------------
-        # Axis 0 (2x thick rib) meets boundary axis 3 -> profile A
-        # Axis 6 (2x thick rib) meets boundary axis 5 -> profile B
+        # Only one side is needed (the other is symmetrical via placement).
+        # Origin is at the rib-boundary axis intersection (rib end).
+        # rib_dir_sign flips the profile direction so it extends into the rib.
         hilti_joints = []
+        modifiers = []
         hilti_configs = [
-            (3, 0, "A"),  # boundary axis 3, rib axis 0, profile A
-            (5, 6, "B"),  # boundary axis 5, rib axis 6, profile B
+            (3, 0, 1),   # boundary axis 3, rib axis 0, +rib_dir
+            (5, 6, -1),  # boundary axis 5, rib axis 6, -rib_dir
         ]
-        for boundary_axis, rib_axis, profile in hilti_configs:
-            edge_mid = boundary_edge_midpoints[boundary_axis]
-            rib_dir = builder.axes[rib_axis].direction
+        for boundary_axis, rib_axis, rib_dir_sign in hilti_configs:
+            # Origin at rib-boundary axis intersection, offset by 0.5*thick along boundary normal
+            pt = Point(*intersection_line_line(builder.axes[rib_axis], builder.axes[boundary_axis])[0])
+            boundary_normal = builder.axes[boundary_axis].direction.unitized()
+            boundary_normal_ortho = Vector.Zaxis().cross(boundary_normal).unitized()
+            origin = Point(pt.x + boundary_normal.x * 0.5 * builder.thick + boundary_normal_ortho.x * -0.5 * builder.thick,
+                           pt.y + boundary_normal.y * -0.5 * builder.thick + boundary_normal_ortho.y * -0.5 * builder.thick,
+                           -height_middle)
+            rib_dir = builder.axes[rib_axis].direction * rib_dir_sign
             boundary_dir = builder.axes[boundary_axis].direction
-            origin = Point(edge_mid.x, edge_mid.y, -height_middle)
-            hilti = _create_hilti(origin, rib_dir, boundary_dir, profile, height=builder.thick)
+            hilti = _create_hilti(origin, rib_dir, boundary_dir, height=builder.thick * 2.1)
             hilti = apply_rotation(hilti)
             hilti_joints.append(hilti)
             interactions.append((hilti, axis_elements[rib_axis]))
             interactions.append((hilti, axis_elements[boundary_axis]))
+            # Boolean difference: cut hilti shape from rib and boundary elements
+            modifiers.append((hilti, axis_elements[rib_axis], SolidDifferenceModifier()))
+            modifiers.append((hilti, axis_elements[boundary_axis], SolidDifferenceModifier()))
 
         # -----------------------------------------------------------------------
         # Corner screws - near oculus (belong to axis[4])
@@ -888,4 +899,5 @@ class QuarterFloorElement(Element):
             strips=strips,
             hilti_joints=hilti_joints,
             interactions=interactions,
+            modifiers=modifiers,
         )
