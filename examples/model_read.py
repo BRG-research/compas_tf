@@ -24,11 +24,15 @@ from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.joint_hilti import HiltiElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 from compas_tf.solid_union_modifier import SolidUnionModifier
 
 # Connector types for identification
-CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element)
+CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element, HiltiElement)
+
+# Modifier-only connector types: geometry used only for boolean cuts, not drawn
+MODIFIER_ONLY_TYPES = (HiltiElement,)
 
 # Colors for different connector types (RGB tuples 0-255)
 CONNECTOR_COLORS = {
@@ -36,6 +40,7 @@ CONNECTOR_COLORS = {
     DowelElement: (0, 0, 255),          # Blue - dowels
     AlignmentStripElement: (0, 255, 0), # Green - strips
     SherpaXL120Element: (255, 165, 0),  # Orange - sherpa connectors
+    HiltiElement: (255, 0, 255),        # Magenta - hilti connectors
 }
 
 
@@ -89,31 +94,26 @@ def get_element_connectors(model, element):
     return connectors
 
 
-def get_element_geometry_with_cuts(element, connectors):
-    """Get element geometry with boolean cuts from connectors applied.
+def get_element_geometry_with_cuts(model, element):
+    """Get element geometry in model coordinates with all modifiers applied.
+
+    Delegates to element.modelgeometry which already applies all registered
+    modifiers (SolidDifferenceModifier, SolidUnionModifier, etc.) from the
+    interaction graph via compute_modelgeometry().
 
     Parameters
     ----------
+    model : Model
+        The loaded compas_model Model.
     element : Element
         The element to get geometry for.
-    connectors : list
-        List of connectors that interact with this element.
 
     Returns
     -------
     Mesh or geometry
-        The element geometry with cuts applied, or original if no cuts needed.
+        The element geometry with all modifiers applied.
     """
-    geom = element.modelgeometry
-    if geom is None:
-        return None
-
-    # Apply boolean difference for each connector (modifier skips non-mesh)
-    modifier = SolidDifferenceModifier()
-    for connector in connectors:
-        geom = modifier.apply(connector, geom)
-
-    return geom
+    return element.modelgeometry
 
 # MODEL_FILEPATH = Path(r"C:\brg\code_python\compas_tf\examples\model.json")
 MODEL_FILEPATH = Path(r"C:\brg\compas_tf\examples\model.json")
@@ -163,15 +163,19 @@ def convert_meshes_to_breps(guids, merge_coplanar=True, tolerance=None):
                 if merge_coplanar:
                     brep.MergeCoplanarFaces(tolerance)
 
-                # Copy attributes (layer, color, name, etc.)
-                attributes = obj.Attributes.Duplicate()
-
-                # Delete old mesh and add new brep
-                sc.doc.Objects.Delete(guid, quiet=True)
-                new_guid = sc.doc.Objects.AddBrep(brep, attributes)
-
-                if new_guid:
-                    new_guids.append(new_guid)
+                # Check brep is still valid after merge
+                if brep.IsValid:
+                    attributes = obj.Attributes.Duplicate()
+                    sc.doc.Objects.Delete(guid, quiet=True)
+                    new_guid = sc.doc.Objects.AddBrep(brep, attributes)
+                    if new_guid:
+                        new_guids.append(new_guid)
+                    else:
+                        print(f"WARNING: AddBrep failed for {obj.Attributes.Name}, mesh lost")
+                else:
+                    # MergeCoplanarFaces corrupted the brep, keep original mesh
+                    print(f"WARNING: MergeCoplanarFaces invalidated brep for {obj.Attributes.Name}, keeping mesh")
+                    new_guids.append(guid)
             else:
                 # Keep original if conversion failed
                 new_guids.append(guid)
@@ -261,10 +265,25 @@ def load_model_to_rhino(model_filepath, create_groups=True, convert_to_brep=True
     element_scene_objects = {}  # element -> (group_name, [scene_objects])
 
     # Add all elements and their connectors to scene (single batch)
+    skipped = []
     for element, connectors in element_connectors.items():
-        # Get geometry with boolean cuts from cutting connectors applied
-        geom = get_element_geometry_with_cuts(element, connectors)
+        # Get geometry with boolean cuts from registered modifiers applied
+        try:
+            geom = get_element_geometry_with_cuts(model, element)
+        except Exception as e:
+            print(f"WARNING: Failed to get geometry for {element.name}: {e}")
+            geom = element.modelgeometry
+
+        # Check for empty meshes (e.g., from failed boolean operations)
+        if geom is not None and isinstance(geom, Mesh):
+            nv = geom.number_of_vertices()
+            nf = geom.number_of_faces()
+            if nv == 0 or nf == 0:
+                print(f"WARNING: Empty mesh for {element.name} (V={nv}, F={nf}), using original geometry")
+                geom = element.modelgeometry
+
         if geom is None:
+            skipped.append(element.name)
             continue
 
         layer_path = get_layer_path(element, model)
@@ -280,6 +299,9 @@ def load_model_to_rhino(model_filepath, create_groups=True, convert_to_brep=True
         # Add connectors for THIS element (as separate copies)
         connector_layer = f"{layer_path}::connectors"
         for i, connector in enumerate(connectors):
+            # Skip modifier-only connectors (e.g., hilti cutters)
+            if isinstance(connector, MODIFIER_ONLY_TYPES):
+                continue
             conn_geom = connector.modelgeometry
             if conn_geom is None:
                 continue
@@ -296,6 +318,9 @@ def load_model_to_rhino(model_filepath, create_groups=True, convert_to_brep=True
         group_name = layer_path.replace("::", "_") + "_group"
         element_scene_objects[element] = (group_name, scene_objects)
 
+    if skipped:
+        print(f"WARNING: Skipped {len(skipped)} elements with no geometry: {skipped}")
+
     # Single draw call for all geometry
     scene.draw()
     print(f"Added {element_count} elements, {connector_count} connector instances")
@@ -303,6 +328,7 @@ def load_model_to_rhino(model_filepath, create_groups=True, convert_to_brep=True
     # Convert meshes to breps and create groups (GUIDs are now available)
     group_count = 0
     brep_count = 0
+    no_guids = []
 
     for element, (group_name, scene_objects) in element_scene_objects.items():
         guids = []
@@ -311,6 +337,7 @@ def load_model_to_rhino(model_filepath, create_groups=True, convert_to_brep=True
                 guids.extend(obj.guids)
 
         if not guids:
+            no_guids.append(element.name)
             continue
 
         # Convert meshes to breps with merged coplanar faces
@@ -325,6 +352,8 @@ def load_model_to_rhino(model_filepath, create_groups=True, convert_to_brep=True
             rs.AddObjectsToGroup(guids, group_name)
             group_count += 1
 
+    if no_guids:
+        print(f"WARNING: {len(no_guids)} elements produced no GUIDs after draw: {no_guids}")
     if convert_to_brep:
         print(f"Converted {brep_count} meshes to NURBS breps with merged coplanar faces")
     print(f"Created {group_count} groups")
@@ -399,7 +428,7 @@ def orient_element_to_xy(model, element_name):
     }
 
     # Transform main element mesh (with boolean cuts applied)
-    geom = get_element_geometry_with_cuts(element, connectors)
+    geom = get_element_geometry_with_cuts(model, element)
     if geom:
         result["mesh"] = (element.name, geom.transformed(xform))
 
@@ -548,7 +577,7 @@ def draw_single_element_to_rhino(model, element_name, create_group=True, convert
     scene_objects = []
 
     # Add main mesh (with boolean cuts applied)
-    geom = get_element_geometry_with_cuts(element, connectors)
+    geom = get_element_geometry_with_cuts(model, element)
     if geom:
         obj = scene.add(geom, layer=f"{base_layer}::mesh", name=element_name)
         scene_objects.append(obj)

@@ -647,8 +647,8 @@ class QuarterFloorElement(Element):
 
         corner_block_elements = [
             PlateElement(
-                top_polyline=corner_block_polyline_pairs[i][0].transformed(rotation_xform) if rotation_xform else corner_block_polyline_pairs[i][0],
-                bottom_polyline=corner_block_polyline_pairs[i][1].transformed(rotation_xform) if rotation_xform else corner_block_polyline_pairs[i][1],
+                top_polyline=corner_block_polyline_pairs[i][0],
+                bottom_polyline=corner_block_polyline_pairs[i][1],
                 mesh=m.transformed(rotation_xform) if rotation_xform else m,
                 name=f"corner_block_{i}",
             )
@@ -681,12 +681,12 @@ class QuarterFloorElement(Element):
         # Corner screws - axes 0, 1, 2, 6 corners
         # -----------------------------------------------------------------------
         axis_pairs_02_to_boundary = {
-            (3, 0): axis_elements[3],  # axis 3
-            (3, 1): axis_elements[3],  # axis 3
-            (5, 6): axis_elements[5],  # axis 5
-            (5, 2): axis_elements[5],  # axis 5
+            (3, 0): (axis_elements[3], axis_elements[0]),  # boundary axis 3, rib axis 0
+            (3, 1): (axis_elements[3], axis_elements[1]),  # boundary axis 3, rib axis 1
+            (5, 6): (axis_elements[5], axis_elements[6]),  # boundary axis 5, rib axis 6
+            (5, 2): (axis_elements[5], axis_elements[2]),  # boundary axis 5, rib axis 2
         }
-        for (offset_axis, intersect_axis), boundary_element in axis_pairs_02_to_boundary.items():
+        for (offset_axis, intersect_axis), (boundary_element, rib_element) in axis_pairs_02_to_boundary.items():
             if intersect_axis in (0, 6):
                 # Double-thick ribs: swap axes to rotate screw 90°, half thick longer on both sides
                 line = LineOffset.offset_intersect(builder.axes[intersect_axis], builder.axes[offset_axis], builder.thick * 1.5)
@@ -699,6 +699,7 @@ class QuarterFloorElement(Element):
                 screw = apply_rotation(_line_to_screw(translated_line))
                 screws.append(screw)
                 interactions.append((screw, boundary_element))
+                interactions.append((screw, rib_element))
 
         # -----------------------------------------------------------------------
         # Strips between diagonal axes (axis[1] and axis[2])
@@ -767,21 +768,23 @@ class QuarterFloorElement(Element):
             left_axis, right_axis = corner_rib_axes[k]
 
             # Left rib face: edge top[0]→top[1], strip at midpoint, rotated 90°, normal flipped
+            # Positions from corner_block_polyline_pairs are already rotated, no apply_rotation needed
             left_mid = (top_poly[0] + top_poly[1]) * 0.5
             left_dir = -Vector.Zaxis().cross(Vector.from_start_end(top_poly[0], top_poly[1]))
             left_point = Point(left_mid.x, left_mid.y, -builder.head_h * 0.5)
             left_line = Line(left_point, left_point + left_dir)
-            left_strip = apply_rotation(_line_to_strip(left_line, builder.thick * 2))
+            left_strip = _line_to_strip(left_line, builder.head_h)
             strips.append(left_strip)
             interactions.append((left_strip, corner_block_elements[k]))
             interactions.append((left_strip, axis_elements[left_axis]))
 
             # Right rib face: edge top[3]→top[2], strip at midpoint, rotated 90°, normal flipped
+            # Positions from corner_block_polyline_pairs are already rotated, no apply_rotation needed
             right_mid = (top_poly[3] + top_poly[2]) * 0.5
             right_dir = -Vector.Zaxis().cross(Vector.from_start_end(top_poly[3], top_poly[2]))
             right_point = Point(right_mid.x, right_mid.y, -builder.head_h * 0.5)
             right_line = Line(right_point, right_point + right_dir)
-            right_strip = apply_rotation(_line_to_strip(right_line, builder.thick * 2))
+            right_strip = _line_to_strip(right_line, builder.head_h)
             strips.append(right_strip)
             interactions.append((right_strip, corner_block_elements[k]))
             interactions.append((right_strip, axis_elements[right_axis]))
@@ -812,10 +815,8 @@ class QuarterFloorElement(Element):
             hilti = apply_rotation(hilti)
             hilti_joints.append(hilti)
             interactions.append((hilti, axis_elements[rib_axis]))
-            interactions.append((hilti, axis_elements[boundary_axis]))
-            # Boolean difference: cut hilti shape from rib and boundary elements
+            # Boolean difference: cut hilti shape from boundary rib only
             modifiers.append((hilti, axis_elements[rib_axis], SolidDifferenceModifier()))
-            modifiers.append((hilti, axis_elements[boundary_axis], SolidDifferenceModifier()))
 
         # -----------------------------------------------------------------------
         # Corner screws - near oculus (belong to axis[4])

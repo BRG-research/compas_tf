@@ -57,7 +57,14 @@ class SolidDifferenceModifier(Modifier):
         TARGET = targetgeometry.to_vertices_and_faces(triangulated=True)
 
         V, F = boolean_difference_mesh_mesh(TARGET, SOURCE)
-        shape = Polyhedron(V.tolist(), F.tolist())
+        vertices = V.tolist()
+        faces = F.tolist()
+
+        if not vertices or not faces:
+            print(f"WARNING: Boolean difference produced empty result, keeping original geometry")
+            return targetgeometry
+
+        shape = Polyhedron(vertices, faces)
         shape = shape.to_mesh()
 
         return shape

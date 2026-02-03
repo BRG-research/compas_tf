@@ -152,13 +152,32 @@ def build_element_connectors_map(model):
     return element_connectors
 
 
+def get_union_source_elements(model):
+    """Get elements whose geometry has been absorbed into another via SolidUnionModifier.
+
+    These elements should not be drawn separately (their geometry is merged into the target).
+    """
+    sources = set()
+    for edge in model.graph.edges():
+        modifiers = model.graph.edge_attribute(edge, name="modifiers")
+        if not modifiers:
+            continue
+        for modifier in modifiers:
+            if isinstance(modifier, SolidUnionModifier):
+                u, _v = edge
+                source = model.graph.node_element(u)
+                sources.add(source)
+    return sources
+
+
 def add_model_to_viewer(model, viewer):
     """Traverse model tree and create viewer hierarchy."""
 
     # Build map of element -> all its connectors (from interactions)
     element_connectors = build_element_connectors_map(model)
 
-    added_elements = set()
+    # Find elements absorbed by boolean union (works after JSON round-trip)
+    union_sources = get_union_source_elements(model)
 
     def traverse_element(element, viewer_parent):
         """Recursively traverse element children and add to viewer."""
@@ -169,24 +188,24 @@ def add_model_to_viewer(model, viewer):
                 child_group = viewer.scene.add_group(child.name or "group", parent=viewer_parent)
                 traverse_element(child, child_group)
             else:
-                # Skip elements hidden by boolean union modifiers
-                if getattr(child, '_hidden', False):
+                # Skip elements absorbed by boolean union modifiers
+                if child in union_sources:
                     continue
                 # Add element geometry and get its viewer group
                 color = get_color_for_element(child)
                 child_viewer_group = add_element_to_viewer(viewer, viewer_parent, child, color)
-                added_elements.add(id(child))
 
                 if child_viewer_group is not None:
                     # Add connectors from interactions (not just tree children)
+                    # Connectors can appear under multiple elements they connect
                     if child in element_connectors:
                         connectors_group = viewer.scene.add_group("connectors", parent=child_viewer_group)
                         for connector in element_connectors[child]:
-                            if id(connector) in added_elements:
+                            # Skip modifier-only connectors (e.g., hilti cutters)
+                            if isinstance(connector, HiltiElement):
                                 continue
                             conn_color = get_color_for_element(connector)
                             add_element_to_viewer(viewer, connectors_group, connector, conn_color)
-                            added_elements.add(id(connector))
 
                     # Still recurse for any non-connector children (e.g., nested groups)
                     for grandchild in child.children:
@@ -210,153 +229,188 @@ def add_model_to_viewer(model, viewer):
                     add_element_to_viewer(viewer, connectors_group, connector, conn_color)
 
 
-# Create a box representing one grid frame unit
-# TODO column_head, edge_beam and quarter:_floor uses same:
-# end_planes = builder.compute_cut_planes(scale=150, inclination=0)[3:6]
-# We need to unify to be usable from one location e.g. model.py  FloorBuilder must set the scale 150 only once for all elements
-# TODO Connecting triangle elements
-# TODO Conectors: diagonal screw, concrete screw, sherpa, slab to slab connector etc.
-column_size = 200.0
-grid_size = 6000.0
-height = 3000.0
-floor_thickness = 650.0
-thick = 40.0
-corner_block_height0 = 500  # Extra height below column head
-corner_block_height1 = 100  # Extra height below column head
-corner_block_offset = 141#141
-builder = FloorBuilder(
-    size=3000, 
-    height=650, 
-    rise=453, 
-    oculus=1000, 
-    thick=thick, 
-    beam_w=thick, 
-    column_head_scale=250, 
-    column_head_inclination=0, 
-    head_h=corner_block_height0,
-    head_b=corner_block_height1,
-    head_o=corner_block_offset )
-box = Box(grid_size-(column_size*0.5-thick)*2, grid_size-(column_size*0.5-thick)*2, height+floor_thickness, Frame([0,0,-(height+floor_thickness)*0.5]))
+def build_model():
+    """Build the complete structural model and return it."""
 
-# Model with hierarchical groups
-model = Model(name="Example Model")
+    # Create a box representing one grid frame unit
+    # TODO column_head, edge_beam and quarter:_floor uses same:
+    # end_planes = builder.compute_cut_planes(scale=150, inclination=0)[3:6]
+    # We need to unify to be usable from one location e.g. model.py  FloorBuilder must set the scale 150 only once for all elements
+    # TODO Connecting triangle elements
+    # TODO Conectors: diagonal screw, concrete screw, sherpa, slab to slab connector etc.
+    column_size = 200.0
+    grid_size = 6000.0
+    height = 3000.0
+    floor_thickness = 650.0
+    thick = 40.0
+    corner_block_height0 = 500  # Extra height below column head
+    corner_block_height1 = 100  # Extra height below column head
+    corner_block_offset = 141#141
+    builder = FloorBuilder(
+        size=3000,
+        height=650,
+        rise=453,
+        oculus=1000,
+        thick=thick,
+        beam_w=thick,
+        column_head_scale=250,
+        column_head_inclination=0,
+        head_h=corner_block_height0,
+        head_b=corner_block_height1,
+        head_o=corner_block_offset )
+    box = Box(grid_size-(column_size*0.5-thick)*2, grid_size-(column_size*0.5-thick)*2, height+floor_thickness, Frame([0,0,-(height+floor_thickness)*0.5]))
 
-# Create top-level groups (add_group adds to root)
-supports_group = model.add_group("supports")
-columns_group = model.add_group("columns")
-column_heads_group = model.add_group("column_heads")
-quarters_group = model.add_group("quarters")
-oculus_group = model.add_group("oculus")
+    # Model with hierarchical groups
+    model = Model(name="Example Model")
 
-# 1. Supports
-for i, corner_id in enumerate(box.bottom):
-    corner = box.corner(corner_id)
-    frame = Frame(corner, [1, 0, 0], [0, 1, 0])
-    xform = Transformation.from_frame(frame)
-    support = SupportElement(xform)
-    support.name = f"support_{i}"
-    model.add_element(support, parent=supports_group)
+    # Create top-level groups (add_group adds to root)
+    supports_group = model.add_group("supports")
+    columns_group = model.add_group("columns")
+    column_heads_group = model.add_group("column_heads")
+    quarters_group = model.add_group("quarters")
+    oculus_group = model.add_group("oculus")
 
-# 2. Columns
-columns = []
-for i, corner_id in enumerate(box.bottom):
-    corner = box.corner(corner_id)
-    frame = Frame(corner, [1, 0, 0], [0, 1, 0])
-    xform = Transformation.from_frame(frame) * Translation.from_vector([0, 0, SupportElement.HEIGHT])
-    column = ColumnElement(column_size, column_size, height-builder.head_b, xform)
-    column.name = f"column_{i}" 
-    model.add_element(column, parent=columns_group)
-    columns.append(column)
+    # 1. Supports
+    for i, corner_id in enumerate(box.bottom):
+        corner = box.corner(corner_id)
+        frame = Frame(corner, [1, 0, 0], [0, 1, 0])
+        xform = Transformation.from_frame(frame)
+        support = SupportElement(xform)
+        support.name = f"support_{i}"
+        model.add_element(support, parent=supports_group)
 
-# 3. Create builder for floor elements
-pts, pts_offset = builder.column_head_points
+    # 2. Columns
+    columns = []
+    for i, corner_id in enumerate(box.bottom):
+        corner = box.corner(corner_id)
+        frame = Frame(corner, [1, 0, 0], [0, 1, 0])
+        xform = Transformation.from_frame(frame) * Translation.from_vector([0, 0, SupportElement.HEIGHT])
+        column = ColumnElement(column_size, column_size, height-builder.head_b, xform)
+        column.name = f"column_{i}"
+        model.add_element(column, parent=columns_group)
+        columns.append(column)
 
-# 4. Build column head elements with nested groups
-offset = builder.size + builder.beam_w * 0.5
-xforms_columnhead = [
-    Transformation.from_frame(Frame([-offset, -offset, 0], [1,0,0], [0,1,0])),
-    Transformation.from_frame(Frame([-offset, offset, 0], [0,-1,0], [1,0,0])),
-    Transformation.from_frame(Frame([offset, offset, 0], [-1,0,0], [0,-1,0])),
-    Transformation.from_frame(Frame([offset, -offset, 0], [0,1,0], [-1,0,0])),
-]
+    # 3. Create builder for floor elements
+    pts, pts_offset = builder.column_head_points
 
-
-for i, xform in enumerate(xforms_columnhead):
-    column = columns[i]
-
-    # Create corner group (use Group directly for nested groups)
-    corner_group = Group(name=f"corner_{i}")
-    model.add_element(corner_group, parent=column_heads_group)
-
-    # Build column head components
-    head_element, top_element, connections, interactions, modifiers = ColumnHeadElement.build(builder, column_element=column)
-    head_element.transformation = xform
-    top_element.transformation = xform
-    head_element.name = "head"
-    top_element.name = "top"
-
-    model.add_element(head_element, parent=corner_group)
-    model.add_element(top_element, parent=corner_group)
-
-    # Create connectors group and add connectors
-    connectors_group = Group(name="connectors")
-    model.add_element(connectors_group, parent=corner_group)
-
-    for j, connector in enumerate(connections):
-        connector.transformation = xform * connector.transformation
-        connector.name = f"connector_{j}"
-        model.add_element(connector, parent=connectors_group)
-
-    # Add interactions (connector-element relationships)
-    for connector, element in interactions:
-        model.add_interaction(connector, element)
-
-    # Add modifiers (boolean union: source geometry merged into target, source hidden)
-    for source, target in modifiers:
-        model.add_modifier(source, target, SolidUnionModifier())
-        source._hidden = True
+    # 4. Build column head elements with nested groups
+    offset = builder.size + builder.beam_w * 0.5
+    xforms_columnhead = [
+        Transformation.from_frame(Frame([-offset, -offset, 0], [1,0,0], [0,1,0])),
+        Transformation.from_frame(Frame([-offset, offset, 0], [0,-1,0], [1,0,0])),
+        Transformation.from_frame(Frame([offset, offset, 0], [-1,0,0], [0,-1,0])),
+        Transformation.from_frame(Frame([offset, -offset, 0], [0,1,0], [-1,0,0])),
+    ]
 
 
-# 5. Build quarter floor elements
-for q_idx in range(4):
-    quarter_result = QuarterFloorElement.build(builder, q_idx * 90)
+    for i, xform in enumerate(xforms_columnhead):
+        column = columns[i]
 
-    # Create quarter group (use Group directly for nested groups)
-    quarter_group = Group(name=f"quarter_{q_idx}")
-    model.add_element(quarter_group, parent=quarters_group)
+        # Create corner group (use Group directly for nested groups)
+        corner_group = Group(name=f"corner_{i}")
+        model.add_element(corner_group, parent=column_heads_group)
 
-    # Axis elements group
-    axis_group = Group(name="axis_elements")
-    model.add_element(axis_group, parent=quarter_group)
-    for axis_idx, element in quarter_result.axis_elements.items():
-        element.name = f"axis_{axis_idx}"
-        model.add_element(element, parent=axis_group)
+        # Build column head components
+        head_element, top_element, connections, interactions, modifiers = ColumnHeadElement.build(builder, column_element=column)
+        head_element.transformation = xform
+        top_element.transformation = xform
+        head_element.name = "head"
+        top_element.name = "top"
 
-    # T-sections group
-    tsections_group = Group(name="tsections")
-    model.add_element(tsections_group, parent=quarter_group)
-    for i, element in enumerate(quarter_result.tsection_elements):
-        element.name = f"tsection_{i}"
-        model.add_element(element, parent=tsections_group)
+        model.add_element(head_element, parent=corner_group)
+        model.add_element(top_element, parent=corner_group)
 
-    # Surface elements group
-    surfaces_group = Group(name="surfaces")
-    model.add_element(surfaces_group, parent=quarter_group)
-    for i, element in enumerate(quarter_result.surface_elements):
-        element.name = f"surface_{i}"
-        model.add_element(element, parent=surfaces_group)
+        # Create connectors group and add connectors
+        connectors_group = Group(name="connectors")
+        model.add_element(connectors_group, parent=corner_group)
 
-    # Corner block elements group
-    corner_blocks_group = Group(name="corner_blocks")
-    model.add_element(corner_blocks_group, parent=quarter_group)
-    for i, element in enumerate(quarter_result.corner_block_elements):
-        element.name = f"corner_block_{i}"
-        model.add_element(element, parent=corner_blocks_group)
+        for j, connector in enumerate(connections):
+            connector.transformation = xform * connector.transformation
+            connector.name = f"connector_{j}"
+            model.add_element(connector, parent=connectors_group)
+
+        # Add interactions (connector-element relationships)
+        for connector, element in interactions:
+            model.add_interaction(connector, element)
+
+        # Add modifiers (boolean union: source geometry merged into target)
+        for source, target in modifiers:
+            model.add_modifier(source, target, SolidUnionModifier())
+
+
+    # 5. Build quarter floor elements
+    for q_idx in range(4):
+        quarter_result = QuarterFloorElement.build(builder, q_idx * 90)
+
+        # Create quarter group (use Group directly for nested groups)
+        quarter_group = Group(name=f"quarter_{q_idx}")
+        model.add_element(quarter_group, parent=quarters_group)
+
+        # Axis elements group
+        axis_group = Group(name="axis_elements")
+        model.add_element(axis_group, parent=quarter_group)
+        for axis_idx, element in quarter_result.axis_elements.items():
+            element.name = f"axis_{axis_idx}"
+            model.add_element(element, parent=axis_group)
+
+        # T-sections group
+        tsections_group = Group(name="tsections")
+        model.add_element(tsections_group, parent=quarter_group)
+        for i, element in enumerate(quarter_result.tsection_elements):
+            element.name = f"tsection_{i}"
+            model.add_element(element, parent=tsections_group)
+
+        # Surface elements group
+        surfaces_group = Group(name="surfaces")
+        model.add_element(surfaces_group, parent=quarter_group)
+        for i, element in enumerate(quarter_result.surface_elements):
+            element.name = f"surface_{i}"
+            model.add_element(element, parent=surfaces_group)
+
+        # Corner block elements group
+        corner_blocks_group = Group(name="corner_blocks")
+        model.add_element(corner_blocks_group, parent=quarter_group)
+        for i, element in enumerate(quarter_result.corner_block_elements):
+            element.name = f"corner_block_{i}"
+            model.add_element(element, parent=corner_blocks_group)
+
+        # Build element -> connectors mapping from interactions
+        # A connector may interact with multiple elements, so pick the first as parent
+        connector_parent = {}  # connector -> first element it interacts with
+        for connector, element in quarter_result.interactions:
+            if connector not in connector_parent:
+                connector_parent[connector] = element
+
+        # Add connectors as children of their first interacting element
+        connector_idx = 0
+        for connector, parent_element in connector_parent.items():
+            connector.name = f"connector_{connector_idx}"
+            model.add_element(connector, parent=parent_element)
+            connector_idx += 1
+
+        # Add interactions
+        for connector, element in quarter_result.interactions:
+            model.add_interaction(connector, element)
+
+        # Add modifiers (boolean difference: hilti cuts into rib/boundary elements)
+        for source, target, modifier in quarter_result.modifiers:
+            model.add_modifier(source, target, modifier)
+
+
+    # 7. Build oculus element
+    oculus_result = OculusElement.build(builder)
+
+    # Elements group for oculus (use Group directly for nested groups)
+    elements_group = Group(name="elements")
+    model.add_element(elements_group, parent=oculus_group)
+    for i, element in enumerate(oculus_result.oculus_elements):
+        element.name = f"oculus_{i}"
+        model.add_element(element, parent=elements_group)
 
     # Build element -> connectors mapping from interactions
     # A connector may interact with multiple elements, so pick the first as parent
-    connector_parent = {}  # connector -> first element it interacts with
-    for connector, element in quarter_result.interactions:
+    connector_parent = {}
+    for connector, element in oculus_result.interactions:
         if connector not in connector_parent:
             connector_parent[connector] = element
 
@@ -368,42 +422,14 @@ for q_idx in range(4):
         connector_idx += 1
 
     # Add interactions
-    for connector, element in quarter_result.interactions:
+    for connector, element in oculus_result.interactions:
         model.add_interaction(connector, element)
 
-    # Add modifiers (boolean difference: hilti cuts into rib/boundary elements)
-    for source, target, modifier in quarter_result.modifiers:
-        model.add_modifier(source, target, modifier)
+    return model
 
 
-# 7. Build oculus element
-oculus_result = OculusElement.build(builder)
 
-# Elements group for oculus (use Group directly for nested groups)
-elements_group = Group(name="elements")
-model.add_element(elements_group, parent=oculus_group)
-for i, element in enumerate(oculus_result.oculus_elements):
-    element.name = f"oculus_{i}"
-    model.add_element(element, parent=elements_group)
-
-# Build element -> connectors mapping from interactions
-# A connector may interact with multiple elements, so pick the first as parent
-connector_parent = {}
-for connector, element in oculus_result.interactions:
-    if connector not in connector_parent:
-        connector_parent[connector] = element
-
-# Add connectors as children of their first interacting element
-connector_idx = 0
-for connector, parent_element in connector_parent.items():
-    connector.name = f"connector_{connector_idx}"
-    model.add_element(connector, parent=parent_element)
-    connector_idx += 1
-
-# Add interactions
-for connector, element in oculus_result.interactions:
-    model.add_interaction(connector, element)
-
+model = build_model()
 
 # View model
 config = Config()
@@ -412,7 +438,7 @@ viewer = Viewer(config)
 viewer.renderer.rendermode = "lighted"
 
 # Add model to viewer using hierarchy traversal
-add_model_to_viewer(model, viewer)
+# add_model_to_viewer(model, viewer)
 
 # Export the compas_model Model (preserves full hierarchy)
 from compas import json_dumps
@@ -432,5 +458,4 @@ print(f"Exported Model to {model_filepath}")
 #     viewer.scene.add(polygon, name="cut_plane", color=(0.9, 0.6, 0.0))
 #     viewer.scene.add(normal_line, name="cut_plane_normal", color=(1.0, 0.0, 0.0))
 
-
-viewer.show()
+# viewer.show()

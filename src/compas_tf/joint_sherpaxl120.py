@@ -13,8 +13,6 @@ class SherpaXL120Element(Element):
 
     Parameters
     ----------
-    width : float
-        The width of the connector (X-axis).
     depth : float
         The depth of the connector (Y-axis).
     height : float
@@ -27,15 +25,13 @@ class SherpaXL120Element(Element):
         Name of the element.
     """
 
+    WIDTH = 21.0
+
     @property
     def __data__(self) -> dict:
-        # Note: Box.from_width_height_depth(depth, height+1, width+1) with
-        # Box.from_width_height_depth(w,h,d) -> xsize=w, ysize=d, zsize=h
-        # So: xsize=depth, ysize=width+1, zsize=height+1
         return {
-            "width": self._box.ysize - 1,   # ysize = width + 1
-            "depth": self._box.xsize,        # xsize = depth
-            "height": self._box.zsize - 1,   # zsize = height + 1
+            "depth": self._box.xsize,
+            "height": self._box.zsize,
             "frame": self._box.frame,
             "transformation": self.transformation,
             "name": self.name,
@@ -43,7 +39,6 @@ class SherpaXL120Element(Element):
 
     def __init__(
         self,
-        width: float = 20.0,
         depth: float = 120.0,
         height: float = 410.0,
         frame: Optional[Frame] = None,
@@ -51,8 +46,9 @@ class SherpaXL120Element(Element):
         name: Optional[str] = None,
     ):
         super().__init__(transformation=transformation, features=None, name=name)
-        self._box = Box.from_width_height_depth(depth, height, width)
-        self._box.frame = Frame([0, width/2, -height / 2], [1, 0, 0], [0, 1, 0])
+        w = self.WIDTH
+        self._box = Box.from_width_height_depth(depth, height, w)
+        self._box.frame = Frame([0, w / 2, -height / 2], [1, 0, 0], [0, 1, 0])
 
     @property
     def box(self) -> Box:

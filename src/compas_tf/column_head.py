@@ -108,7 +108,7 @@ class ColumnHeadElement(Element):
         return frame
 
     @staticmethod
-    def build(builder, column_element=None, block_height=100, connection_width=20):
+    def build(builder, column_element=None, block_height=100):
         """Build column head geometry from FloorBuilder data.
 
         Parameters
@@ -120,6 +120,8 @@ class ColumnHeadElement(Element):
 
         Returns: (head_element, top_element, connections, interactions, modifiers)
         """
+        from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+        connection_width = SherpaXL120Element.WIDTH
 
         #############################################################################################
         # Transformation to origin
@@ -182,60 +184,20 @@ class ColumnHeadElement(Element):
         # Joints
         #############################################################################################
 
-        # 4x screws column-head-bottom - column
+        # 2x horizontal screws - column-head-top (parallel to XY plane)
+        # Placed symmetrically about the diagonal: one into -X face, one into -Y face
         screw_frames = []
-        origin = Point(-builder.size - builder.beam_w / 2, -builder.size - builder.beam_w / 2, -builder.head_h)
-        offset = 40
-        corner_offsets = [(-1, -1), (1, -1), (1, 1), (-1, 1)]
-        
-        for sx, sy in corner_offsets:
-            x = sx * (builder.beam_w / 2 - offset)
-            y = sy * (builder.beam_w / 2 - offset)
-            frame = Frame(origin + Vector(x, y, 0), -Vector.Xaxis(), Vector.Yaxis())
-            screw_frames.append(frame)
-
-        # 4x inclined screws - within column-head-bottom (along taper edge)
-        # taper_point0 = taper[1]
-        # taper_point1 = polyline_bottom[1]
-        # taper_point_025 = taper_point0 + 0.2 * (taper_point1 - taper_point0)
-        # taper_point_075 = taper_point0 + 0.8 * (taper_point1 - taper_point0)
-
-        # frame0 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_025, taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
-        # screw_frames.append(frame0)
-        # frame1 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075, taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
-        # screw_frames.append(frame1)
-        # OPTIONAL
-        # frame2 = Frame(Vector.Yaxis()*builder.beam_w / 2 + taper_point_075 + Vector.Yaxis()*(builder.beam_w+builder.thick),  # noqa: E501
-        #     taper_point1 - taper_point0, -Vector.Xaxis().cross(taper_point1 - taper_point0))
-        # screw_frames.append(frame2)
-
-        # diagonal_plane = Plane(origin, Vector(1, -1, 0))
-        # reflection = Reflection.from_plane(diagonal_plane)
-        # frame0_reflected = frame0.transformed(reflection)
-        # frame1_reflected = frame1.transformed(reflection)
-        
-        # screw_frames.append(Frame(frame0_reflected.point, -frame0_reflected.xaxis, frame0_reflected.yaxis))
-        # screw_frames.append(Frame(frame1_reflected.point, -frame1_reflected.xaxis, frame1_reflected.yaxis))
-        # OPTIONAL
-        # frame2_reflected = frame2.transformed(reflection)
-        # frame2_reflected_flipped = Frame(frame2_reflected.point, -frame2_reflected.xaxis, frame2_reflected.yaxis)
-        # screw_frames.append(frame2_reflected_flipped)
-
-        # OPTIONAL Average frame between frame2 and frame2_reflected_flipped
-        # avg_origin = Point((frame2.point.x + frame2_reflected_flipped.point.x) / 2,  # noqa: E501
-        #     (frame2.point.y + frame2_reflected_flipped.point.y) / 2, (frame2.point.z + frame2_reflected_flipped.point.z) / 2)
-        # avg_frame = Frame(avg_origin, Vector.Xaxis(), Vector.Yaxis())
-        # screw_frames.append(avg_frame)
-
-        # 1x screw - collumn-head-bottom
-        origin = Point(-builder.size - builder.beam_w / 2, -builder.size - builder.beam_w / 2, -builder.height)
-        screw_frames.append(Frame(origin, Vector.Xaxis(), Vector.Yaxis()))
-
-        # 2x screws - column-head-top
         screw_diameter = 8
-        origin_side = Point(-builder.size - builder.beam_w, -builder.size - builder.beam_w/2 - screw_diameter, -builder.head_h+40-screw_diameter)
-        screw_frames.append(Frame(origin_side, -Vector.Zaxis(), Vector.Yaxis()))
-        screw_frames.append(screw_frames[-1].rotated(math.pi/2, Vector.Zaxis(), origin).translated(Vector(0, 0, +screw_diameter)))
+        for i in range(2):
+            origin = Point(
+                -builder.size- builder.thick*1,
+                -builder.size- builder.thick*(-2.75+i*3),
+                -builder.head_h - builder.head_b)
+            z = -builder.head_h - builder.head_b * 0.5 - screw_diameter
+            # Screw 1: on -X face, extends in +X
+            screw_frames.append(Frame(Point(origin.x-screw_diameter, origin.y, z+screw_diameter*0.5), -Vector.Zaxis(), Vector.Yaxis()))
+            screw_frames.append(Frame(Point(origin.y, origin.x-screw_diameter, z-screw_diameter*0.5), Vector.Zaxis(), screw_frames[-1].zaxis))
+
 
         # 3x sherpaXL120 - column-head-top
         sherpa_frames = []
@@ -271,7 +233,6 @@ class ColumnHeadElement(Element):
         top_element = ColumnHeadElement(mesh=top_mesh, name="column_head_top")
 
         from compas_tf.joint_screw import ScrewElement
-        from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 
         
 
@@ -279,7 +240,6 @@ class ColumnHeadElement(Element):
             ScrewElement(transformation=xform * Transformation.from_frame(frame), name=f"screw_columnhead_{i}")
             for i, frame in enumerate(screw_frames)
         ]
-        screws = []
         
         sherpas = []
         for i, frame in enumerate(sherpa_frames):
@@ -297,24 +257,12 @@ class ColumnHeadElement(Element):
             for sherpa in sherpas:
                 interactions.append((sherpa, column_element))
 
-        # Screw interactions by index ranges
-        # SCREWS_HEAD_COLUMN = slice(0, 4)       # 4x screws column-head-bottom - column
-        # SCREWS_HEAD_INCLINED = slice(4, 8)     # 4x inclined screws within column-head-bottom
-        # SCREW_HEAD_CONNECTOR = 8               # 1x screw column-head-bottom
-        # SCREWS_TOP_CONNECTOR = slice(9, 11)    # 2x screws column-head-top
-
-        # for screw in screws[SCREWS_HEAD_COLUMN]:
-        #     interactions.append((screw, head_element))
-        #     if column_element is not None:
-        #         interactions.append((screw, column_element))
-
-        # for screw in screws[SCREWS_HEAD_INCLINED]:
-        #     interactions.append((screw, head_element))
-        #     # Note: These screws are entirely within head_element (along taper edge),
-        #     # they do NOT connect to top_element
-
-        # for screw in screws[SCREWS_TOP_CONNECTOR]:
-        #     interactions.append((screw, top_element))
+        # 2x horizontal screws connect to head_element, top_element, and column
+        for screw in screws:
+            interactions.append((screw, head_element))
+            interactions.append((screw, top_element))
+            if column_element is not None:
+                interactions.append((screw, column_element))
 
         modifiers = []
         if column_element is not None:
