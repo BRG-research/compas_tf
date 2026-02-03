@@ -142,3 +142,6 @@ uv_compas_tf
 
 # Claude temporary files
 tmpclaude-*
+
+# Example model data
+examples/model.json
