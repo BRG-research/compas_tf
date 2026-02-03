@@ -8,9 +8,9 @@ Usage:
        also detect that and reimport before refreshing.
 """
 
+import importlib
 import os
 import sys
-import importlib
 import traceback
 
 from compas import json_load

@@ -61,7 +61,7 @@ class SolidDifferenceModifier(Modifier):
         faces = F.tolist()
 
         if not vertices or not faces:
-            print(f"WARNING: Boolean difference produced empty result, keeping original geometry")
+            print("WARNING: Boolean difference produced empty result, keeping original geometry")
             return targetgeometry
 
         shape = Polyhedron(vertices, faces)

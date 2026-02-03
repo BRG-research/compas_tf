@@ -1,24 +1,29 @@
 import os
-from compas.geometry import Box, Line, Frame, Transformation, Translation, Vector
+
+from compas import json_dumps
+from compas.geometry import Box
+from compas.geometry import Frame
+from compas.geometry import Line
+from compas.geometry import Transformation
+from compas.geometry import Translation
 from compas_model.elements.column import ColumnElement
 from compas_model.elements.group import Group
 from compas_model.models import Model
 from compas_viewer.config import Config
 from compas_viewer.viewer import Viewer
 
-from compas_tf.support import SupportElement
-from compas_tf.floor_builder import FloorBuilder
 from compas_tf.column_head import ColumnHeadElement
-from compas_tf.quarter_floor import QuarterFloorElement
-from compas_tf.oculus import OculusElement
-from compas_tf.solid_difference_modifier import SolidDifferenceModifier
-from compas_tf.solid_union_modifier import SolidUnionModifier
-from compas_tf.plate import PlateElement
-from compas_tf.joint_screw import ScrewElement
+from compas_tf.floor_builder import FloorBuilder
 from compas_tf.joint_dowel import DowelElement
-from compas_tf.joint_strip import AlignmentStripElement
-from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.joint_hilti import HiltiElement
+from compas_tf.joint_screw import ScrewElement
+from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.joint_strip import AlignmentStripElement
+from compas_tf.oculus import OculusElement
+from compas_tf.plate import PlateElement
+from compas_tf.quarter_floor import QuarterFloorElement
+from compas_tf.solid_union_modifier import SolidUnionModifier
+from compas_tf.support import SupportElement
 
 # Connector types for identification
 CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element, HiltiElement)
@@ -441,8 +446,6 @@ viewer.renderer.rendermode = "lighted"
 # add_model_to_viewer(model, viewer)
 
 # Export the compas_model Model (preserves full hierarchy)
-from compas import json_dumps
-
 model_filepath = os.path.join(os.path.dirname(__file__), "model.json")
 with open(model_filepath, "w") as f:
     f.write(json_dumps(model, pretty=True))

@@ -3,7 +3,6 @@
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.quarter_floor import QuarterFloorElement
 
-
 # Create builder
 builder = FloorBuilder()
 

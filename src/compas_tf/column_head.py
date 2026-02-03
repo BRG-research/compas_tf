@@ -1,24 +1,19 @@
-import math
 from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
 from compas.geometry import Frame
-from compas.geometry import Line
 from compas.geometry import Plane
 from compas.geometry import Point
 from compas.geometry import Polyline
-from compas.geometry import Reflection
 from compas.geometry import Transformation
 from compas.geometry import Translation
 from compas.geometry import Vector
-from compas.geometry import intersection_line_plane
-from compas.geometry import intersection_polyline_plane
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
-from compas_tf.geometry import PolylineLoft
 from compas_tf.geometry import PlaneIntersect
+from compas_tf.geometry import PolylineLoft
 
 
 class ColumnHeadFeature(Feature):
@@ -133,12 +128,12 @@ class ColumnHeadElement(Element):
         # Bottom block
         #############################################################################################
 
-        pts, pts_offset = builder.column_head_points
-        corner = builder.corner_point
+        pts, pts_offset = builder.column_head_points  # noqa: F841
+        _corner = builder.corner_point  # noqa: F841
         _end_planes = builder.end_planes  # noqa: F841
-        head_h = builder.head_h
-        beam_w = builder.beam_w
-        height = builder.height
+        _head_h = builder.head_h  # noqa: F841
+        _beam_w = builder.beam_w  # noqa: F841
+        _height = builder.height  # noqa: F841
 
 
 

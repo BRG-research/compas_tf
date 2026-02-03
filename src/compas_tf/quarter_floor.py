@@ -14,8 +14,6 @@ from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
 from compas.geometry import intersection_line_line
-from compas.geometry import intersection_line_plane
-from compas.geometry import intersection_plane_plane_plane
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
 
@@ -368,7 +366,7 @@ def _build_corners_blocks(builder, axis_planes, offset_axes):
     tuple[list[Mesh], list[tuple[Polyline, Polyline]]]
         (meshes, polyline_pairs) where polyline_pairs is [(top, bottom), ...]
     """
-    rib_parabolas = builder.rib_parabolas
+    _rib_parabolas = builder.rib_parabolas  # noqa: F841
     cut_planes0 = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
     cut_planes1 = builder.compute_cut_planes()[3:6]
     cut_planes1 = [Plane(cp.point, -cp.normal) for cp in cut_planes1]
@@ -498,8 +496,8 @@ def _build_boundaries(builder, surface_edge_polys):
     plane1 = Plane(builder.axes[0].midpoint, Vector.Zaxis().cross(builder.axes[0].direction)).offset(-builder.thick * 0.5)
     plane2 = Plane.worldXY().offset(-builder.head_h)
     plane3 = Plane(builder.axes[-1].midpoint, Vector.Zaxis().cross(builder.axes[-1].direction)).offset(-builder.thick * 0.5)
-    result0 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_0))
-    result1 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_1))
+    _result0 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_0))  # noqa: F841
+    _result1 = Polyline(PlaneIntersect.intersect_consecutive_planes([plane0, plane1, plane2, plane3, plane0, plane1], plane_cut_1))  # noqa: F841
 
     # meshes[7] = PolylineLoft.to_mesh(result0, result1)
     # polyline_pairs[7] = (result0, result1)
@@ -666,7 +664,7 @@ class QuarterFloorElement(Element):
         height_offset = 20
         divisions = 4
         height0 = (builder.height - builder.rise - height_offset * 2) / (divisions - 1)
-        height1 = (builder.head_h - height_offset * 2) / (divisions * 2 - 1)
+        _height1 = (builder.head_h - height_offset * 2) / (divisions * 2 - 1)  # noqa: F841
         height_middle = (builder.height - builder.rise) * 0.5
 
         # Helper to apply rotation to connector

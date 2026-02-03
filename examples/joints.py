@@ -1,7 +1,8 @@
-from compas_tf.joint_screw import ScrewElement
-from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_viewer.config import Config
 from compas_viewer.viewer import Viewer
+
+from compas_tf.joint_screw import ScrewElement
+from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 
 config = Config()
 config.unit = "mm"

@@ -5,10 +5,8 @@ from compas.geometry import Box
 from compas.geometry import Point
 from compas.geometry import Polygon
 from compas.geometry import Transformation
-from compas.geometry import Vector
 from compas.geometry import earclip_polygon
 from compas_model.elements import Element
-
 
 # Polyline coordinates parsed from hilti.txt (one side only, the other is symmetrical)
 # CW winding when viewed from +Z.

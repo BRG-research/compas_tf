@@ -10,22 +10,23 @@ Connectors are found via the interaction graph, not tree children.
 """
 
 from pathlib import Path
+
 from compas import json_load
 from compas.colors import Color
 from compas.datastructures import Mesh
-from compas.geometry import Frame, Transformation
+from compas.geometry import Frame
+from compas.geometry import Transformation
 from compas.scene import Scene
-from compas_rhino.layers import create_layers_from_paths
 from compas_model.elements.group import Group
+from compas_rhino.layers import create_layers_from_paths
 
-# Import compas_tf to register custom element types for JSON deserialization
-import compas_tf
-from compas_tf.joint_screw import ScrewElement
+import compas_tf  # noqa: F401 (registers custom types for JSON deserialization)
 from compas_tf.joint_dowel import DowelElement
-from compas_tf.joint_strip import AlignmentStripElement
-from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.joint_hilti import HiltiElement
-from compas_tf.solid_difference_modifier import SolidDifferenceModifier
+from compas_tf.joint_screw import ScrewElement
+from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.joint_strip import AlignmentStripElement
+from compas_tf.solid_difference_modifier import SolidDifferenceModifier  # noqa: F401
 from compas_tf.solid_union_modifier import SolidUnionModifier
 
 # Connector types for identification
@@ -224,8 +225,6 @@ def load_model_to_rhino(model_filepath, create_groups=True, convert_to_brep=True
         If True, convert meshes to NURBS breps and merge coplanar faces.
     """
     import rhinoscriptsyntax as rs
-    import Rhino.Geometry as rg
-    import scriptcontext as sc
 
     # Load the model
     model = json_load(model_filepath)
@@ -520,7 +519,7 @@ def orient_and_draw_to_rhino(model, element_name, create_group=True, convert_to_
     # Convert meshes to breps with merged coplanar faces
     if convert_to_brep and guids:
         guids = convert_meshes_to_breps(guids, merge_coplanar=True)
-        print(f"Converted meshes to NURBS breps with merged coplanar faces")
+        print("Converted meshes to NURBS breps with merged coplanar faces")
 
     # Create Rhino group with all objects
     if create_group and guids:
@@ -612,7 +611,7 @@ def draw_single_element_to_rhino(model, element_name, create_group=True, convert
     # Convert meshes to breps with merged coplanar faces
     if convert_to_brep and guids:
         guids = convert_meshes_to_breps(guids, merge_coplanar=True)
-        print(f"Converted meshes to NURBS breps with merged coplanar faces")
+        print("Converted meshes to NURBS breps with merged coplanar faces")
 
     # Create Rhino group with all objects
     if create_group and guids:
