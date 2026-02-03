@@ -10,72 +10,30 @@ Repository for the timber floor development.
 <img width="2494" height="1568" alt="Screenshot from 2025-12-10 19-06-33" src="https://github.com/user-attachments/assets/ab1e5a47-9f85-4785-ad50-eca10c7dbd6e" />
 
 
-## Installation
-
-### Option 1: Using uv (Recommended)
-
-[uv](https://docs.astral.sh/uv/) is a fast Python package manager. Install it first:
+## Quick Setup (Git Bash)
 
 ```bash
-# Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# macOS/Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
+cd /c/brg/compas_tf
+source .venv/Scripts/activate
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+pip install -e .
 ```
 
-Then set up the project:
+## Run
+
+```bash
+python examples/model.py
+```
+
+## Fresh Install
 
 ```bash
 git clone https://github.com/BRG-research/compas_tf.git
 cd compas_tf
 uv venv .venv --python 3.12
-uv pip install -e ".[dev]" compas_model compas_viewer
-```
-
-Activate the environment:
-
-```bash
-# Windows (Git Bash / MINGW64)
 source .venv/Scripts/activate
-
-# Windows (PowerShell)
-.venv\Scripts\Activate.ps1
-
-# Windows (CMD)
-.venv\Scripts\activate.bat
-
-# macOS/Linux
-source .venv/bin/activate
-```
-
-Run an example:
-
-```bash
-python examples/test_quarter_floor.py
-```
-
-### Option 2: Using conda
-
-```bash
-git clone https://github.com/BRG-research/compas_tf.git
-cd compas_tf
-conda create -n compas_tf python=3.12
-conda activate compas_tf
-pip install compas compas_viewer compas_model
-pip install -e .
-```
-
-## Development
-
-Run linting:
-
-```bash
-ruff check src/
-```
-
-Run tests:
-
-```bash
-pytest tests/
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+pip install -e ".[dev]" compas_model compas_viewer
 ```
