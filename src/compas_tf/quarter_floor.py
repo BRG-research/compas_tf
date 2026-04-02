@@ -490,8 +490,8 @@ def _build_boundaries(builder, surface_edge_polys):
         # meshes.append(PolylineLoft.to_mesh(s2, s3))
 
     # Column head boundary (diagonal cut) -> axis 7
-    plane_cut_1 = builder.end_diagonal_plane
-    plane_cut_0 = builder.end_diagonal_plane.offset(-builder.thick)
+    plane_cut_1 = builder.end_planes[1]
+    plane_cut_0 = builder.end_planes[1].offset(-builder.thick)
     plane0 = Plane.worldXY()
     plane1 = Plane(builder.axes[0].midpoint, Vector.Zaxis().cross(builder.axes[0].direction)).offset(-builder.thick * 0.5)
     plane2 = Plane.worldXY().offset(-builder.head_h)

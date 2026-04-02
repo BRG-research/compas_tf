@@ -15,9 +15,39 @@ from compas_tf.geometry import PolylineOffset
 
 
 class FloorBuilder:
-    """Provides geometry parameters for building column heads and edge beams."""
+    """Provides geometry parameters for building column heads and edge beams.
 
-    def __init__(self, size=3000, height=650, rise=453, oculus=1000, thick=40, beam_w=200, column_head_scale=460, column_head_inclination=180, head_h=500, head_b=100, head_o=150):
+    Parameters — floor shape
+        size        half-span of the square floor plan (mm)
+        height      total depth from top slab to lowest point (mm)
+        rise        parabola rise within that depth (mm)
+        oculus      radius of the central opening (mm)
+        thick       rib / shell thickness (mm)
+        beam_w      edge beam width (mm)
+
+    Parameters — column head
+        column_head_scale          how far the head extends along each axis (mm)
+        column_head_inclination    splay distance of the bottom ring (mm)
+        head_h, head_b, head_o     head height, base, overhang (mm)
+    """
+
+    def __init__(
+        self,
+        # --- floor shape ---
+        size=3000,
+        height=650,
+        rise=453,
+        oculus=1000,
+        thick=40,
+        beam_w=200,
+        # --- column head ---
+        column_head_scale=460,
+        column_head_inclination=180,
+        head_h=500,
+        head_b=100,
+        head_o=150,
+    ):
+        # floor shape
         self.size = size
         self.height = height
         self.rise = rise
@@ -25,9 +55,15 @@ class FloorBuilder:
         self.oculus = oculus
         self.beam_w = beam_w
         self.thick = thick
+
+        # column head
         self.head_h = head_h
         self.head_b = head_b
         self.head_o = head_o
+        self._column_head_scale = column_head_scale
+        self._column_head_inclination = column_head_inclination
+
+        # caches (invalidated lazily)
         self._oculus_pts = None
         self._q1_poly = None
         self._axes = None
@@ -39,11 +75,14 @@ class FloorBuilder:
         self._end_planes = None
         self._top_end_planes = None
         self._top_corner_block_points = None
-        self._column_head_scale = column_head_scale
-        self._column_head_inclination = column_head_inclination
+
+    # ------------------------------------------------------------------ #
+    #  Floor plan geometry (2D)
+    # ------------------------------------------------------------------ #
 
     @property
     def oculus_points(self):
+        """Four points whose distance is sqrt(2) * oculus."""
         if self._oculus_pts is None:
             self._oculus_pts = [
                 Point(0, -self.oculus, 0),
@@ -55,6 +94,7 @@ class FloorBuilder:
 
     @property
     def quarter_polygon(self):
+        """The main polygon of the floor."""
         if self._q1_poly is None:
             self._q1_poly = Polygon([
                 Point(-self.size, -self.size, 0),
@@ -67,16 +107,22 @@ class FloorBuilder:
 
     @property
     def corner_point(self):
+        """The bottom left corner."""
         return self.quarter_polygon.points[0]
 
     @property
     def boundary_points(self):
-        """Points along quarter boundary: edge -> oculus -> oculus -> edge."""
+        """Points along quarter boundary."""
         q1 = self.quarter_polygon
         return [q1[i] for i in [1, 2, 3, 4]]
 
+    # ------------------------------------------------------------------ #
+    #  Axes & ribs (3D curves along the vault)
+    # ------------------------------------------------------------------ #
+
     @property
     def axes(self):
+        """Lines of the ribs, with a small offset for the two central axes."""
         if self._axes is None:
             polygon = self.quarter_polygon
             offset_polygon_full = PolylineOffset.offset_polygon(polygon, self.thick)
@@ -118,11 +164,12 @@ class FloorBuilder:
 
     @property
     def corner_axis_point(self):
+        """The point where the two boundary axes intersect."""
         return intersection_line_line(self.axes[0], self.axes[-1])[0]
 
     @property
     def boundary_parabolas(self):
-        """Two boundary parabolas for Q1 (first and last axes)."""
+        """Two boundary parabolas for first and last axes."""
         if self._bound_parabolas is None:
             divisions = 7
             q1_parabolas = []
@@ -152,15 +199,15 @@ class FloorBuilder:
 
     @property
     def target_planes(self):
-        """Planes perpendicular to axes[0:4], at axis start points."""
+        """Planes from lines and z-axis."""
         if self._target_planes is None:
             axes = self.axes
-            self._target_planes = [Plane(axes[i].start, Vector.Zaxis().cross(axes[i].direction)) for i in range(4)]
+            self._target_planes = [Plane(axes[i].midpoint, Vector.Zaxis().cross(axes[i].direction)) for i in range(len(axes))]
         return self._target_planes
 
     @property
     def rib_parabolas(self):
-        """Four rib parabolas for Q1."""
+        """Four parabolas at each axis."""
         if self._rib_parabolas is None:
             axes = self.axes
             proj_dir0 = Vector.Zaxis().cross(axes[0].direction)
@@ -180,7 +227,11 @@ class FloorBuilder:
             self._rib_parabolas = [parabola0, parabola1, parabola2, parabola3]
         return self._rib_parabolas
     
-    def compute_column_head_points(self, scale=None, inclination=None):
+    # ------------------------------------------------------------------ #
+    #  Column head (transition from ribs to column)
+    # ------------------------------------------------------------------ #
+
+    def _compute_column_head_points(self, scale=None, inclination=None):
         """Compute corner profile points without caching.
 
         Parameters
@@ -221,10 +272,10 @@ class FloorBuilder:
         ]
 
         # Offset points: move along axis direction, then down by height
-        pts_offset = [self.axes[i].direction * inclination + pts[i] for i in range(4)]
+        pts_offset = [Point(*(self.axes[i].direction * inclination + pts[i])) for i in range(4)]
         pts_offset[0] = axis_planes[0].closest_point(pts_offset[1])
         pts_offset[3] = axis_planes[3].closest_point(pts_offset[2])
-        pts_offset = [-Vector.Zaxis() * self.height + p for p in pts_offset]
+        pts_offset = [Point(*(-Vector.Zaxis() * self.height + p)) for p in pts_offset]
 
         return pts, pts_offset
 
@@ -232,7 +283,7 @@ class FloorBuilder:
     def column_head_points(self):
         """Cached version using default parameters."""
         if self._corner_pts is None:
-            self._corner_pts = self.compute_column_head_points()
+            self._corner_pts = self._compute_column_head_points()
         return self._corner_pts
 
     def compute_cut_planes(self, scale=None, inclination=None):
@@ -248,7 +299,7 @@ class FloorBuilder:
         list[Plane]
             6 planes: 3 boundary offsets + 3 corner planes.
         """
-        pts, pts_offset = self.compute_column_head_points(scale, inclination)
+        pts, pts_offset = self._compute_column_head_points(scale, inclination)
 
         # Build cut planes: 3 boundary offsets + 3 corner planes
         boundary_planes = [Plane(self.axes[j].midpoint, Vector.Zaxis().cross(self.axes[j].direction)) for j in range(3, len(self.axes) - 1)]
@@ -281,12 +332,16 @@ class FloorBuilder:
         self._corner_pts = None
         self._cut_planes = None
 
+    # ------------------------------------------------------------------ #
+    #  Corner block & end planes
+    # ------------------------------------------------------------------ #
+
     @property
     def top_corner_block_points(self):
         """Points defining the top block of the column head."""
         if self._top_corner_block_points is None:
             polyline = Polyline(self.quarter_polygon.points+[self.quarter_polygon.points[0]])
-            result = intersection_polyline_plane(polyline, self.end_diagonal_plane, 2)
+            result = intersection_polyline_plane(polyline, self.end_planes[1], 2)
             p0 = Point(*result[0])
             p1 = Point(*result[1])
             if p1[1] < p0[1]:
@@ -300,6 +355,7 @@ class FloorBuilder:
     
     @property
     def top_end_planes(self):
+        """Planes at midpoints of corner block edges."""
         if self._top_end_planes is None:
 
             p0 = (self.top_corner_block_points[0] + self.top_corner_block_points[1]) * 0.5
@@ -339,9 +395,3 @@ class FloorBuilder:
             self._end_planes = planes
         return self._end_planes
 
-    @property
-    def end_diagonal_plane(self):
-        # plane = Plane(self.corner_point, Vector(-1,-1,0)).offset(-self.thick * 2.27 )
-        plane = Plane(self.corner_point, Vector(-1,-1,0)).offset(-self.thick * 1.87)
-        return plane
-    
