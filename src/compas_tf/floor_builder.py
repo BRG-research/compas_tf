@@ -1,3 +1,6 @@
+from compas.data import Data
+from compas.geometry import Box
+from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Plane
 from compas.geometry import Point
@@ -14,7 +17,7 @@ from compas_tf.geometry import BezierCurve
 from compas_tf.geometry import PolylineOffset
 
 
-class FloorBuilder:
+class FloorBuilder(Data):
     """Provides geometry parameters for building column heads and edge beams.
 
     Parameters — floor shape
@@ -25,6 +28,7 @@ class FloorBuilder:
         thick       rib / shell thickness (mm)
         beam_w      edge beam width (mm)
 
+    Parameters — column head
     Parameters — column head
         column_head_scale          how far the head extends along each axis (mm)
         column_head_inclination    splay distance of the bottom ring (mm)
@@ -47,6 +51,7 @@ class FloorBuilder:
         head_b=100,
         head_o=150,
     ):
+        super().__init__()
         # floor shape
         self.size = size
         self.height = height
@@ -75,6 +80,22 @@ class FloorBuilder:
         self._end_planes = None
         self._top_end_planes = None
         self._top_corner_block_points = None
+
+    @property
+    def __data__(self) -> dict:
+        return {
+            "size": self.size,
+            "height": self.height,
+            "rise": self.rise,
+            "oculus": self.oculus,
+            "thick": self.thick,
+            "beam_w": self.beam_w,
+            "column_head_scale": self._column_head_scale,
+            "column_head_inclination": self._column_head_inclination,
+            "head_h": self.head_h,
+            "head_b": self.head_b,
+            "head_o": self.head_o,
+        }
 
     # ------------------------------------------------------------------ #
     #  Floor plan geometry (2D)
@@ -108,7 +129,22 @@ class FloorBuilder:
     @property
     def corner_point(self):
         """The bottom left corner."""
-        return self.quarter_polygon.points[0]
+        return Point(-self.size, -self.size, 0)
+
+    def corner_point_column(self, column_size=200):
+        """Column base center in plan for one quarter.
+
+        Parameters
+        ----------
+        column_size : float
+            Column cross-section side length in mm.
+
+        Returns
+        -------
+        :class:`compas.geometry.Point`
+        """
+        d = self.size - (column_size * 0.5 - self.thick)
+        return Point(-d, -d, 0)
 
     @property
     def boundary_points(self):
@@ -394,4 +430,3 @@ class FloorBuilder:
                 planes.append(Plane(p0, p0 - p1).offset(-self.thick * 10/math.sqrt(2)))
             self._end_planes = planes
         return self._end_planes
-

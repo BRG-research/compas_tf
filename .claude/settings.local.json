@@ -5,7 +5,9 @@
       "Bash(uv pip install:*)",
       "Bash(.venv/Scripts/python.exe:*)",
       "Bash(.venv/Scripts/ruff.exe check src/)",
-      "Bash(.venv/Scripts/ruff.exe check src/ --fix)"
+      "Bash(.venv/Scripts/ruff.exe check src/ --fix)",
+      "Bash(/c/Users/petrasv/.conda/envs/compas_tf/python.exe -m pip install -e C:/brg/code_rust/session/session_py -e C:/brg/code_rust/session/session_compas)",
+      "Bash(/c/Users/petrasv/.conda/envs/compas_tf/python.exe *)"
     ]
   }
 }

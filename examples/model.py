@@ -96,7 +96,7 @@ def add_element_to_viewer(viewer, viewer_parent, element, color):
         return None
 
     element_name = element.name or "element"
-    element_group = viewer.scene.add_group(element_name, parent=viewer_parent)
+    element_group = viewer.scene.add_group(element_name) if viewer_parent is None else viewer.scene.add_group(element_name, parent=viewer_parent)
 
     # Add mesh
     element_group.add(mesh, name="mesh", hide_coplanaredges=True, color=color)
@@ -226,7 +226,7 @@ def add_model_to_viewer(model, viewer):
             traverse_element(element, group)
         else:
             color = get_color_for_element(element)
-            elem_group = add_element_to_viewer(viewer, viewer.scene, element, color)
+            elem_group = add_element_to_viewer(viewer, None, element, color)
             if elem_group is not None and element in element_connectors:
                 connectors_group = viewer.scene.add_group("connectors", parent=elem_group)
                 for connector in element_connectors[element]:
@@ -434,22 +434,23 @@ def build_model():
 
 
 
-model = build_model()
+if __name__ == "__main__":
+    model = build_model()
 
-# View model
-config = Config()
-config.unit = "mm"
-viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"
+    # View model
+    config = Config()
+    config.unit = "mm"
+    viewer = Viewer(config)
+    viewer.renderer.rendermode = "lighted"
 
-# Add model to viewer using hierarchy traversal
-# add_model_to_viewer(model, viewer)
+    # Add model to viewer using hierarchy traversal
+    # add_model_to_viewer(model, viewer)
 
-# Export the compas_model Model (preserves full hierarchy)
-model_filepath = os.path.join(os.path.dirname(__file__), "model.json")
-with open(model_filepath, "w") as f:
-    f.write(json_dumps(model, pretty=True))
-print(f"Exported Model to {model_filepath}")
+    # Export the compas_model Model (preserves full hierarchy)
+    model_filepath = os.path.join(os.path.dirname(__file__), "model.json")
+    with open(model_filepath, "w") as f:
+        f.write(json_dumps(model, pretty=True))
+    print(f"Exported Model to {model_filepath}")
 
 # Visualize cut planes from builder
 # from compas.geometry import Plane
