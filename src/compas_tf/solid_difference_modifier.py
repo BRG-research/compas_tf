@@ -46,25 +46,49 @@ class SolidDifferenceModifier(Modifier):
 
         # Get source geometry
         source_geom = source.modelgeometry
+        source_name = getattr(source, "name", "<unnamed>")
 
         # Skip if source or target is not a Mesh
         if not isinstance(source_geom, Mesh):
+            print(f"[diff] skip '{source_name}': source is {type(source_geom).__name__}, not Mesh")
             return targetgeometry
         if not isinstance(targetgeometry, Mesh):
+            print(f"[diff] skip '{source_name}': target is {type(targetgeometry).__name__}, not Mesh")
+            return targetgeometry
+
+
+        # Watertight inputs are required; an open mesh will abort CGAL hard.
+        src_closed = source_geom.is_closed()
+        tgt_closed = targetgeometry.is_closed()
+        print(
+            f"[diff] '{source_name}' -> target  "
+            f"src V/F/closed={source_geom.number_of_vertices()}/{source_geom.number_of_faces()}/{src_closed}  "
+            f"tgt V/F/closed={targetgeometry.number_of_vertices()}/{targetgeometry.number_of_faces()}/{tgt_closed}"
+        )
+        if not src_closed:
+            print(f"[diff] skip '{source_name}': cutter not closed")
+            return targetgeometry
+        if not tgt_closed:
+            print(f"[diff] skip '{source_name}': target not closed")
             return targetgeometry
 
         SOURCE = source_geom.to_vertices_and_faces(triangulated=True)
         TARGET = targetgeometry.to_vertices_and_faces(triangulated=True)
 
-        V, F = boolean_difference_mesh_mesh(TARGET, SOURCE)
+        try:
+            V, F = boolean_difference_mesh_mesh(TARGET, SOURCE)
+        except Exception as exc:
+            print(f"[diff] CGAL raised for '{source_name}': {exc}")
+            return targetgeometry
+
         vertices = V.tolist()
         faces = F.tolist()
 
         if not vertices or not faces:
-            print("WARNING: Boolean difference produced empty result, keeping original geometry")
+            print(f"[diff] empty result for '{source_name}', keeping original")
             return targetgeometry
 
         shape = Polyhedron(vertices, faces)
         shape = shape.to_mesh()
-
+        print(f"[diff] '{source_name}' OK  -> result V/F={len(vertices)}/{len(faces)}")
         return shape

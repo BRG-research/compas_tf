@@ -22,6 +22,7 @@ from compas_tf.plate import PlateElement
 
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.support import SupportElement
+from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 
 class FloorModel(Model):
@@ -36,7 +37,7 @@ class FloorModel(Model):
         Parametric floor geometry.
     name : str
         Name passed to the inner ``Model``.
-    """
+    """ 
 
 
     @property
@@ -163,6 +164,12 @@ class FloorModel(Model):
     def add_column_cutter(self):
         """Add column 3 cutter per column. """
 
+
+        # Columns are ordered 0..3 like the quarters (both rotated j * pi/2).
+        columns = self.find_all_elements_of_type(ColumnElement)
+        columns_by_index = {int(c.name.split("_")[-1]): c for c in columns}
+
+        # Cutters
         offset_planes = self.builder.compute_cut_planes(scale=self.builder.head_o, inclination=0)[3:6]
         for i in range(len(offset_planes)):
             offset_planes[i] = offset_planes[i].offset(-SherpaXL120Element.WIDTH*2)
@@ -171,7 +178,7 @@ class FloorModel(Model):
         corner_end_plane1 = Plane(self.builder.end_planes[0].point, Vector.Zaxis().cross(self.builder.end_planes[0].normal)).offset(self.builder.thick*1.5)
         cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0] + self.builder.compute_cut_planes()[3:6][::-1] + [corner_end_plane1]
         top = Polygon(FloorModel._intersect_consecutive_planes(cut_planes, Plane.worldXY())).translated(Vector(0, 0, 0))
-        
+            
 
         for i in range(3):
             p00 = top[i]
@@ -184,8 +191,11 @@ class FloorModel(Model):
             p10 = p10 + v0 * self.builder.thick 
             p11 = p11 - v0 * self.builder.thick 
 
-            poly = Polygon([p00, p01, p10, p11])
-            plate = PlateElement(poly, SherpaXL120Element.WIDTH*4, name="column_cutter")
+            poly0 = Polygon([p11, p10, p01, p00])
+            poly1 = poly0.translated(poly0.normal * SherpaXL120Element.WIDTH * 6)
+            bot_pl = Polyline(list(poly0.points) + [poly0.points[0]])
+            top_pl = Polyline(list(poly1.points) + [poly1.points[0]])
+            plate = PlateElement(bottom_polyline=bot_pl, top_polyline=top_pl, name="column_cutter")
             plate.transformation = Translation.from_vector(Vector(0, 0, self.story_height))
             quarters = self.find_element_with_name("quarters")
 
@@ -195,9 +205,11 @@ class FloorModel(Model):
                 copy.transformation = rot * plate.transformation
                 copy.name = f"column_cutter_{i}_{j}"
                 self.add_element(copy, parent=quarters)
-                
-        
-        
+
+                column = columns_by_index.get(j)
+                if column is not None:
+                    self.add_modifier(copy, column, SolidDifferenceModifier())
+            
 
 
 

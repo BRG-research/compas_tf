@@ -44,6 +44,8 @@ floor_model.add_column_cutter()
 #  Write to file
 # ------------------------------------------------------------------ #
 
+compas.json_dump(floor_model, data_dir / "floor_model_elements_floor.json")
+
 # ------------------------------------------------------------------ #
 #  Show in viewer
 # ------------------------------------------------------------------ #

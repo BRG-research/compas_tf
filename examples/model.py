@@ -22,6 +22,7 @@ from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.oculus import OculusElement
 from compas_tf.plate import PlateElement
 from compas_tf.quarter_floor import QuarterFloorElement
+from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 from compas_tf.solid_union_modifier import SolidUnionModifier
 from compas_tf.support import SupportElement
 
@@ -175,6 +176,23 @@ def get_union_source_elements(model):
     return sources
 
 
+def get_difference_source_elements(model):
+    """Get elements acting as cutters via SolidDifferenceModifier.
+
+    Cutters carve other elements but are not meant to be drawn themselves.
+    """
+    sources = set()
+    for edge in model.graph.edges():
+        modifiers = model.graph.edge_attribute(edge, name="modifiers")
+        if not modifiers:
+            continue
+        for modifier in modifiers:
+            if isinstance(modifier, SolidDifferenceModifier):
+                u, _v = edge
+                sources.add(model.graph.node_element(u))
+    return sources
+
+
 def add_model_to_viewer(model, viewer):
     """Traverse model tree and create viewer hierarchy."""
 
@@ -183,6 +201,9 @@ def add_model_to_viewer(model, viewer):
 
     # Find elements absorbed by boolean union (works after JSON round-trip)
     union_sources = get_union_source_elements(model)
+    # Find cutters (sources of SolidDifferenceModifier) to hide from the viewer
+    difference_sources = get_difference_source_elements(model)
+    hidden_sources = union_sources | difference_sources
 
     def traverse_element(element, viewer_parent):
         """Recursively traverse element children and add to viewer."""
@@ -193,8 +214,8 @@ def add_model_to_viewer(model, viewer):
                 child_group = viewer.scene.add_group(child.name or "group", parent=viewer_parent)
                 traverse_element(child, child_group)
             else:
-                # Skip elements absorbed by boolean union modifiers
-                if child in union_sources:
+                # Skip elements absorbed by boolean union or used as difference cutters
+                if child in hidden_sources:
                     continue
                 # Add element geometry and get its viewer group
                 color = get_color_for_element(child)
@@ -225,6 +246,8 @@ def add_model_to_viewer(model, viewer):
             group = viewer.scene.add_group(element.name or "group")
             traverse_element(element, group)
         else:
+            if element in hidden_sources:
+                continue
             color = get_color_for_element(element)
             elem_group = add_element_to_viewer(viewer, None, element, color)
             if elem_group is not None and element in element_connectors:

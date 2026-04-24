@@ -215,7 +215,7 @@ class PlateElement(Element):
                 self.bottom: Polygon = bottom if isinstance(bottom, Polygon) else Polygon(bottom.points[:-1])
             else:
                 normal: Vector = polygon.normal
-                down: Vector = normal * (0.0 * thickness)
+                down: Vector = normal * (-0.5 * thickness)
                 self.bottom = polygon.copy()
                 for point in self.bottom.points:
                     point += down
@@ -224,7 +224,7 @@ class PlateElement(Element):
                 self.top: Polygon = top if isinstance(top, Polygon) else Polygon(top.points[:-1])
             else:
                 normal: Vector = polygon.normal
-                up: Vector = normal * (-1.0 * thickness)
+                up: Vector = normal * (0.5 * thickness)
                 self.top = polygon.copy()
                 for point in self.top.points:
                     point += up
@@ -413,9 +413,21 @@ class PlateElement(Element):
         if self._mesh is not None:
             return self._mesh
 
-        # Compute mesh from polygons
-        offset: int = len(self.bottom)
-        vertices: list[Point] = self.bottom.points + self.top.points  # type: ignore
+        bottom_pts = list(self.bottom.points)
+        top_pts = list(self.top.points)
+
+        # Ensure outward-facing winding: the vector from bottom centroid to
+        # top centroid must align with the right-hand-rule normal of the
+        # bottom loop. If it doesn't, reverse both loops in lockstep.
+        b_centroid = Point(*self.bottom.centroid)
+        t_centroid = Point(*self.top.centroid)
+        up_dir = Vector.from_start_end(b_centroid, t_centroid)
+        if up_dir.dot(self.bottom.normal) < 0:
+            bottom_pts = list(reversed(bottom_pts))
+            top_pts = list(reversed(top_pts))
+
+        offset: int = len(bottom_pts)
+        vertices: list[Point] = bottom_pts + top_pts  # type: ignore
         bottom: list[int] = list(range(offset))
         top: list[int] = [i + offset for i in bottom]
         faces: list[list[int]] = [bottom[::-1], top]
