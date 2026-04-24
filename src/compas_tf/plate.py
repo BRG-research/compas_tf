@@ -8,13 +8,15 @@ from compas.geometry import Plane
 from compas.geometry import Point
 from compas.geometry import Polygon
 from compas.geometry import Polyline
+from compas.geometry import Projection
 from compas.geometry import Transformation
 from compas.geometry import Vector
 from compas.geometry import bestfit_plane
+from compas.geometry import intersection_segment_plane
+from compas.geometry.triangulation_earclip import Earcut
 from compas.itertools import pairwise
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
-
 from compas_tf.geometry import PolylineLoft
 
 
@@ -227,6 +229,12 @@ class PlateElement(Element):
                 for point in self.top.points:
                     point += up
 
+            # Auto-loft mesh from top/bottom if both were provided by the caller.
+            if self._mesh is None and top is not None and bottom is not None:
+                bottom_pl = Polyline(list(self.bottom.points) + [self.bottom.points[0]])
+                top_pl = Polyline(list(self.top.points) + [self.top.points[0]])
+                self._mesh = PlateElement.loft(bottom_pl, top_pl, cap=True, close=True)
+
     @property
     def top_polyline(self) -> Optional[Polyline]:
         """Get top polyline with transformation applied."""
@@ -303,6 +311,96 @@ class PlateElement(Element):
             frame.transform(self.transformation)
         return frame
 
+    @staticmethod
+    def _remove_duplicate_points(points, tolerance=1e-6):
+        """Remove consecutive duplicate points and closing point if it matches first."""
+        if not points:
+            return points
+        cleaned = [points[0]]
+        for pt in points[1:]:
+            if cleaned[-1].distance_to_point(pt) > tolerance:
+                cleaned.append(pt)
+        if len(cleaned) > 1 and cleaned[0].distance_to_point(cleaned[-1]) <= tolerance:
+            cleaned = cleaned[:-1]
+        return cleaned
+
+    @staticmethod
+    def _earclip_polygon(polygon):
+        """Triangulate a planar polygon using the ear-clipping method.
+
+        Parameters
+        ----------
+        polygon : :class:`compas.geometry.Polygon`
+
+        Returns
+        -------
+        list[[int, int, int]]
+        """
+        frame = Frame.from_plane(Plane(polygon.points[0], polygon.normal))
+        xform = Transformation.from_frame_to_frame(frame, Frame.worldXY())
+        points = [point.transformed(xform) for point in polygon.points]
+
+        sum_val = 0.0
+        for p0, p1 in zip(points, points[1:] + [points[0]]):
+            sum_val += (p1[0] - p0[0]) * (p1[1] + p0[1])
+
+        if sum_val > 0.0:
+            points.reverse()
+
+        ear_cut = Earcut(points)
+        triangles = ear_cut.triangulate()
+
+        if sum_val > 0.0:
+            n = len(points) - 1
+            for i in range(len(triangles)):
+                triangles[i] = [abs(triangles[i][j % 3] - n) for j in range(3)]
+        return triangles
+
+    @staticmethod
+    def loft(polyline0, polyline1, cap=True, close=True):
+        """Loft two polylines into a mesh with earclip-triangulated caps.
+
+        Parameters
+        ----------
+        polyline0 : :class:`compas.geometry.Polyline`
+            Bottom polyline.
+        polyline1 : :class:`compas.geometry.Polyline`
+            Top polyline.
+        cap : bool
+            If True, add triangulated caps at top and bottom.
+        close : bool
+            If True, close the side loop by connecting last point to first.
+
+        Returns
+        -------
+        :class:`compas.datastructures.Mesh`
+        """
+        pts0 = PlateElement._remove_duplicate_points(list(polyline0.points))
+        pts1 = PlateElement._remove_duplicate_points(list(polyline1.points))
+
+        polyline0 = Polyline(pts0)
+        polyline1 = Polyline(pts1)
+
+        vertices = polyline0.points + polyline1.points
+        faces = []
+        n0 = len(polyline0)
+
+        num_faces = n0 if close else n0 - 1
+        for i in range(num_faces):
+            next_i = (i + 1) % n0
+            faces.append([i, next_i, next_i + n0, i + n0])
+
+        if cap:
+            bottom_triangles = PlateElement._earclip_polygon(Polygon(polyline0.points))
+            for tri in bottom_triangles:
+                faces.append([tri[2], tri[1], tri[0]])
+
+            top_triangles = PlateElement._earclip_polygon(Polygon(polyline1.points))
+            for tri in top_triangles:
+                faces.append([tri[0] + n0, tri[1] + n0, tri[2] + n0])
+
+        return Mesh.from_vertices_and_faces(vertices, faces)
+
     def compute_elementgeometry(self, include_features=False) -> Mesh:
         """Compute the shape of the plate from the given polygons or return pre-computed mesh.
 
@@ -326,9 +424,9 @@ class PlateElement(Element):
         mesh: Mesh = Mesh.from_vertices_and_faces(vertices, faces)
         return mesh
 
-    # =============================================================================
+    # ------------------------------------------------------------------ #
     # Implementations of abstract methods
-    # =============================================================================
+    # ------------------------------------------------------------------ #
 
     def compute_aabb(self, inflate: float = 1.0) -> Box:
         box = self.modelgeometry.aabb

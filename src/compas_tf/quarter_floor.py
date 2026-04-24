@@ -40,20 +40,17 @@ def _line_to_screw(line: Line) -> ScrewElement:
     xform = Transformation.from_frame(Frame.from_plane(plane))
     return ScrewElement(8, 25, line.length, transformation=xform)
 
-
 def _line_to_dowel(line: Line) -> DowelElement:
     """Create a DowelElement from a line."""
     plane = Plane(line.start, line.direction)
     xform = Transformation.from_frame(Frame.from_plane(plane))
     return DowelElement(20, 20, line.length, transformation=xform)
 
-
 def _line_to_strip(line: Line, height: float) -> AlignmentStripElement:
     """Create an AlignmentStripElement from a line."""
     frame = Frame(line.start, Vector.Zaxis().cross(line.direction), line.direction)
     xform = Transformation.from_frame(frame)
     return AlignmentStripElement(height=height, transformation=xform)
-
 
 def _create_hilti(origin: Point, rib_dir: Vector, boundary_dir: Vector, height: float = 120.0) -> HiltiElement:
     """Create a HiltiElement positioned at the rib-boundary interface.
@@ -121,14 +118,12 @@ def _compute_axis_boundary_planes(builder):
     axes = builder.axes
     return [Plane(axes[j].midpoint, Vector.Zaxis().cross(axes[j].direction)) for j in range(3, len(axes) - 1)]
 
-
 def _compute_axis_planes(builder):
     """Axis planes for T-sections (from slab.py:244-255)."""
     axes = builder.axes
     planes = [Plane(axes[j].start, Vector.Zaxis().cross(axes[j].direction)) for j in range(3)]
     planes.append(Plane(axes[-1].start, -Vector.Zaxis().cross(axes[-1].direction)))
     return planes
-
 
 def _compute_offset_axes(builder):
     """Offset axes for surface lofting (from slab.py:296-324)."""
@@ -154,7 +149,6 @@ def _compute_offset_axes(builder):
         [offset_3_bottom, offset_3_top],
     ]
 
-
 def _compute_lofted_lines(builder, offset_axes):
     """Lofted lines between offset axes (from slab.py:326-342)."""
     rib_parabolas = builder.rib_parabolas
@@ -166,7 +160,6 @@ def _compute_lofted_lines(builder, offset_axes):
         lofted_top.append(PolylineLoft.to_lines(offset_axes[i][1], offset_axes[i + 1][1]))
 
     return [lofted_bottom, lofted_top]
-
 
 def _build_ribs(builder):
     """Compute rib meshes and polyline pairs for quarter 1 (from slab.py:393-442).
@@ -251,7 +244,6 @@ def _build_ribs(builder):
 
     return quarter_meshes, list_rib_polylines, polyline_pairs
 
-
 def _build_tsections(builder, axis_planes, lofted_lines):
     """Compute T-section meshes and polyline pairs for quarter 1 (from slab.py:444-485).
 
@@ -297,7 +289,6 @@ def _build_tsections(builder, axis_planes, lofted_lines):
             polyline_pairs.append((merged0, merged1))
 
     return quarter_meshes, polyline_pairs
-
 
 def _build_surfaces(builder, axis_planes, lofted_lines, continuous=False):
     """Compute surface meshes, edge polylines, and polyline pairs for quarter 1.
@@ -405,7 +396,6 @@ def _build_corners_blocks(builder, axis_planes, offset_axes):
         polyline_pairs.append((top, bottom))
 
     return meshes, polyline_pairs
-
 
 def _build_boundaries(builder, surface_edge_polys):
     """Compute boundary beam meshes and polyline pairs for quarter 1.

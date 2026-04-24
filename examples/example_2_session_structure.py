@@ -23,17 +23,16 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 builder = compas.json_load(data_dir / "floorbuilder.json")
 floor_model = FloorModel(builder=builder)
-session = floor_model.model
 
 # ------------------------------------------------------------------ #
 #  Add groups
 # ------------------------------------------------------------------ #
 
-supports_group = session.add_group("supports")
-columns_group = session.add_group("columns")
-column_heads_group = session.add_group("column_heads")
-quarters_group = session.add_group("quarters")
-oculus_group = session.add_group("oculus")
+supports_group = floor_model.add_group("supports")
+columns_group = floor_model.add_group("columns")
+column_heads_group = floor_model.add_group("column_heads")
+quarters_group = floor_model.add_group("quarters")
+oculus_group = floor_model.add_group("oculus")
 
 compas.json_dump(floor_model, data_dir / "floor_model.json")
 
@@ -46,6 +45,6 @@ config.unit = "mm"
 viewer = Viewer(config)
 viewer.renderer.rendermode = "lighted"
 
-add_model_to_viewer(session, viewer)
+add_model_to_viewer(floor_model, viewer)
 
 viewer.show()

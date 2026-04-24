@@ -16,14 +16,14 @@ from model import add_model_to_viewer  # noqa: E402
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 # ------------------------------------------------------------------ #
-#  Load schoring models (written by example_4_prop)
-# ------------------------------------------------------------------ #
-schoring_models = compas.json_load(data_dir / "schoring_models.json")
-
-# ------------------------------------------------------------------ #
 #  Load floor model with supports + columns (written by example_3)
 # ------------------------------------------------------------------ #
 floor_model = compas.json_load(data_dir / "floor_model_elements.json")
+
+# ------------------------------------------------------------------ #
+#  Load schoring models (written by example_4_prop)
+# ------------------------------------------------------------------ #
+schoring_models = compas.json_load(data_dir / "schoring_models.json")
 
 # ------------------------------------------------------------------ #
 #  Show in viewer

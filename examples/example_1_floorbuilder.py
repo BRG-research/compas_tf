@@ -9,7 +9,6 @@ from compas.geometry import Polyline
 from compas.geometry import Vector
 from compas.colors import Color
 
-import compas_tf  # noqa: F401
 from compas_tf.floor_builder import FloorBuilder
 
 
@@ -122,5 +121,24 @@ for plane in builder.top_end_planes:
 g = viewer.scene.add_group("end_planes")
 for plane in builder.end_planes:
     add_plane(viewer, plane, parent=g)
+
+
+g = viewer.scene.add_group("axis_planes")
+four_bottom_and_top_polylines_pairs = builder.offset_axes()
+for axis_pair in four_bottom_and_top_polylines_pairs:
+    g_lines = viewer.scene.add_group("lines", parent=g)
+    for axis in axis_pair:
+        viewer.scene.add(axis, parent=g_lines)
+
+g = viewer.scene.add_group("lofted_offset_axes")
+lofted_bottom_and_top_lines = builder.lofted_lines(builder.offset_axes())
+
+for pair in lofted_bottom_and_top_lines:
+    g_pair = viewer.scene.add_group("pair", parent=g)
+    for lofted_lines in pair:
+        g_lofted_lines = viewer.scene.add_group("lofted_lines", parent=g_pair)
+        for line in lofted_lines:
+            viewer.scene.add(line, parent=g_lofted_lines)
+
 
 viewer.show()

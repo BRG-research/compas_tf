@@ -215,21 +215,13 @@ class ColumnHeadElement(Element):
             # frame.translate(Vector(0, 0, -15))
             sherpa_frames.append(frame)
 
-
-
-
-
-
-
         #############################################################################################
         # Create the elements
         #############################################################################################
         head_element = ColumnHeadElement(mesh=head_mesh, name="column_head")
         top_element = ColumnHeadElement(mesh=top_mesh, name="column_head_top")
 
-        from compas_tf.joint_screw import ScrewElement
-
-        
+        from compas_tf.joint_screw import ScrewElement       
 
         screws = [
             ScrewElement(transformation=xform * Transformation.from_frame(frame), name=f"screw_columnhead_{i}")

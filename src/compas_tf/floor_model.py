@@ -1,20 +1,30 @@
 import math
 
-from compas.data import Data
 from compas.geometry import Frame
 from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
-from compas_model.elements.column import ColumnElement
+from compas.geometry import Plane
+from compas.geometry import Polyline
+from compas.geometry import Polygon
+from compas.geometry import Line
+from compas.geometry import Translation
+from compas.geometry import intersection_plane_plane
+from compas.geometry import intersection_line_plane
 from compas_model.elements.group import Group
 from compas_model.models import Model
+from compas_model.models.interactiongraph import InteractionGraph
+from compas_model.models.elementtree import ElementNode
+from compas_model.elements import ColumnElement
+from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.plate import PlateElement
 
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.support import SupportElement
 
 
-class FloorModel(Data):
+class FloorModel(Model):
     """A timber floor model combining a Model tree with a FloorBuilder.
 
     Uses composition: holds a ``Model`` for the element tree
@@ -28,116 +38,169 @@ class FloorModel(Data):
         Name passed to the inner ``Model``.
     """
 
-    def __init__(self, builder=None, name="session"):
-        super().__init__()
-        self.builder = builder or FloorBuilder()
-        self.model = Model(name=name)
 
     @property
     def __data__(self) -> dict:
-        return {
+        data = {
+            "transformation": self.transformation,
+            "elements": self._elements,
+            "materials": self._materials,
+            "tree": self._tree.__data__,
+            "graph": self._graph.__data__,
             "builder": self.builder.__data__,
-            "model": self.model.__data__,
-            "model_name": self.model.name,
+            "story_height": self.story_height
         }
+        return data
 
     @classmethod
-    def __from_data__(cls, data):
-        builder = FloorBuilder.__from_data__(data["builder"])
-        obj = cls(builder=builder, name=data.get("model_name", "session"))
-        obj.model = Model.__from_data__(data["model"])
-        obj.model.name = data.get("model_name", "session")
-        return obj
+    def __from_data__(cls, data: dict) -> "Model":
+        model = cls(FloorBuilder.__from_data__(data["builder"]), story_height=data["story_height"])
 
+        model._transformation = data["transformation"]
+        model._elements = data["elements"]
+        model._materials = data["materials"]
 
+        for guid, element in model._elements.items():
+            element.model = model
+
+        model._graph = InteractionGraph.__from_data__(data["graph"])
+        model._graph.model = model
+
+        graphnode: int
+        for graphnode in model._graph.nodes():  # type: ignore
+            element = model._graph.node_element(graphnode)
+            element.graphnode = graphnode
+
+        def add(nodedata: dict, node: ElementNode) -> None:
+            if "children" in nodedata:
+                for childdata in nodedata["children"]:
+                    name = childdata["name"]
+                    guid = childdata["element"]
+                    attr = childdata.get("attributes") or {}
+
+                    element = model._elements[guid]
+                    childnode = ElementNode(element=element, name=name, **attr)
+                    element.treenode = childnode
+
+                    node.add(childnode)
+                    add(childdata, childnode)
+
+        nodedata = data["tree"]["root"]
+        node = model._tree.root
+
+        add(nodedata, node)
+        return model
+
+    def __init__(self, builder, name="session", story_height=3500):
+        super(FloorModel, self).__init__(name=name)
+        self.builder = builder
+        self.story_height = story_height
 
     # ------------------------------------------------------------------ #
-    #  supports
+    #  floor block
     # ------------------------------------------------------------------ #
-
-    def add_support(self, column_size=200, story_height=3000):
-        """Add 4 support elements rotated 90° around centre.
+    @staticmethod
+    def _intersect_consecutive_planes(planes, reference_plane=None):
+        """Find intersection points of consecutive plane pairs with a reference plane.
 
         Parameters
         ----------
-        column_size : float
-            Column cross-section side length in mm.
-        story_height : float
-            Story height in mm.
-        """
-        column_plan = self.builder.corner_point_column(column_size)
-        base_frame = Frame([column_plan.x, column_plan.y, 0], [1, 0, 0], [0, 1, 0])
-        supports_group = self.model.add_group("supports")
-        for i in range(4):
-            rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
-            support = SupportElement(rot * Transformation.from_frame(base_frame))
-            support.name = f"support_{i}"
-            self.model.add_element(support, parent=supports_group)
-
-    # ------------------------------------------------------------------ #
-    #  columns
-    # ------------------------------------------------------------------ #
-
-    def add_column(self, column_size=200, story_height=3000):
-        """Add 4 column elements rotated 90° around centre.
-
-        Parameters
-        ----------
-        column_size : float
-            Column cross-section side length in mm.
-        story_height : float
-            Story height in mm.
-        """
-        column_plan = self.builder.corner_point_column(column_size)
-        column_h = story_height + self.builder.height - SupportElement.HEIGHT
-        base_frame = Frame([column_plan.x, column_plan.y, SupportElement.HEIGHT], [1, 0, 0], [0, 1, 0])
-        columns_group = self.model.add_group("columns")
-        for i in range(4):
-            rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
-            column = ColumnElement(column_size, column_size, column_h, rot * Transformation.from_frame(base_frame))
-            column.name = f"column_{i}"
-            self.model.add_element(column, parent=columns_group)
-
-
-    # ------------------------------------------------------------------ #
-    #  column_heads
-    # ------------------------------------------------------------------ #
-
-    def add_column_head(self, column_element=None):
-        """Add column head elements using ColumnHeadElement.build().
-
-        Parameters
-        ----------
-        column_element : Element, optional
-            The column element for cross-element interactions.
+        planes : list[:class:`compas.geometry.Plane`]
+            List of planes to intersect pairwise.
+        reference_plane : :class:`compas.geometry.Plane`, optional
+            Plane to intersect the resulting lines with. Defaults to world XY.
 
         Returns
         -------
-        tuple
-            (head_element, top_element)
+        list[:class:`compas.geometry.Point`]
+            Intersection points.
         """
-        from compas_tf.column_head import ColumnHeadElement
+        if reference_plane is None:
+            reference_plane = Plane.worldXY()
 
-        head_element, top_element, connections, interactions, modifiers = (
-            ColumnHeadElement.build(self.builder, column_element=column_element)
-        )
+        intersection_points = []
+        for i in range(len(planes) - 1):
+            result = intersection_plane_plane(planes[i], planes[i + 1])
+            if result:
+                line = Line(result[0], result[1])
+                pt = intersection_line_plane(line, reference_plane)
+                if pt:
+                    intersection_points.append(pt)
+        return intersection_points
+    
+    def add_floor_block(self):
+        """Add column blocks. """
+        
+        offset_planes = self.builder.compute_cut_planes(scale=self.builder.head_o, inclination=0)[3:6]
+        for i in range(len(offset_planes)):
+            offset_planes[i] = offset_planes[i].offset(-SherpaXL120Element.WIDTH*2)
+        
+        corner_end_plane0 = Plane(self.builder.end_planes[3].point, Vector.Zaxis().cross(self.builder.end_planes[3].normal)).offset(self.builder.thick*-1.5)
+        corner_end_plane1 = Plane(self.builder.end_planes[0].point, Vector.Zaxis().cross(self.builder.end_planes[0].normal)).offset(self.builder.thick*1.5)
+        cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0] + self.builder.compute_cut_planes()[3:6][::-1] + [corner_end_plane1]
+        
+        top = Polygon(FloorModel._intersect_consecutive_planes(cut_planes, Plane.worldXY())).translated(Vector(0, 0, -self.builder.head_h))
+        bottom = top.translated(Vector(0, 0, -self.builder.head_b ))
 
-        head_group = self.model.add_group("column_heads")
-        self.model.add_element(head_element, parent=head_group)
-        self.model.add_element(top_element, parent=head_group)
+        plate = PlateElement(top=top, bottom=bottom, name="add_floor_block")
+        plate.transformation = Translation.from_vector(Vector(0, 0, self.story_height))
+        
 
-        connectors_group = Group(name="column_head_connectors")
-        self.model.add_element(connectors_group, parent=head_group)
-        for conn in connections:
-            self.model.add_element(conn, parent=connectors_group)
+        # Rotate 4 times, 90 degress
+        quarters = self.find_element_with_name("quarters")
+        
+        for i in range(4):
+            rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
+            copy = plate.copy()
+            copy.transformation = rot * plate.transformation
+            copy.name = f"floor_block{i}"
+            self.add_element(copy, parent=quarters)
 
-        for a, b in interactions:
-            self.model.add_interaction(a, b)
+    # ------------------------------------------------------------------ #
+    #  column heads cuts
+    # ------------------------------------------------------------------ #
 
-        for source, target in modifiers:
-            self.model.add_interaction(source, target)
+    def add_column_cutter(self):
+        """Add column 3 cutter per column. """
 
-        return head_element, top_element
+        offset_planes = self.builder.compute_cut_planes(scale=self.builder.head_o, inclination=0)[3:6]
+        for i in range(len(offset_planes)):
+            offset_planes[i] = offset_planes[i].offset(-SherpaXL120Element.WIDTH*2)
+        
+        corner_end_plane0 = Plane(self.builder.end_planes[3].point, Vector.Zaxis().cross(self.builder.end_planes[3].normal)).offset(self.builder.thick*-1.5)
+        corner_end_plane1 = Plane(self.builder.end_planes[0].point, Vector.Zaxis().cross(self.builder.end_planes[0].normal)).offset(self.builder.thick*1.5)
+        cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0] + self.builder.compute_cut_planes()[3:6][::-1] + [corner_end_plane1]
+        top = Polygon(FloorModel._intersect_consecutive_planes(cut_planes, Plane.worldXY())).translated(Vector(0, 0, 0))
+        
+
+        for i in range(3):
+            p00 = top[i]
+            p01 = top[i+1]
+            p10 = top[i+1] + Vector(0, 0, -self.builder.head_b-self.builder.head_h)
+            p11 = top[i] + Vector(0, 0, -self.builder.head_b-self.builder.head_h)
+            v0 = (p01 - p00).unitized()
+            p00 = p00 - v0 * self.builder.thick + Vector(0, 0, 10)
+            p01 = p01 + v0 * self.builder.thick + Vector(0, 0, 10)
+            p10 = p10 + v0 * self.builder.thick 
+            p11 = p11 - v0 * self.builder.thick 
+
+            poly = Polygon([p00, p01, p10, p11])
+            plate = PlateElement(poly, SherpaXL120Element.WIDTH*4, name="column_cutter")
+            plate.transformation = Translation.from_vector(Vector(0, 0, self.story_height))
+            quarters = self.find_element_with_name("quarters")
+
+            for j in range(4):
+                rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), j * math.pi / 2, Point(0, 0, 0))
+                copy = plate.copy()
+                copy.transformation = rot * plate.transformation
+                copy.name = f"column_cutter_{i}_{j}"
+                self.add_element(copy, parent=quarters)
+                
+        
+        
+
+
+
 
     # ------------------------------------------------------------------ #
     #  quarters
@@ -241,24 +304,69 @@ class FloorModel(Data):
 
         result = OculusElement.build(self.builder)
 
-        oculus_group = self.model.add_group("oculus")
+        oculus_group = self.add_group("oculus")
         for element in result.oculus_elements:
-            self.model.add_element(element, parent=oculus_group)
+            self.add_element(element, parent=oculus_group)
 
         connectors_group = Group(name="oculus_connectors")
-        self.model.add_element(connectors_group, parent=oculus_group)
+        self.add_element(connectors_group, parent=oculus_group)
         for screw in result.screws:
-            self.model.add_element(screw, parent=connectors_group)
+            self.add_element(screw, parent=connectors_group)
         for dowel in result.dowels:
-            self.model.add_element(dowel, parent=connectors_group)
+            self.add_element(dowel, parent=connectors_group)
         for strip in result.strips:
-            self.model.add_element(strip, parent=connectors_group)
+            self.add_element(strip, parent=connectors_group)
 
         for connector, element in result.interactions:
-            self.model.add_interaction(connector, element)
+            self.add_interaction(connector, element)
 
         return result.oculus_elements
 
     # ------------------------------------------------------------------ #
-    #  scaffolding
+    #  supports
     # ------------------------------------------------------------------ #
+
+    def add_support(self, column_size=200):
+        """Add 4 support elements rotated 90° around centre.
+
+        Parameters
+        ----------
+        column_size : float
+            Column cross-section side length in mm.
+        story_height : float
+            Story height in mm.
+        """
+        column_plan = self.builder.corner_point_column(column_size)
+        base_frame = Frame([column_plan.x, column_plan.y, 0], [1, 0, 0], [0, 1, 0])
+        supports_group = self.add_group("supports")
+        for i in range(4):
+            rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
+            support = SupportElement(rot * Transformation.from_frame(base_frame))
+            support.name = f"support_{i}"
+            self.add_element(support, parent=supports_group)
+
+    # ------------------------------------------------------------------ #
+    #  columns
+    # ------------------------------------------------------------------ #
+
+    def add_column(self, column_size=200):
+        """Add 4 column elements rotated 90° around centre.
+
+        Parameters
+        ----------
+        column_size : float
+            Column cross-section side length in mm.
+        story_height : float
+            Story height in mm.
+        """
+        column_plan = self.builder.corner_point_column(column_size)
+        column_height = self.story_height - SupportElement.HEIGHT
+        base_frame = Frame([column_plan.x, column_plan.y, SupportElement.HEIGHT], [1, 0, 0], [0, 1, 0])
+        columns_group = self.add_group("columns")
+        for i in range(4):
+            rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
+            column = ColumnElement(column_size, column_size, column_height, rot * Transformation.from_frame(base_frame), name=f"column_{i}")
+            self.add_element(column, parent=columns_group)
+
+
+

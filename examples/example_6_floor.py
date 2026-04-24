@@ -17,33 +17,41 @@ from compas_tf.floor_model import FloorModel
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 # ------------------------------------------------------------------ #
-#  Load FloorModel written by example_2
+#  Models
+# ------------------------------------------------------------------ #
+models = []
+
+# ------------------------------------------------------------------ #
+#  Load floor model with supports + columns (written by example_3)
+# ------------------------------------------------------------------ #
+floor_model : FloorModel = compas.json_load(data_dir / "floor_model_elements.json")
+models.append(floor_model)
+
+# ------------------------------------------------------------------ #
+#  Load schoring models (written by example_4_prop)
+# ------------------------------------------------------------------ #
+# schoring_models : list = compas.json_load(data_dir / "schoring_models.json")
+# models.extend(schoring_models)
+
+# ------------------------------------------------------------------ #
+#  Create floor model
 # ------------------------------------------------------------------ #
 
-floor_model : FloorModel = compas.json_load(data_dir / "floor_model.json")
-
-# ------------------------------------------------------------------ #
-#  Add supports and columns
-# ------------------------------------------------------------------ #
-
-floor_model.add_support()
-floor_model.add_column()
+floor_model.add_floor_block()
+floor_model.add_column_cutter()
 
 # ------------------------------------------------------------------ #
 #  Write to file
 # ------------------------------------------------------------------ #
 
-compas.json_dump(floor_model, data_dir / "floor_model_elements.json")
-
 # ------------------------------------------------------------------ #
 #  Show in viewer
 # ------------------------------------------------------------------ #
-
 config = Config()
 config.unit = "mm"
 viewer = Viewer(config)
 viewer.renderer.rendermode = "lighted"
 
-add_model_to_viewer(floor_model, viewer)
-
+for model in models:
+    add_model_to_viewer(model, viewer)
 viewer.show()

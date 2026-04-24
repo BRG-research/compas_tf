@@ -1,26 +1,7 @@
-"""
-example_4_prop.py
-
-This example demonstrates how to create, position, and visualize shoring elements (props) and towers using the COMPAS framework.
-
-How to add new shoring elements/datasets:
------------------------------------------
-1. Add new dataset filenames to the Dataset class in src/compas_tf/schoring_element.py, e.g.:
-       schoring_vertical_body_start_6 = "schoring_vertical_body_start_6.json"
-       schoring_vertical_body_end_6 = "schoring_vertical_body_end_6.json"
-2. Create the corresponding JSON files in data/SchoringElement/ using the COMPAS Mesh format.
-3. Reference the new datasets in your code via Dataset.schoring_vertical_body_start_6, etc.
-4. Use SchoringElement.from_points_and_vectors or from_points_and_vectors_no_foot_no_head to instantiate elements with the new datasets.
-5. Add the new elements to your model and viewer as needed.
-
-See the Dataset class and SchoringElement usage below for examples.
-"""
-
 import math
 import pathlib
 import compas
 from compas_viewer import Viewer
-from compas_tf.floor_builder import FloorBuilder
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.schoring_element import Dataset
 
@@ -28,7 +9,6 @@ from compas_tf.schoring_element import Dataset
 SchoringElement.clear_cache()
 from compas_tf.tower_element import TowerElement
 from compas_model.models import Model
-from compas.geometry import Transformation
 from compas.geometry import Translation
 from compas.geometry import Rotation
 from compas.geometry import Vector
@@ -40,6 +20,11 @@ from model import add_model_to_viewer  # noqa: E402
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 # ------------------------------------------------------------------ #
+#  Models
+# ------------------------------------------------------------------ #
+schoring_models = []
+
+# ------------------------------------------------------------------ #
 #  Floor parameters — drive prop positioning from FloorBuilder
 # ------------------------------------------------------------------ #
 
@@ -48,7 +33,6 @@ prop_height = 2500
 story_height = 3000
 builder = compas.json_load(data_dir / "floorbuilder.json")
 column_plan = builder.corner_point_column(column_size)  # e.g. (-2940, -2940, 0)
-
 offset_from_corner = column_size / 2  # small clearance from column face
 
 # ------------------------------------------------------------------ #
@@ -70,7 +54,7 @@ model_scaffolding0.transformation *= Translation.from_vector(Vector(column_plan.
 model_scaffolding1 = model_scaffolding0.copy()
 model_scaffolding1.transformation = Translation.from_vector(Vector(column_plan.x, column_plan.y, 0)) * Rotation.from_axis_and_angle(Vector(0, 0, 1), math.pi / 2, Point(0, 0, 0))
 
-schoring_models = []
+
 model_scaffolding = Model()
 for i in range(4):
     model_rotated0 = model_scaffolding0.copy()
@@ -84,8 +68,11 @@ for i in range(4):
 #  Tower element at origin, rotated 45° around Z (XY plane)
 # ------------------------------------------------------------------ #
 
+model_tower = Model("tower")
 tower = TowerElement()
 tower.transformation = Rotation.from_axis_and_angle(Vector(0, 0, 1), math.pi / 4, Point(0, 0, 0))
+model_tower.add_element(tower)
+schoring_models.append(model_tower)
 
 # ------------------------------------------------------------------ #
 #  Prop with custom head shape
@@ -101,13 +88,10 @@ model_custom = SchoringElement.from_points_and_vectors_no_foot_no_head(
     dataset_hat=Dataset.schoring_head_custom,
 )
 
-
 for i in range(4):
     model_rotated = model_custom.copy()
     model_rotated.transformation = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
     schoring_models.append(model_rotated)
-
-
 
 # ------------------------------------------------------------------ #
 #  Write models to file
@@ -126,9 +110,5 @@ viewer.renderer.rendermode = "lighted"
 
 for model in schoring_models:
     add_model_to_viewer(model, viewer)
-
-tower_model = Model("tower")
-tower_model.add_element(tower)
-add_model_to_viewer(tower_model, viewer)
 
 viewer.show()

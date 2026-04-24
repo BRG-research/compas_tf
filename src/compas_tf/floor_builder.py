@@ -10,6 +10,7 @@ from compas.geometry import Projection
 from compas.geometry import Vector
 from compas.geometry import intersection_line_line
 from compas.geometry import intersection_line_plane
+from compas.geometry import intersection_plane_plane_plane
 from compas.geometry import intersection_polyline_plane
 from compas.geometry import intersection_segment_segment
 
@@ -262,6 +263,104 @@ class FloorBuilder(Data):
 
             self._rib_parabolas = [parabola0, parabola1, parabola2, parabola3]
         return self._rib_parabolas
+   
+
+    @staticmethod
+    def _offset_polyline(polyline, distance, baseplane=None):
+        """Offset a polyline by a distance in 3D.
+
+        Parameters
+        ----------
+        polyline : :class:`compas.geometry.Polyline`
+            Polyline to offset.
+        distance : float
+            Offset distance.
+        baseplane : :class:`compas.geometry.Plane`, optional
+            Reference plane for offset direction. Defaults to world XY.
+
+        Returns
+        -------
+        :class:`compas.geometry.Polyline`
+            Offset polyline.
+        """
+        if baseplane is None:
+            baseplane = Plane.worldXY()
+
+        # End planes
+        start_plane = Plane(polyline[0], polyline[1] - polyline[0])
+        end_plane = Plane(polyline[-1], polyline[-2] - polyline[-1])
+
+        # Planes for intersection
+        planes = [start_plane]
+        for line in polyline.lines:
+            xaxis = line.direction
+            yaxis = baseplane.normal.cross(xaxis)
+            zaxis = xaxis.cross(yaxis)
+            planes.append(Plane(line.midpoint, zaxis).offset(distance))
+        planes.append(end_plane)
+
+        # Base plane
+        baseplane = Plane(polyline[0], baseplane.normal.cross(polyline[-1] - polyline[0]))
+
+        # Perform offset by plane intersection
+        points = []
+        for i in range(len(planes) - 1):
+            a = planes[i]
+            b = planes[i + 1]
+            c = baseplane
+            result = intersection_plane_plane_plane(a, b, c)
+            if not result:
+                raise Exception(f"No intersection at offset_polyline. Index: {i}")
+            points.append(result)
+
+        return Polyline(points)
+
+    def offset_axes(self):
+        """Offset axes for surface lofting"""
+        rib_parabolas = self.rib_parabolas
+        target_planes = self.target_planes
+        axes = self.axes
+        thick = self.thick
+
+        offset_0_bottom = self._offset_polyline(rib_parabolas[0], thick)
+        offset_0_top = self._offset_polyline(rib_parabolas[0], thick * 2)
+        offset_3_bottom = self._offset_polyline(rib_parabolas[3], thick)
+        offset_3_top = self._offset_polyline(rib_parabolas[3], thick * 2)
+
+        proj_dir0 = Vector.Zaxis().cross(axes[0].direction)
+        proj_dir3 = Vector.Zaxis().cross(axes[3].direction)
+        xform10 = Projection.from_plane_and_direction(target_planes[1], proj_dir0)
+        xform20 = Projection.from_plane_and_direction(target_planes[2], proj_dir3)
+
+        return [
+            [offset_0_bottom, offset_0_top],
+            [offset_0_bottom.transformed(xform10), offset_0_top.transformed(xform10)],
+            [offset_3_bottom.transformed(xform20), offset_3_top.transformed(xform20)],
+            [offset_3_bottom, offset_3_top],
+        ]
+
+    def lofted_lines(self, offset_axes):
+        """Lofted lines between offset axes (from slab.py:326-342)."""
+        rib_parabolas = self.rib_parabolas
+        lofted_bottom = []
+        lofted_top = []
+
+        for i in range(len(rib_parabolas) - 1):
+
+            lofted_bottom_lines = []
+            for j in range(len(offset_axes[i][0])):
+                lofted_bottom_lines.append(Line(offset_axes[i][0][j], offset_axes[i + 1][0][j]))
+
+            lofted_top_lines = []
+            for j in range(len(offset_axes[i][1])):
+                lofted_top_lines.append(Line(offset_axes[i][1][j], offset_axes[i + 1][1][j]))
+
+            lofted_bottom.append(lofted_bottom_lines)
+            lofted_top.append(lofted_top_lines)
+
+        return [lofted_bottom, lofted_top]
+
+
     
     # ------------------------------------------------------------------ #
     #  Column head (transition from ribs to column)
