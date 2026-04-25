@@ -112,6 +112,7 @@ dist/docs
 
 generated/
 
+*.3dm
 *.3dmbak
 *.rhl
 
