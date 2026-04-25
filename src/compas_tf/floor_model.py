@@ -211,6 +211,132 @@ class FloorModel(Model):
                     self.add_modifier(copy, column, SolidDifferenceModifier())
             
 
+    # ------------------------------------------------------------------ #
+    #  Ribs
+    # ------------------------------------------------------------------ #
+
+    def add_ribs(self, boundary_thick=100, inner_thick=60, inner_outward_signs=None):
+        """Add rib PlateElements (axes 0, 1, 2, 6) per quarter.
+
+        Boundary ribs (axes 0 and 6) keep their column-side face fixed at
+        +/-1.5*thick from the axis and grow inward until total width =
+        ``boundary_thick``.
+
+        Inner ribs (axes 1 and 2) keep their *outer* face fixed at
+        +/-0.5*thick from the axis (matching the original geometry on the
+        side facing the boundary) and grow inward until total width =
+        ``inner_thick``. Which side counts as outward depends on the target
+        plane's normal direction — pass ``inner_outward_signs`` as
+        ``{1: +1 or -1, 2: +1 or -1}`` to flip a rib that went the wrong
+        way. Default ``{1: +1, 2: -1}``.
+
+        Each plate is lifted by ``self.story_height`` and rotated 4x around
+        Z, nested under the ``quarters`` group.
+        """
+        if inner_outward_signs is None:
+            inner_outward_signs = {1: -1, 2: +1}
+        from compas.geometry import Projection
+        from compas_tf.geometry import PolylineCut
+        from compas_tf.geometry import PolylineLoft
+
+        builder = self.builder
+        rib_parabolas = builder.rib_parabolas
+        target_planes = builder.target_planes
+        cut_planes = builder.cut_planes
+        thick = builder.thick
+        head_h = builder.head_h
+        end_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
+
+        # (axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx)
+        rib_configs = [
+            (0, 0, 0, 0, 0, 0),
+            (1, 1, 1, 0, 1, 1),
+            (2, 2, 2, 2, 1, 1),
+            (6, 3, 3, 2, 2, 2),
+        ]
+
+        quarters = self.find_element_with_name("quarters")
+        lift = Translation.from_vector(Vector(0, 0, self.story_height))
+
+        for axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx in rib_configs:
+            # Per-axis offsets along target_plane normal, expressed as multiples of `thick`
+            # so the existing `* thick * offset` math below stays unchanged.
+            #
+            # Boundary ribs (0, 6): keep the OUTER face (column-side, at +/-1.5*thick from axis
+            # in the original geometry) fixed and grow the rib INWARD until total width = boundary_thick.
+            # Inner ribs (1, 2): centred on the axis with total width = inner_thick.
+            if axis_idx == 0:
+                # Outward = -normal. Column-side face stays at -1.5*thick; inner face moves toward +normal.
+                offset1 = -1.5
+                offset0 = offset1 + boundary_thick / thick
+            elif axis_idx == 6:
+                # Outward = +normal. Column-side face stays at +1.5*thick; inner face moves toward -normal.
+                offset0 = 1.5
+                offset1 = offset0 - boundary_thick / thick
+            else:
+                # Inner ribs: anchor the outer face at +/-0.5*thick (whichever side faces
+                # the boundary, per inner_outward_signs) and grow inward.
+                sign = inner_outward_signs.get(axis_idx, +1)
+                if sign > 0:
+                    offset0 = 0.5
+                    offset1 = 0.5 - inner_thick / thick
+                else:
+                    offset0 = -0.5 + inner_thick / thick
+                    offset1 = -0.5
+
+            end_plane = Plane(end_planes[end_plane_idx].point, -end_planes[end_plane_idx].normal)
+            cut_boundary = cut_planes[boundary_cut_idx]
+            cut_rib = cut_planes[rib_cut_idx + 3]
+
+            if axis_idx in (0, 6):
+                cut_boundary = cut_boundary.offset(-thick)
+
+            proj0 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset0)
+            proj1 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset1)
+
+            cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj0, cut_rib), cut_boundary)
+            cut1 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj1, cut_rib), cut_boundary)
+
+            extension = 600
+            line0 = PolylineCut.cut_by_plane(Polyline([cut0[0], cut0[-1]]).extended([extension, 0]), end_plane, flip=True)
+            line1 = PolylineCut.cut_by_plane(Polyline([cut1[0], cut1[-1]]).extended([extension, 0]), end_plane, flip=True)
+
+            xy_proj = Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis())
+            mid_proj = Projection.from_plane_and_direction(Plane([0, 0, -head_h], [0, 0, 1]), Vector.Zaxis())
+
+            top0, top1 = line0.transformed(xy_proj), line1.transformed(xy_proj)
+            mid0 = PolylineCut.cut_by_plane(line0.transformed(mid_proj), cut_rib, flip=True)
+            mid1 = PolylineCut.cut_by_plane(line1.transformed(mid_proj), cut_rib, flip=True)
+
+            joined0 = Polyline(list(reversed(top0.points)) + mid0.points + cut0.points)
+            joined1 = Polyline(list(reversed(top1.points)) + mid1.points + cut1.points)
+            joined0.append(joined0.points[0])
+            joined1.append(joined1.points[0])
+
+            mesh = PolylineLoft.to_mesh(joined0, joined1)
+
+            for j in range(4):
+                rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), j * math.pi / 2, Point(0, 0, 0))
+                plate = PlateElement(
+                    top_polyline=joined0,
+                    bottom_polyline=joined1,
+                    mesh=mesh,
+                    name=f"rib_{axis_idx}_{j}",
+                )
+                plate.transformation = rot * lift
+                self.add_element(plate, parent=quarters)
+
+    # ------------------------------------------------------------------ #
+    #  Boundaries
+    # ------------------------------------------------------------------ #
+
+    # ------------------------------------------------------------------ #
+    #  TSections
+    # ------------------------------------------------------------------ #
+
+    # ------------------------------------------------------------------ #
+    #  Surfaces
+    # ------------------------------------------------------------------ #
 
 
 

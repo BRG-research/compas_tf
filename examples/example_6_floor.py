@@ -39,6 +39,7 @@ models.append(floor_model)
 
 floor_model.add_floor_block()
 floor_model.add_column_cutter()
+floor_model.add_ribs()
 
 # ------------------------------------------------------------------ #
 #  Write to file
