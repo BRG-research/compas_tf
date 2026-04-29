@@ -21,19 +21,23 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 #  FloorBuilder
 # ------------------------------------------------------------------ #
 
+
+
 builder = FloorBuilder(
     size=3000,
     height=650,
     rise=453,
     oculus=1000,
-    thick=40,
     beam_w=40,
+    column_head_offset=50,
+    inner_thick=60,
+    outer_thick=100,
     column_head_scale=250,
     column_head_inclination=0,
     head_h=500,
     head_b=100,
     head_o=141,
-)
+) 
 
 compas.json_dump(builder, data_dir / "floorbuilder.json")
 

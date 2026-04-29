@@ -43,14 +43,19 @@ class FloorBuilder(Data):
         height=650,
         rise=453,
         oculus=1000,
-        thick=40,
         beam_w=200,
+        # --- thicknesses ---
+        column_head_offset=40,
+        inner_thick=60,
+        outer_thick=100,
         # --- column head ---
         column_head_scale=460,
         column_head_inclination=180,
         head_h=500,
         head_b=100,
         head_o=150,
+        # --- legacy alias (kept for backward compat with old JSONs) ---
+        thick=None,
     ):
         super().__init__()
         # floor shape
@@ -60,7 +65,15 @@ class FloorBuilder(Data):
         self.static_h = height - rise
         self.oculus = oculus
         self.beam_w = beam_w
-        self.thick = thick
+
+        # Thicknesses. ``column_head_offset`` is the proportional unit used by
+        # the column-head / cutter / axes geometry. ``inner_thick`` is the width
+        # of inner ribs (axes 1, 2) and the oculus-perimeter boundary plates.
+        # ``outer_thick`` is the width of the outer/boundary ribs (axes 0, 6).
+        # Legacy ``thick`` keyword (if provided) overrides column_head_offset.
+        self.column_head_offset = thick if thick is not None else column_head_offset
+        self.inner_thick = inner_thick
+        self.outer_thick = outer_thick
 
         # column head
         self.head_h = head_h
@@ -83,13 +96,24 @@ class FloorBuilder(Data):
         self._top_corner_block_points = None
 
     @property
+    def thick(self):
+        """Legacy alias: maps to ``column_head_offset``.
+
+        All existing builder code that references ``self.thick`` (axes,
+        cut_planes, end_planes, etc.) reads this proportional unit.
+        """
+        return self.column_head_offset
+
+    @property
     def __data__(self) -> dict:
         return {
             "size": self.size,
             "height": self.height,
             "rise": self.rise,
             "oculus": self.oculus,
-            "thick": self.thick,
+            "column_head_offset": self.column_head_offset,
+            "inner_thick": self.inner_thick,
+            "outer_thick": self.outer_thick,
             "beam_w": self.beam_w,
             "column_head_scale": self._column_head_scale,
             "column_head_inclination": self._column_head_inclination,
@@ -392,6 +416,10 @@ class FloorBuilder(Data):
             plane = Plane(point, self.axes[i].direction.cross(Vector.Zaxis()))
 
             # OPTIONAL: second check is need when axis are offset:
+            # column-head corner planes use `column_head_offset` (self.thick), NOT
+            # inner_thick — these planes define where ribs terminate at the column,
+            # so they must remain proportional to the column-head geometry, not
+            # the rib width.
             if i == 0 or i == 3:
                 axis_planes.append(plane.offset(self.thick * (-0.5 if i > 1 else 0.5)))
             else:

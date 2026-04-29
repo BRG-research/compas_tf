@@ -39,7 +39,10 @@ models.append(floor_model)
 
 floor_model.add_floor_block()
 floor_model.add_column_cutter()
+floor_model.add_sherpa_joints()
 floor_model.add_ribs()
+floor_model.add_boundaries()
+floor_model.add_wedges()
 
 # ------------------------------------------------------------------ #
 #  Write to file

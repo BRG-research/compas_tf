@@ -25,7 +25,7 @@ class SherpaXL120Element(Element):
         Name of the element.
     """
 
-    WIDTH = 21.0
+    WIDTH = 18.0
 
     @property
     def __data__(self) -> dict:
