@@ -5,13 +5,16 @@ from compas.geometry import Polygon
 from compas.geometry import Polyline
 from compas.geometry import Plane
 from compas.geometry import Vector
+from compas.geometry import Projection
 from compas.geometry import intersection_segment_segment
 from compas.geometry import intersection_plane_plane_plane
 from compas.geometry import intersection_line_plane
 import math
 
 from compas_tf.geometry import BezierCurve
+from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineOffset
+from compas_tf.plate import PlateElement
 
 
 class FloorGuide(Data):
@@ -69,7 +72,7 @@ class FloorGuide(Data):
         self._q_poly = None
         self._c_poly = None
         self._axes = None
-        self._bound_parabolas = None
+        self._boundary_parabolas = None
         self._construction_planes = None
         self._quad_planes = None
         self._construction_quads = None
@@ -497,7 +500,7 @@ class FloorGuide(Data):
     def boundary_parabolas(self):
         """Boundary parabolas along the outer and inner rib axes,
         each flanked by two t-section offsets at +/- size_tsections."""
-        if self._bound_parabolas is None:
+        if self._boundary_parabolas is None:
             axes = [
                 self.construction_quads["outer_ribs"][0].lines[0],
                 self.construction_quads["outer_ribs"][1].lines[0],
@@ -514,10 +517,96 @@ class FloorGuide(Data):
                 q1_parabolas.append([
                     parabola,
                     PolylineOffset.offset_polyline(parabola, self.size_tsections),
-                    PolylineOffset.offset_polyline(parabola, -self.size_tsections),
+                    PolylineOffset.offset_polyline(parabola, 2*self.size_tsections),
                 ])
-            self._bound_parabolas = q1_parabolas
-        return self._bound_parabolas
+            self._boundary_parabolas = q1_parabolas
+        return self._boundary_parabolas
+    
+
+    @property
+    def beds(self):
+        """Create the bed geometry"""
+
+        # 1. Project polylines to planes
+        # 2. Cut the projected polylines by side planes
+
+        def panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1):
+
+            cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(parabola0, cut_plane0), cut_plane1)
+            cut1 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(parabola1, cut_plane0), cut_plane1)
+
+            cut00 = cut0.transformed(projection0)
+            cut01 = cut0.transformed(projection1)
+            cut10 = cut1.transformed(projection0)
+            cut11 = cut1.transformed(projection1)
+
+            plates = []
+            for i in range(len(cut00.points) - 1):
+                top = Polyline([
+                    cut00.points[i], cut00.points[i+1],
+                    cut01.points[i+1], cut01.points[i],
+                    cut00.points[i],
+                ])
+                bottom = Polyline([
+                    cut10.points[i], cut10.points[i+1],
+                    cut11.points[i+1], cut11.points[i],
+                    cut10.points[i],
+                ])
+                plates.append(PlateElement(top_polyline=top, bottom_polyline=bottom))
+            return plates
+
+        projected_parabolas = []
+
+        # Panel 1
+        parabola0 = self.boundary_parabolas[0][0]
+        parabola1 = self.boundary_parabolas[0][1]
+        projection0 = Projection.from_plane_and_direction(
+            self.construction_planes["inner_ribs"][0][0],
+            self.construction_planes["outer_ribs"][0][0].normal,
+        )
+        projection1 = Projection.from_plane_and_direction(
+            self.construction_planes["outer_ribs"][0][1],
+            self.construction_planes["outer_ribs"][0][0].normal,
+        )
+        cut_plane0 = self.construction_planes["inner_beams"][0][1]
+        cut_plane1 = self.construction_planes["wedges"][0][0]
+        projected_parabolas.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
+
+        # Panel 2
+        parabola0 = self.boundary_parabolas[2][0]
+        parabola1 = self.boundary_parabolas[2][1]
+        projection0 = Projection.from_plane_and_direction(
+            self.construction_planes["inner_ribs"][0][1],
+            self.construction_planes["inner_ribs"][0][0].normal-self.construction_planes["inner_ribs"][1][0].normal,
+        )
+        projection1 = Projection.from_plane_and_direction(
+            self.construction_planes["inner_ribs"][1][1],
+            self.construction_planes["inner_ribs"][0][0].normal-self.construction_planes["inner_ribs"][1][0].normal,
+        )
+        cut_plane0 = self.construction_planes["inner_beams"][1][1]
+        cut_plane1 = self.construction_planes["wedges"][1][0]
+        projected_parabolas.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
+
+
+        # Panel 3
+        parabola0 = self.boundary_parabolas[1][0]
+        parabola1 = self.boundary_parabolas[1][1]
+        projection0 = Projection.from_plane_and_direction(
+            self.construction_planes["inner_ribs"][1][0],
+            self.construction_planes["outer_ribs"][1][0].normal,
+        )
+        projection1 = Projection.from_plane_and_direction(
+            self.construction_planes["outer_ribs"][1][1],
+            self.construction_planes["outer_ribs"][1][0].normal,
+        )
+        cut_plane0 = self.construction_planes["inner_beams"][2][1]
+        cut_plane1 = self.construction_planes["wedges"][2][0]
+        projected_parabolas.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
+
+
+        return projected_parabolas
+
+
 
 
     # @property
@@ -595,7 +684,7 @@ class FloorGuide(Data):
     # @property
     # def boundary_parabolas(self):
     #     """Two boundary parabolas for first and last axes."""
-    #     if self._bound_parabolas is None:
+    #     if self._boundary_parabolas is None:
     #         divisions = 7
     #         q1_parabolas = []
 
@@ -612,5 +701,5 @@ class FloorGuide(Data):
     #             bezier = BezierCurve.quadratic_points(p0, p1, p2, divisions)
     #             q1_parabolas.append(bezier)
 
-    #         self._bound_parabolas = q1_parabolas
-    #     return self._bound_parabolas
+    #         self._boundary_parabolas = q1_parabolas
+    #     return self._boundary_parabolas

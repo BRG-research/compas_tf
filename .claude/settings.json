@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(uv pip install --python .venv\\\\Scripts\\\\python.exe -e \".[dev]\")",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"import compas, compas_model, compas_viewer, compas_cgal, compas_tf; from compas_tf.floor_guide import FloorGuide; from compas_tf.floor_model import FloorModel; from compas_tf.floor_builder import FloorBuilder; print\\('all imports OK'\\)\")"
+    ]
+  }
+}

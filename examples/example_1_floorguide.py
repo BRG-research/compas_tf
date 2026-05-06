@@ -98,4 +98,12 @@ g = viewer.scene.add_group("debug")
 for o in guide.debug:
     viewer.scene.add(o, parent=g)
 
+g = viewer.scene.add_group("beds")
+for i, plate in enumerate(guide.beds):
+    group = viewer.scene.add_group(f"bed_{i}", parent=g)
+    group.add(plate.elementgeometry, facecolor=Color.green(), show_lines=False)
+    group.add(plate.top_polyline, linecolor=Color.green())
+    group.add(plate.bottom_polyline, linecolor=Color.green())
+
+
 viewer.show()

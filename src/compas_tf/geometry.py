@@ -455,8 +455,12 @@ class PolylineCut:
     """Cutting and intersection operations for polylines."""
 
     @staticmethod
-    def cut_by_plane(polyline, plane, flip=False):
-        """Cut polyline by plane, keeping points on one side.
+    def cut_by_plane(polyline, plane, flip=None):
+        """Cut polyline by plane.
+
+        By default the side containing the polyline's arc-length midpoint is kept.
+        Pass ``flip=False``/``True`` to force the legacy fixed-side behavior
+        (keep side opposite to the plane normal, or aligned with it).
 
         Parameters
         ----------
@@ -464,34 +468,49 @@ class PolylineCut:
             Polyline to cut.
         plane : :class:`compas.geometry.Plane`
             Cutting plane.
-        flip : bool
-            If True, keep points on opposite side of plane normal.
+        flip : bool, optional
+            Manual override of which side to keep. ``None`` (default) picks the
+            side containing the polyline's center.
 
         Returns
         -------
         :class:`compas.geometry.Polyline`
             Cut polyline.
         """
+        if len(polyline) < 2:
+            return Polyline(list(polyline))
+
+        if flip is None:
+            center = polyline.point_at(0.5)
+            keep_sign = 1.0 if plane.normal.dot(center - plane.point) >= 0 else -1.0
+        else:
+            keep_sign = -1.0 if not flip else 1.0
+
+        def on_keep_side(pt):
+            return plane.normal.dot(pt - plane.point) * keep_sign >= 0
+
         points = []
-        normal = plane.normal if not flip else -plane.normal
-
         for i in range(len(polyline) - 1):
-            line = Line(polyline[i], polyline[i + 1])
-
-            vector = plane.point - polyline[i]
-            if normal.dot(vector) < 0:
+            if on_keep_side(polyline[i]):
                 points.append(polyline[i])
 
+            line = Line(polyline[i], polyline[i + 1])
             floats = intersection_segment_plane(line, plane)
             if floats:
                 points.append(Point(*floats))
 
-        # Check if last point should be included
-        vector = plane.point - polyline[-1]
-        if normal.dot(vector) < 0:
+        if on_keep_side(polyline[-1]):
             points.append(polyline[-1])
 
-        return Polyline(points)
+        # Drop consecutive near-duplicate points: a vertex lying on the plane gets
+        # accepted by on_keep_side (>= 0) and also returned by intersection_segment_plane.
+        tol = 1e-6
+        deduped = []
+        for p in points:
+            if not deduped or deduped[-1].distance_to_point(p) > tol:
+                deduped.append(p)
+
+        return Polyline(deduped)
 
     @staticmethod
     def cut_lines_by_plane(lines, plane):
