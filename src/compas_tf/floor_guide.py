@@ -76,6 +76,8 @@ class FloorGuide(Data):
         self._construction_planes = None
         self._quad_planes = None
         self._construction_quads = None
+        self._block_level_bottom = None
+        self._block_level_top = None
 
         self.debug = []
 
@@ -500,13 +502,20 @@ class FloorGuide(Data):
     def boundary_parabolas(self):
         """Boundary parabolas along the outer and inner rib axes,
         each flanked by two t-section offsets at +/- size_tsections."""
+
+        def _trim_end(line, amount):                                                
+            u = (line.end - line.start).unitized()                                  
+            return Line(line.start + u * amount, line.end )     
+
         if self._boundary_parabolas is None:
-            axes = [
-                self.construction_quads["outer_ribs"][0].lines[0],
-                self.construction_quads["outer_ribs"][1].lines[0],
-                self.construction_quads["inner_ribs"][0].lines[0],
-                self.construction_quads["inner_ribs"][1].lines[0],
+                                                                              
+            axes = [                                                                
+                _trim_end(self.construction_quads["outer_ribs"][0].lines[0],          
+            self.size_wedge),
+                _trim_end(self.construction_quads["outer_ribs"][1].lines[0],
+            self.size_wedge),
             ]
+
             divisions = 7
             q1_parabolas = []
             for axis in axes:
@@ -519,6 +528,23 @@ class FloorGuide(Data):
                     PolylineOffset.offset_polyline(parabola, self.size_tsections),
                     PolylineOffset.offset_polyline(parabola, 2*self.size_tsections),
                 ])
+
+            # Inner parabolas are projections
+            projection0 = Projection.from_plane_and_direction(self.construction_planes["inner_ribs"][0][0], self.construction_planes["outer_ribs"][0][0].normal)
+            projection1 = Projection.from_plane_and_direction(self.construction_planes["inner_ribs"][1][0], self.construction_planes["outer_ribs"][1][0].normal)
+
+            q1_parabolas.append([
+                q1_parabolas[0][0].transformed(projection0),
+                q1_parabolas[0][1].transformed(projection0),
+                q1_parabolas[0][2].transformed(projection0),
+            ])
+            q1_parabolas.append([
+                q1_parabolas[1][0].transformed(projection1),
+                q1_parabolas[1][1].transformed(projection1),
+                q1_parabolas[1][2].transformed(projection1),
+            ])
+
+
             self._boundary_parabolas = q1_parabolas
         return self._boundary_parabolas
     
@@ -532,8 +558,16 @@ class FloorGuide(Data):
 
         def panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1):
 
-            cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(parabola0, cut_plane0), cut_plane1)
-            cut1 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(parabola1, cut_plane0), cut_plane1)
+            def _extend_polyline_ends(pl, amount=1e6):                                  
+                pts = list(pl.points)                                                   
+                d0 = (pts[0] - pts[1]).unitized() * amount                              
+                d1 = (pts[-1] - pts[-2]).unitized() * amount                            
+                pts[0] = pts[0] + d0                                                
+                pts[-1] = pts[-1] + d1
+                return Polyline(pts)
+
+            cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(parabola0, amount=100), cut_plane0), cut_plane1)
+            cut1 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(parabola1, amount=100), cut_plane0), cut_plane1)
 
             cut00 = cut0.transformed(projection0)
             cut01 = cut0.transformed(projection1)
@@ -555,11 +589,11 @@ class FloorGuide(Data):
                 plates.append(PlateElement(top_polyline=top, bottom_polyline=bottom))
             return plates
 
-        projected_parabolas = []
+        plates = []
 
         # Panel 1
-        parabola0 = self.boundary_parabolas[0][0]
-        parabola1 = self.boundary_parabolas[0][1]
+        parabola0 = self.boundary_parabolas[0][1]
+        parabola1 = self.boundary_parabolas[0][2]
         projection0 = Projection.from_plane_and_direction(
             self.construction_planes["inner_ribs"][0][0],
             self.construction_planes["outer_ribs"][0][0].normal,
@@ -569,12 +603,12 @@ class FloorGuide(Data):
             self.construction_planes["outer_ribs"][0][0].normal,
         )
         cut_plane0 = self.construction_planes["inner_beams"][0][1]
-        cut_plane1 = self.construction_planes["wedges"][0][0]
-        projected_parabolas.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
+        cut_plane1 = self.construction_planes["wedges"][0][1]
+        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
 
         # Panel 2
-        parabola0 = self.boundary_parabolas[2][0]
-        parabola1 = self.boundary_parabolas[2][1]
+        parabola0 = self.boundary_parabolas[2][1]
+        parabola1 = self.boundary_parabolas[2][2]
         projection0 = Projection.from_plane_and_direction(
             self.construction_planes["inner_ribs"][0][1],
             self.construction_planes["inner_ribs"][0][0].normal-self.construction_planes["inner_ribs"][1][0].normal,
@@ -584,13 +618,13 @@ class FloorGuide(Data):
             self.construction_planes["inner_ribs"][0][0].normal-self.construction_planes["inner_ribs"][1][0].normal,
         )
         cut_plane0 = self.construction_planes["inner_beams"][1][1]
-        cut_plane1 = self.construction_planes["wedges"][1][0]
-        projected_parabolas.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
+        cut_plane1 = self.construction_planes["wedges"][1][1]
+        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
 
 
         # Panel 3
-        parabola0 = self.boundary_parabolas[1][0]
-        parabola1 = self.boundary_parabolas[1][1]
+        parabola0 = self.boundary_parabolas[1][1]
+        parabola1 = self.boundary_parabolas[1][2]
         projection0 = Projection.from_plane_and_direction(
             self.construction_planes["inner_ribs"][1][0],
             self.construction_planes["outer_ribs"][1][0].normal,
@@ -600,12 +634,274 @@ class FloorGuide(Data):
             self.construction_planes["outer_ribs"][1][0].normal,
         )
         cut_plane0 = self.construction_planes["inner_beams"][2][1]
-        cut_plane1 = self.construction_planes["wedges"][2][0]
-        projected_parabolas.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
+        cut_plane1 = self.construction_planes["wedges"][2][1]
+        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
 
 
-        return projected_parabolas
+        return plates
+    
 
+    @property
+    def tsections(self):
+        """Create the tsections geometry"""
+
+
+        def panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection10, projection11):
+
+
+
+            cut00 = parabola0.transformed(projection0) # face 0 top
+            cut10 = parabola1.transformed(projection0) # face 0 bottom
+
+            cut01 = cut00.transformed(projection10) # face 1 top
+            cut11 = cut10.transformed(projection11) # face 1 bottom
+
+            def _extend_polyline_ends(pl, amount=1e6):                                  
+                pts = list(pl.points)                                                   
+                d0 = (pts[0] - pts[1]).unitized() * amount                              
+                d1 = (pts[-1] - pts[-2]).unitized() * amount                            
+                pts[0] = pts[0] + d0                                                
+                pts[-1] = pts[-1] + d1
+                return Polyline(pts)
+
+            cut00 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(cut00, amount=100), cut_plane0), cut_plane1)
+            cut01 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(cut01, amount=100), cut_plane0), cut_plane1)
+            cut10 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(cut10, amount=100), cut_plane0), cut_plane1)
+            cut11 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(cut11, amount=100), cut_plane0), cut_plane1)
+
+            top = Polyline(cut00.points+cut10.points[::-1]+[cut00.points[0]])
+            bottom = Polyline(cut01.points+cut11.points[::-1]+[cut01.points[0]])
+            self.debug.append(top)
+            self.debug.append(bottom)
+            return [PlateElement(top_polyline=top, bottom_polyline=bottom)]
+
+        plates = []
+
+        # T-section 1 same T-section 4 
+        parabola0 = self.boundary_parabolas[0][0]
+        parabola1 = self.boundary_parabolas[0][1]
+        dir = self.construction_planes["outer_ribs"][0][0].normal
+        projection0 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][0][0], dir)
+        projection1 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][0][1], dir)
+        cut_plane0 = self.construction_planes["inner_beams"][0][1]
+        cut_plane1 = self.construction_planes["wedges"][0][1]
+        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1, projection1))
+
+        # T-section 2a same as T-section 4
+        parabola0 = self.boundary_parabolas[0][0]
+        parabola1 = self.boundary_parabolas[0][1]
+        dir0 = self.construction_planes["outer_ribs"][0][0].normal
+        dir1 = self.construction_planes["inner_ribs"][0][0].normal-self.construction_planes["inner_ribs"][1][0].normal
+        projection0 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][1][0], dir0)
+        projection10 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][1][1], dir1)
+        projection11 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][1][1], dir0)
+        cut_plane0 = self.construction_planes["inner_beams"][0][1]
+        cut_plane1 = self.construction_planes["wedges"][0][1]
+        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection10, projection11))
+
+        # T-section 2b
+        parabola0 = self.boundary_parabolas[2][0]
+        parabola1 = self.boundary_parabolas[2][1]
+        dir0 = self.construction_planes["inner_ribs"][0][0].normal-self.construction_planes["inner_ribs"][1][0].normal
+        projection0 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][2][0], dir0)
+        projection10 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][2][1], dir0)
+        projection11 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][2][1], dir0)
+        cut_plane0 = self.construction_planes["inner_beams"][1][1]
+        cut_plane1 = self.construction_planes["wedges"][1][1]
+        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection10, projection11))
+
+        # T-section 3a
+        parabola0 = self.boundary_parabolas[3][0]
+        parabola1 = self.boundary_parabolas[3][1]
+        dir0 = self.construction_planes["inner_ribs"][0][0].normal-self.construction_planes["inner_ribs"][1][0].normal
+        dir1 = self.construction_planes["t_sections"][4][1].normal
+        projection0 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][4][0], dir0)
+        projection10 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][4][1], dir0)
+        projection11 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][4][1], dir0)
+        cut_plane0 = self.construction_planes["inner_beams"][1][1]
+        cut_plane1 = self.construction_planes["wedges"][1][1]
+        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection10, projection11))
+
+
+
+
+        # T-section 3b
+        parabola0 = self.boundary_parabolas[1][0]
+        parabola1 = self.boundary_parabolas[1][1]
+        dir0 = self.construction_planes["outer_ribs"][1][0].normal
+        dir1 = self.construction_planes["inner_ribs"][0][0].normal-self.construction_planes["inner_ribs"][1][0].normal
+        projection0 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][3][0], dir0)
+        projection10 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][3][1], dir1)
+        projection11 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][3][1], dir0)
+        cut_plane0 = self.construction_planes["inner_beams"][2][1]
+        cut_plane1 = self.construction_planes["wedges"][2][1]
+        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection10, projection11))
+
+        # T-section 4 
+        parabola0 = self.boundary_parabolas[1][0]
+        parabola1 = self.boundary_parabolas[1][1]
+        dir = self.construction_planes["outer_ribs"][1][0].normal
+        projection0 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][5][0], dir)
+        projection1 = Projection.from_plane_and_direction(self.construction_planes["t_sections"][5][1], dir)
+        cut_plane0 = self.construction_planes["inner_beams"][2][1]
+        cut_plane1 = self.construction_planes["wedges"][2][1]
+        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1, projection1))
+
+
+        return plates
+    
+
+
+    @property
+    def outer_ribs(self):
+        """Create the ribs geometry"""
+
+        plates = []
+
+        def outline_polyline(parabola, projection, cut_plane0, cut_plane1):
+            # Implementation for creating outline polyline
+
+            def _extend_polyline_ends(pl, amount=1e6):                                  
+                pts = list(pl.points)                                                   
+                d0 = (pts[0] - pts[1]).unitized() * amount                              
+                d1 = (pts[-1] - pts[-2]).unitized() * amount                            
+                pts[0] = pts[0] + d0                                                
+                pts[-1] = pts[-1] + d1
+                return Polyline(pts)
+
+            cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(parabola, amount=100), cut_plane0), cut_plane1)
+            
+            p0 = Point(cut0[0][0], cut0[0][1], 0)
+            p1 = Point(cut0[-1][0], cut0[-1][1], 0)
+            p0_extended = p0 - (p1 - p0).unitized() * self.size_wedge
+
+            p0_moved_down = Point(p0[0], p0[1], cut0[0][2]) + Vector(0, 0, self.size_wedge)
+            p0_extended_moved_down = Point(p0_extended[0], p0_extended[1], cut0[0][2]) + Vector(0, 0, self.size_wedge)
+
+            polyline0 = Polyline([p1, p0_extended, p0_extended_moved_down, p0_moved_down ] + cut0.points + [p1])
+            pollyine1 = polyline0.transformed(projection)
+            plate = PlateElement(top_polyline=polyline0, bottom_polyline=pollyine1)
+            return plate
+        
+
+        projection0 = Projection.from_plane_and_direction(
+            self.construction_planes["outer_ribs"][0][1],
+            self.construction_planes["outer_ribs"][0][1].normal,
+        )
+        projection1 = Projection.from_plane_and_direction(
+            self.construction_planes["outer_ribs"][1][1],
+            self.construction_planes["outer_ribs"][1][1].normal,
+        )
+        plates.append(outline_polyline(self.boundary_parabolas[0][0], projection0,  self.construction_planes["wedges"][0][1], self.construction_planes["inner_beams"][0][0]))
+        plates.append(outline_polyline(self.boundary_parabolas[1][0], projection1, self.construction_planes["wedges"][2][1], self.construction_planes["inner_beams"][2][0]))
+
+        return plates
+
+    @property
+    def inner_ribs(self):
+        """Create the ribs geometry"""
+
+        plates = []
+
+        def outline_polyline(parabola, projection, cut_plane0, cut_plane1):
+            # Implementation for creating outline polyline
+
+            def _extend_polyline_ends(pl, amount=1e6):                                  
+                pts = list(pl.points)                                                   
+                d0 = (pts[0] - pts[1]).unitized() * amount                              
+                d1 = (pts[-1] - pts[-2]).unitized() * amount                            
+                pts[0] = pts[0] + d0                                                
+                pts[-1] = pts[-1] + d1
+                return Polyline(pts)
+
+            cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(parabola, amount=100), cut_plane0), cut_plane1)
+            
+            p0 = Point(cut0[0][0], cut0[0][1], 0)
+            p1 = Point(cut0[-1][0], cut0[-1][1], 0)
+            p1 = Point(*intersection_line_plane(Line(p0, p1), cut_plane1))
+
+            # Determine distance
+            p0_extended = Point(*intersection_line_plane(Line(p0, p1), self.construction_planes["wedges"][1][0]))
+
+            self._block_level_bottom = cut0[0][2]
+            self._block_level_top = self._block_level_bottom+self.size_wedge
+            p0_moved_down = Point(p0[0], p0[1], cut0[0][2]) + Vector(0, 0, self.size_wedge)
+            p0_extended_moved_down = Point(p0_extended[0], p0_extended[1], cut0[0][2]) + Vector(0, 0, self.size_wedge)
+
+            polyline0 = Polyline([p1, p0_extended, p0_extended_moved_down, p0_moved_down ] + cut0.points + [p1])
+            pollyine1 = polyline0.transformed(projection)
+            plate = PlateElement(top_polyline=polyline0, bottom_polyline=pollyine1)
+            return plate
+        
+
+        projection0 = Projection.from_plane_and_direction(
+            self.construction_planes["inner_ribs"][0][1],
+            self.construction_planes["inner_ribs"][0][1].normal- self.construction_planes["inner_ribs"][1][1].normal,
+        )
+        projection1 = Projection.from_plane_and_direction(
+            self.construction_planes["inner_ribs"][1][1],
+            self.construction_planes["inner_ribs"][0][1].normal- self.construction_planes["inner_ribs"][1][1].normal,
+        )
+        plates.append(outline_polyline(self.boundary_parabolas[2][0], projection0,  self.construction_planes["wedges"][1][1], self.construction_planes["inner_beams"][1][1]))
+        plates.append(outline_polyline(self.boundary_parabolas[3][0], projection1, self.construction_planes["wedges"][1][1], self.construction_planes["inner_beams"][1][1]))
+
+        return plates
+
+
+    @property
+    def wedge_block(self):
+
+        # Create a block for the wedge geometry, which is used to cut the ribs and beams.
+        # The block is defined by the planes of the outer ribs and the planes of the inner beams.
+
+        planes = [
+                self.construction_planes["outer_ribs"][0][0],
+                self.construction_planes["wedges"][0][0],
+                self.construction_planes["wedges"][1][0],
+                self.construction_planes["wedges"][2][0],
+                self.construction_planes["outer_ribs"][1][0],
+                self.construction_planes["wedges"][2][1],
+                self.construction_planes["wedges"][1][1],
+                self.construction_planes["wedges"][0][1],
+        ]
+
+        bottom_plane = Plane((0, 0, self._block_level_bottom), Vector(0, 0, 1))
+        top_plane = Plane((0, 0, self._block_level_top), Vector(0, 0, 1))
+
+        def _corners(h_plane):
+            pts = []
+            n = len(planes)
+            for i in range(n):
+                a = planes[i]
+                b = planes[(i + 1) % n]
+                result = intersection_plane_plane_plane(a, b, h_plane)
+                if result:
+                    pts.append(Point(*result))
+            return pts
+
+        bottom_corners = _corners(bottom_plane)
+        top_corners = _corners(top_plane)
+
+        bottom_polyline = Polyline(bottom_corners + [bottom_corners[0]])
+        top_polyline = Polyline(top_corners + [top_corners[0]])
+
+        return [PlateElement(top_polyline=top_polyline, bottom_polyline=bottom_polyline)]
+
+
+    @property
+    def wedges_column(self):
+        """3 wedges + 2 sherpa connections + 3 collumn cutting blocks"""
+        pass
+
+    @property
+    def inner_beams(self):
+        """Flip the middle beam."""
+        pass
+
+    @property
+    def wedges_inner_beam(self):
+        """3 wedges + Bolts connection to inner beams"""
+        pass
 
 
 

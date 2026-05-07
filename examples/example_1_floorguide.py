@@ -94,16 +94,44 @@ for parabolas in guide.boundary_parabolas:
     for parabola in parabolas:
         viewer.scene.add(parabola, parent=g, linecolor=Color.red())
 
-g = viewer.scene.add_group("debug")
-for o in guide.debug:
-    viewer.scene.add(o, parent=g)
-
 g = viewer.scene.add_group("beds")
 for i, plate in enumerate(guide.beds):
     group = viewer.scene.add_group(f"bed_{i}", parent=g)
-    group.add(plate.elementgeometry, facecolor=Color.green(), show_lines=False)
-    group.add(plate.top_polyline, linecolor=Color.green())
-    group.add(plate.bottom_polyline, linecolor=Color.green())
+    group.add(plate.elementgeometry, facecolor=Color.green(), show_lines=True)
+    group.add(plate.top_polyline, linecolor=Color.black())
+    group.add(plate.bottom_polyline, linecolor=Color.black())
 
+g = viewer.scene.add_group("tsections")
+for i, plate in enumerate(guide.tsections):
+    group = viewer.scene.add_group(f"tsection_{i}", parent=g)
+    group.add(plate.elementgeometry, facecolor=Color.orange(), show_lines=True)
+    group.add(plate.top_polyline, linecolor=Color.black())
+    group.add(plate.bottom_polyline, linecolor=Color.black())
+
+
+for i, plate in enumerate(guide.outer_ribs):
+    group = viewer.scene.add_group(f"plate_{i}", parent=g)
+    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
+    group.add(plate.top_polyline, linecolor=Color.black())
+    group.add(plate.bottom_polyline, linecolor=Color.black())
+
+
+for i, plate in enumerate(guide.inner_ribs):
+    group = viewer.scene.add_group(f"plate_{i}", parent=g)
+    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
+    group.add(plate.top_polyline, linecolor=Color.black())
+    group.add(plate.bottom_polyline, linecolor=Color.black())
+
+
+for i, plate in enumerate(guide.wedge_block):
+    group = viewer.scene.add_group(f"plate_{i}", parent=g)
+    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
+    group.add(plate.top_polyline, linecolor=Color.black())
+    group.add(plate.bottom_polyline, linecolor=Color.black())
+
+
+g = viewer.scene.add_group("debug")
+for o in guide.debug:
+    viewer.scene.add(o, parent=g)
 
 viewer.show()
