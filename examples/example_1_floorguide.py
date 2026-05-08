@@ -130,8 +130,65 @@ for i, plate in enumerate(guide.wedge_block):
     group.add(plate.bottom_polyline, linecolor=Color.black())
 
 
+for i, plate in enumerate(guide.wedges_column):
+    group = viewer.scene.add_group(f"plate_{i}", parent=g)
+    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
+    group.add(plate.top_polyline, linecolor=Color.black())
+    group.add(plate.bottom_polyline, linecolor=Color.black())
+
+for i, plate in enumerate(guide.inner_beams):
+    group = viewer.scene.add_group(f"plate_{i}", parent=g)
+    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
+    group.add(plate.top_polyline, linecolor=Color.black())
+    group.add(plate.bottom_polyline, linecolor=Color.black())
+
+g = viewer.scene.add_group("sherpas")
+for i, sherpa in enumerate(guide.sherpas):
+    viewer.scene.add(sherpa.elementgeometry, facecolor=Color.red(), show_lines=True, parent=g)
+
+
 g = viewer.scene.add_group("debug")
 for o in guide.debug:
     viewer.scene.add(o, parent=g)
+
+
+# ------------------------------------------------------------------ #
+#  OBJ export
+# ------------------------------------------------------------------ #
+
+def export_meshes_to_obj(named_plates, filepath):
+    lines = []
+    vertex_offset = 1  # OBJ indices are 1-based
+
+    for name, plates in named_plates:
+        for i, plate in enumerate(plates):
+            mesh = plate.elementgeometry
+            if mesh is None:
+                continue
+            vertices, faces = mesh.to_vertices_and_faces()
+            lines.append(f"o {name}_{i}")
+            for v in vertices:
+                lines.append(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}")
+            for face in faces:
+                indices = " ".join(str(j + vertex_offset) for j in face)
+                lines.append(f"f {indices}")
+            vertex_offset += len(vertices)
+
+    with open(filepath, "w") as f:
+        f.write("\n".join(lines))
+    print(f"Exported OBJ: {filepath}")
+
+
+named_plates = [
+    ("bed", guide.beds),
+    ("tsection", guide.tsections),
+    ("outer_rib", guide.outer_ribs),
+    ("inner_rib", guide.inner_ribs),
+    ("wedge_block", guide.wedge_block),
+    ("wedge_column", guide.wedges_column),
+]
+
+export_meshes_to_obj(named_plates, data_dir / "floorguide.obj")
+
 
 viewer.show()

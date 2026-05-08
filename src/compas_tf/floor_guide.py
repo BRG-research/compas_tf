@@ -188,7 +188,8 @@ class FloorGuide(Data):
             # 2. inner beams, NOTE the central plane has rotation - oculus_plane_angle
             plane0 = Plane(self.quarter_polygon.lines[1].midpoint, Vector.cross(self.quarter_polygon.lines[1].direction, -Vector.Zaxis()))
             plane1 = Plane(self.quarter_polygon.lines[2].midpoint, Vector.cross(self.quarter_polygon.lines[2].direction, -Vector.Zaxis()))
-            plane1.rotate(-oculus_plane_angle* math.pi / 180, self.quarter_polygon.lines[2].direction, self.quarter_polygon.lines[2].midpoint)
+            plane1_rotated = plane1.copy()
+            plane1_rotated.rotate(-oculus_plane_angle* math.pi / 180, self.quarter_polygon.lines[2].direction, self.quarter_polygon.lines[2].midpoint)
             plane2 = Plane(self.quarter_polygon.lines[3].midpoint, Vector.cross(self.quarter_polygon.lines[3].direction, -Vector.Zaxis()))
             construction_planes["inner_beams"]=[
                 [
@@ -196,7 +197,7 @@ class FloorGuide(Data):
                     plane0.offset(self.size_inner_beams),
                 ],
                 [
-                    plane1.copy(),
+                    plane1_rotated.copy(),
                     plane1.offset(self.size_inner_beams)
                 ],
                 [
@@ -546,8 +547,22 @@ class FloorGuide(Data):
 
 
             self._boundary_parabolas = q1_parabolas
+
         return self._boundary_parabolas
-    
+
+    @property
+    def block_level_bottom(self):
+        """Bottom level of the block - used for ribs and wedges."""
+        if self._block_level_bottom is None:
+            self._block_level_bottom = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(self.boundary_parabolas[2][0], self.construction_planes["wedges"][1][1]), self.construction_planes["inner_beams"][1][1])[0].z
+        return self._block_level_bottom
+
+    @property
+    def block_level_top(self):
+        """Top level of the block - used for ribs and wedges."""
+        if self._block_level_top is None:
+            self._block_level_top = self._block_level_bottom + self.size_wedge
+        return self._block_level_top
 
     @property
     def beds(self):
@@ -640,7 +655,6 @@ class FloorGuide(Data):
 
         return plates
     
-
     @property
     def tsections(self):
         """Create the tsections geometry"""
@@ -750,8 +764,6 @@ class FloorGuide(Data):
 
         return plates
     
-
-
     @property
     def outer_ribs(self):
         """Create the ribs geometry"""
@@ -822,11 +834,8 @@ class FloorGuide(Data):
 
             # Determine distance
             p0_extended = Point(*intersection_line_plane(Line(p0, p1), self.construction_planes["wedges"][1][0]))
-
-            self._block_level_bottom = cut0[0][2]
-            self._block_level_top = self._block_level_bottom+self.size_wedge
-            p0_moved_down = Point(p0[0], p0[1], cut0[0][2]) + Vector(0, 0, self.size_wedge)
-            p0_extended_moved_down = Point(p0_extended[0], p0_extended[1], cut0[0][2]) + Vector(0, 0, self.size_wedge)
+            p0_moved_down = Point(p0[0], p0[1], self.block_level_bottom) + Vector(0, 0, self.size_wedge)
+            p0_extended_moved_down = Point(p0_extended[0], p0_extended[1], self.block_level_bottom) + Vector(0, 0, self.size_wedge)
 
             polyline0 = Polyline([p1, p0_extended, p0_extended_moved_down, p0_moved_down ] + cut0.points + [p1])
             pollyine1 = polyline0.transformed(projection)
@@ -847,7 +856,6 @@ class FloorGuide(Data):
 
         return plates
 
-
     @property
     def wedge_block(self):
 
@@ -865,8 +873,8 @@ class FloorGuide(Data):
                 self.construction_planes["wedges"][0][1],
         ]
 
-        bottom_plane = Plane((0, 0, self._block_level_bottom), Vector(0, 0, 1))
-        top_plane = Plane((0, 0, self._block_level_top), Vector(0, 0, 1))
+        bottom_plane = Plane((0, 0, self.block_level_bottom), Vector(0, 0, 1))
+        top_plane = Plane((0, 0, self.block_level_top), Vector(0, 0, 1))
 
         def _corners(h_plane):
             pts = []
@@ -887,16 +895,210 @@ class FloorGuide(Data):
 
         return [PlateElement(top_polyline=top_polyline, bottom_polyline=bottom_polyline)]
 
-
     @property
     def wedges_column(self):
         """3 wedges + 2 sherpa connections + 3 collumn cutting blocks"""
-        pass
+
+        top_plane = Plane((0, 0, 0), Vector(0, 0, 1))
+        bottom_plane0 = Plane((0, 0, self.block_level_top), Vector(0, 0, 1))
+        bottom_plane1 =   Plane((0, 0, -self.static_h+self.size_tsections*2), Vector(0, 0, 1))
+
+        def _wedge(planes, bottom_plane, top_plane):
+            pts_bottom, pts_top = [], []
+            n = len(planes)
+            for i in range(n):
+                a = planes[i]
+                b = planes[(i + 1) % n]
+                rb = intersection_plane_plane_plane(a, b, bottom_plane)
+                rt = intersection_plane_plane_plane(a, b, top_plane)
+                if rb:
+                    pts_bottom.append(Point(*rb))
+                if rt:
+                    pts_top.append(Point(*rt))
+            return PlateElement(
+                top_polyline=Polyline(pts_top + [pts_top[0]]),
+                bottom_polyline=Polyline(pts_bottom + [pts_bottom[0]]),
+            )
+
+        return [
+            _wedge([
+                self.construction_planes["outer_ribs"][0][1],
+                self.construction_planes["wedges"][0][0],
+                self.construction_planes["inner_ribs"][0][0],
+                self.construction_planes["wedges"][0][1],
+            ],
+             bottom_plane=bottom_plane0,
+             top_plane=top_plane,
+            ),
+            _wedge([
+                self.construction_planes["inner_ribs"][0][1],
+                self.construction_planes["wedges"][1][0],
+                self.construction_planes["inner_ribs"][1][1],
+                self.construction_planes["wedges"][1][1],
+            ],
+             bottom_plane=bottom_plane0,
+             top_plane=top_plane,
+            ),
+            _wedge([
+                self.construction_planes["inner_ribs"][1][0],
+                self.construction_planes["wedges"][2][0],
+                self.construction_planes["outer_ribs"][1][1],
+                self.construction_planes["wedges"][2][1],
+            ],
+             bottom_plane=bottom_plane0,
+             top_plane=top_plane,
+            ),
+            _wedge([
+                self.construction_planes["outer_ribs"][0][1],
+                self.construction_planes["wedges"][3][0],
+                self.construction_planes["inner_ribs"][0][0],
+                self.construction_planes["wedges"][3][1],
+            ],
+             bottom_plane=bottom_plane1,
+             top_plane=top_plane,
+            ),
+            _wedge([
+                self.construction_planes["inner_ribs"][0][1],
+                self.construction_planes["wedges"][4][0],
+                self.construction_planes["inner_ribs"][1][1],
+                self.construction_planes["wedges"][4][1],
+            ],
+             bottom_plane=bottom_plane1,
+             top_plane=top_plane,
+            ),
+            _wedge([
+                self.construction_planes["inner_ribs"][1][0],
+                self.construction_planes["wedges"][5][0],
+                self.construction_planes["outer_ribs"][1][1],
+                self.construction_planes["wedges"][5][1],
+            ],
+             bottom_plane=bottom_plane1,
+             top_plane=top_plane,
+            ),
+        ]
+    
+    @property
+    def sherpas(self):
+        """Sherpa connections to inner beams at 0 and 2 wedge 0 planes."""
+        from compas.geometry import Frame
+        from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+
+        # Sherpa height based on foces = 370 mm
+        height = 370
+
+        # Frame origina
+        base_plane = Plane((0, 0, -height*0.5), Vector(0, 0, 1))
+        
+        p0 = Point(*intersection_plane_plane_plane(
+            base_plane,
+            self.construction_planes["outer_ribs"][0][0].offset(self.size_outer_ribs*0.5),
+            self.construction_planes["wedges"][0][0]
+        ))
+
+
+        p2 = Point(*intersection_plane_plane_plane(
+            base_plane,
+            self.construction_planes["outer_ribs"][1][0].offset(self.size_outer_ribs*0.5),
+            self.construction_planes["wedges"][2][0]
+        ))
+
+
+        frame0 = Frame.from_plane(self.construction_planes["wedges"][0][0])
+        frame1 = Frame.from_plane(self.construction_planes["wedges"][1][0]).translated(Vector(0, 0, -height*0.5))
+        frame2 = Frame.from_plane(self.construction_planes["wedges"][2][0])
+        frame0 = Frame(p0, frame0.xaxis, frame0.yaxis)
+        frame2 = Frame(p2, frame2.xaxis, frame2.yaxis)
+
+        # Boolean Cuts
+        extension = 100
+        plates = []
+        for i in range(3):
+            dir = self.quarter_column_polygon[1+i] - self.quarter_column_polygon[2+i]
+            dir = dir.unitized()
+            dir*= extension
+            top = Polyline([
+                self.quarter_column_polygon[1+i]- Vector(0, 0, -extension)+dir,
+                self.quarter_column_polygon[2+i]- Vector(0, 0, -extension)-dir,
+                self.quarter_column_polygon[2+i]- Vector(0, 0, -self.block_level_bottom)-dir,
+                self.quarter_column_polygon[1+i]- Vector(0, 0, -self.block_level_bottom)+dir,
+                self.quarter_column_polygon[1+i]- Vector(0, 0, -extension)+dir,
+            ])
+
+            bottom = top.translated(self.construction_planes["wedges"][i][0].normal * extension)
+            plate = PlateElement(top=top, bottom=bottom)
+            plates.append(plate)
+
+
+
+
+        return [
+            SherpaXL120Element(depth=80, height=height, frame=frame0, name="sherpa_0"),
+            # SherpaXL120Element(depth=80, height=height, frame=frame1, name="sherpa_1"),
+            SherpaXL120Element(depth=80, height=height, frame=frame2, name="sherpa_2"),
+            *plates
+        ]
+    
+
 
     @property
     def inner_beams(self):
         """Flip the middle beam."""
-        pass
+        
+        # Beam1
+
+
+        def _wedge(planes, bottom_plane, top_plane):
+            pts_bottom, pts_top = [], []
+            n = len(planes)
+            for i in range(n):
+                a = planes[i]
+                b = planes[(i + 1) % n]
+                rb = intersection_plane_plane_plane(a, b, bottom_plane)
+                rt = intersection_plane_plane_plane(a, b, top_plane)
+                if rb:
+                    pts_bottom.append(Point(*rb))
+                if rt:
+                    pts_top.append(Point(*rt))
+            return PlateElement(
+                top_polyline=Polyline(pts_top + [pts_top[0]]),
+                bottom_polyline=Polyline(pts_bottom + [pts_bottom[0]]),
+            )
+        side0 = Plane((0, 0, 0), Vector(0, 0, 1))
+        side1 = Plane((0, 0, -self.static_h), Vector(0, 0, 1))
+        return [
+                _wedge([
+                    self.construction_planes["outer_ribs"][0][1],
+                    side0,
+                    self.construction_planes["inner_beams"][1][0],
+                    side1,
+                ],
+                bottom_plane=self.construction_planes["inner_beams"][0][0],
+                top_plane=self.construction_planes["inner_beams"][0][1],
+                ),
+
+                _wedge([
+                    self.construction_planes["inner_beams"][0][1],
+                    side0,
+                    self.construction_planes["inner_beams"][2][1],
+                    side1,
+                ],
+                bottom_plane=self.construction_planes["inner_beams"][1][0],
+                top_plane=self.construction_planes["inner_beams"][1][1],
+                ),
+
+                _wedge([
+                    self.construction_planes["outer_ribs"][1][1],
+                    side0,
+                    self.construction_planes["inner_beams"][1][0],
+                    side1,
+                ],
+                bottom_plane=self.construction_planes["inner_beams"][2][0],
+                top_plane=self.construction_planes["inner_beams"][2][1],
+                ),
+
+            ]
+
+
 
     @property
     def wedges_inner_beam(self):

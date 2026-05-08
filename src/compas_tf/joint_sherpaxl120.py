@@ -47,8 +47,10 @@ class SherpaXL120Element(Element):
     ):
         super().__init__(transformation=transformation, features=None, name=name)
         w = self.WIDTH
-        self._box = Box.from_width_height_depth(depth, height, w)
-        self._box.frame = Frame([0, w / 2, -height / 2], [1, 0, 0], [0, 1, 0])
+        self._box = Box.from_width_height_depth(depth, w, height)
+        self._box.frame = Frame([0, 0, -w/2], [1, 0, 0], [0, 1, 0])
+        if frame is not None:
+            self._box.transform(Transformation.from_frame(frame))
 
     @property
     def box(self) -> Box:
