@@ -606,8 +606,12 @@ class PolylineLoft:
             faces.append([i, next_i, next_i + n0, i + n0])
 
         if cap:
-            faces.append(list(range(n0 - 1, -1, -1)))
-            faces.append(list(range(n0, 2 * n0)))
+            bottom_triangles = earclip_polygon(Polygon(list(reversed(pts0))))
+            for tri in bottom_triangles:
+                faces.append([n0 - 1 - tri[0], n0 - 1 - tri[1], n0 - 1 - tri[2]])
+            top_triangles = earclip_polygon(Polygon(pts1))
+            for tri in top_triangles:
+                faces.append([tri[0] + n0, tri[1] + n0, tri[2] + n0])
 
         return Mesh.from_vertices_and_faces(vertices, faces)
 
