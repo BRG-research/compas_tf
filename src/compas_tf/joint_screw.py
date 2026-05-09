@@ -2,6 +2,7 @@ from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
+from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Point
 from compas.geometry import Polygon
@@ -105,7 +106,7 @@ class ScrewElement(Element):
     def compute_aabb(self, inflate: float = 1.0) -> Box:
         line = self.axis
         midpoint = line.midpoint
-        box = Box(self.diameter_head * inflate, self.diameter_head * inflate, self.height * inflate, frame=midpoint)
+        box = Box(self.diameter_head * inflate, self.diameter_head * inflate, self.height * inflate, frame=Frame(midpoint))
         self._aabb = box
         return box
 

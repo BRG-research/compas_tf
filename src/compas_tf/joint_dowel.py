@@ -2,6 +2,7 @@ from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
+from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Point
 from compas.geometry import Polyline
@@ -102,7 +103,7 @@ class DowelElement(Element):
         line = self.axis
         midpoint = line.midpoint
         size = max(self.width, self.depth)
-        box = Box(size * inflate, size * inflate, self.height * inflate, frame=midpoint)
+        box = Box(size * inflate, size * inflate, self.height * inflate, frame=Frame(midpoint))
         self._aabb = box
         return box
 

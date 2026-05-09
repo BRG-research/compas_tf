@@ -111,50 +111,97 @@ def _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh):
 
 
 class SolidDifferenceModifier(Modifier):
-    @staticmethod
-    def apply_batch(sources: list, targetgeometry: Mesh) -> Mesh:
-        """Apply all cutters in a single boolean_chain call (one C++ round-trip).
 
-        Uses ``boolean_chain_with_face_source`` so every output triangle carries
-        ``[mesh_id, face_id]`` provenance from CGAL.  Triangles sharing the same
-        source face are merged back into one n-gon polygon, producing a clean
-        polygonal mesh instead of a triangle soup.
+    SUPPORTED_WITH_FACE_SOURCE = {"union", "difference", "intersection"}
+
+    def __init__(self, operation: str = "difference", name: str = None):
+        """Boolean modifier with a configurable operation type.
+
+        Parameters
+        ----------
+        operation : str
+            One of ``"difference"``, ``"union"``, ``"intersection"``, ``"xor"``.
+            ``"xor"`` falls back to ``boolean_chain`` (no face-source tracking).
+        """
+        super().__init__(name=name)
+        if operation not in ("difference", "union", "intersection", "xor"):
+            raise ValueError(f"Unknown boolean operation '{operation}'. Use difference/union/intersection/xor.")
+        self.operation = operation
+
+    @property
+    def __data__(self) -> dict:
+        return {"operation": self.operation}
+
+    @classmethod
+    def __from_data__(cls, data: dict) -> "SolidDifferenceModifier":
+        return cls(operation=data.get("operation", "difference"))
+
+    @staticmethod
+    def apply_batch(sources: list, targetgeometry: Mesh, operations: list = None) -> Mesh:
+        """Apply a sequence of boolean operations in a single CGAL call.
+
+        Each entry in ``sources`` corresponds to the operation at the same index
+        in ``operations``.  Supported values: ``"difference"``, ``"union"``,
+        ``"intersection"``.  If any operation is ``"xor"``, the method falls
+        back to ``boolean_chain`` (no face-source tracking, triangle output).
 
         Parameters
         ----------
         sources : list of :class:`compas.datastructures.Mesh`
-            Cutter meshes (must be closed).
         targetgeometry : :class:`compas.datastructures.Mesh`
-            The mesh to cut into.
+        operations : list of str, optional
+            Per-source operation strings.  Defaults to ``["difference"] * n``.
 
         Returns
         -------
         :class:`compas.datastructures.Mesh`
-            Polygonal result mesh, or original if the operation fails.
         """
-        from compas_cgal.booleans import boolean_chain_with_face_source
+        if operations is None:
+            operations = ["difference"] * len(sources)
 
-        # Triangulate each mesh manually to track tri_face_id → original_face_id
+        has_xor = any(op == "xor" for op in operations)
+
         all_vf = []
+        for mesh in [targetgeometry] + list(sources):
+            verts, tris, _ = _triangulate_mesh(mesh)
+            all_vf.append((verts, tris))
+
+        op_summary = "+".join(sorted(set(operations)))
+        print(f"[batch-bool] boolean_chain ({op_summary}): target + {len(sources)} mesh(es)")
+
+        if has_xor:
+            # xor is only supported by boolean_chain (no face-source tracking)
+            from compas_cgal.booleans import boolean_chain
+            try:
+                V, F = boolean_chain(all_vf, operations)
+            except Exception as exc:
+                print(f"[batch-bool] boolean_chain (xor) failed: {exc}")
+                return targetgeometry
+            if not V.size or not F.size:
+                print("[batch-bool] empty result, keeping original")
+                return targetgeometry
+            print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
+            return Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
+
+        from compas_cgal.booleans import boolean_chain_with_face_source
         tri_to_orig_per_mesh = []
+        all_vf_tracked = []
         for mesh in [targetgeometry] + list(sources):
             verts, tris, tri_to_orig = _triangulate_mesh(mesh)
-            all_vf.append((verts, tris))
+            all_vf_tracked.append((verts, tris))
             tri_to_orig_per_mesh.append(tri_to_orig)
 
-        operations = ["difference"] * len(sources)
-        print(f"[batch-diff] boolean_chain: target + {len(sources)} cutter(s)")
         try:
-            V, F, S = boolean_chain_with_face_source(all_vf, operations)
+            V, F, S = boolean_chain_with_face_source(all_vf_tracked, operations)
         except Exception as exc:
-            print(f"[batch-diff] boolean_chain failed: {exc}")
+            print(f"[batch-bool] boolean_chain_with_face_source failed: {exc}")
             return targetgeometry
         if not V.size or not F.size:
-            print("[batch-diff] empty result, keeping original")
+            print("[batch-bool] empty result, keeping original")
             return targetgeometry
-        print(f"[batch-diff] OK -> V/F={len(V)}/{len(F)}")
+        print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
         result = _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh)
-        print(f"[batch-diff] polygonal -> V/F={result.number_of_vertices()}/{result.number_of_faces()}")
+        print(f"[batch-bool] polygonal -> V/F={result.number_of_vertices()}/{result.number_of_faces()}")
         return result
 
     """Modifier for boolean difference between two geometries.
@@ -165,10 +212,6 @@ class SolidDifferenceModifier(Modifier):
         The name of the modifier.
 
     """
-
-    @property
-    def __data__(self) -> dict:
-        return {}
 
     def apply(
         self,

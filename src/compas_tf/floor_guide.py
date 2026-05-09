@@ -4,6 +4,7 @@ from compas.geometry import Point
 from compas.geometry import Polygon
 from compas.geometry import Polyline
 from compas.geometry import Plane
+from compas.geometry import Rotation
 from compas.geometry import Vector
 from compas.geometry import Projection
 from compas.geometry import intersection_segment_segment
@@ -1106,6 +1107,71 @@ class FloorGuide(Data):
         pass
 
 
+    @property
+    def oculus(self):
+        """Oculus constructed from the inner beam 2 beam first plane rotated around origin 4 times.
+        Oculus is made from 5 plates elements:
+        4x boundary beams
+        1x inner plate connecting the 4 beams
+        """
+
+        def _wedge(planes, bottom_plane, top_plane):
+            pts_bottom, pts_top = [], []
+            n = len(planes)
+            for i in range(n):
+                a = planes[i]
+                b = planes[(i + 1) % n]
+                rb = intersection_plane_plane_plane(a, b, bottom_plane)
+                rt = intersection_plane_plane_plane(a, b, top_plane)
+                if rb:
+                    pts_bottom.append(Point(*rb))
+                if rt:
+                    pts_top.append(Point(*rt))
+            return PlateElement(
+                top_polyline=Polyline(pts_top + [pts_top[0]]),
+                bottom_polyline=Polyline(pts_bottom + [pts_bottom[0]]),
+            )
+
+        cp = self.construction_planes
+        side0 = Plane((0, 0, 0), Vector(0, 0, 1))
+        side1 = Plane((0, 0, -self.static_h+self.size_tsections), Vector(0, 0, 1))
+
+        # Rotate inner_beams[1] planes (middle diagonal beam) 4×90° around Z
+        rotated = []
+        for i in range(4):
+            rot = Rotation.from_axis_and_angle([0, 0, 1], i * math.pi / 2)
+            rotated.append(
+                cp["inner_beams"][1][0].transformed(rot),  # oculus face
+            )
+
+        plates = []
+
+        # 4 boundary beams – same pattern as inner_beams[1] per quarter
+        for i in range(4):
+            plates.append(_wedge(
+                [
+                 rotated[i],
+                 rotated[(i+1)%4],
+                 rotated[i].offset(-self.size_inner_beams),
+                 rotated[(i-1)%4].offset(-self.size_inner_beams)
+                 ],
+                bottom_plane=side1,
+                top_plane=side0,
+            ))
+
+        # 1 inner plate – center diamond bounded by the 4 oculus faces
+        plates.append(_wedge(
+            [
+            rotated[0].offset(-self.size_inner_beams), 
+             rotated[1].offset(-self.size_inner_beams), 
+             rotated[2].offset(-self.size_inner_beams), 
+             rotated[3].offset(-self.size_inner_beams)
+             ],
+            bottom_plane=side1,
+            top_plane=side0,
+        ))
+
+        return plates
 
     # @property
     # def corner_point(self):

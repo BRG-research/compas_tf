@@ -156,6 +156,7 @@ class FloorModel(Model):
             ("wedge_block", guide.wedge_block),
             ("wedges_column", guide.wedges_column),
             ("inner_beams", guide.inner_beams),
+            ("oculus", guide.oculus),
         ]
         for group_name, plates in plate_sections:
             sub = Group(name=group_name)
@@ -295,17 +296,20 @@ class FloorModel(Model):
                 if self._skip_contacts(nbr):
                     continue
                 v = nbr.graphnode
-                if not self.graph.has_edge((u, v), directed=False):
-                    contacts = element.compute_contacts(nbr, tolerance=tolerance, minimum_area=minimum_area, contacttype=contacttype)
-                    if contacts:
-                        self.graph.add_edge(u, v, contacts=contacts)
-                else:
-                    edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
-                    existing = self.graph.edge_attribute(edge, name="contacts")
-                    if not existing:
+                try:
+                    if not self.graph.has_edge((u, v), directed=False):
                         contacts = element.compute_contacts(nbr, tolerance=tolerance, minimum_area=minimum_area, contacttype=contacttype)
                         if contacts:
-                            self.graph.edge_attribute(edge, name="contacts", value=contacts)
+                            self.graph.add_edge(u, v, contacts=contacts)
+                    else:
+                        edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
+                        existing = self.graph.edge_attribute(edge, name="contacts")
+                        if not existing:
+                            contacts = element.compute_contacts(nbr, tolerance=tolerance, minimum_area=minimum_area, contacttype=contacttype)
+                            if contacts:
+                                self.graph.edge_attribute(edge, name="contacts", value=contacts)
+                except NotImplementedError:
+                    pass
 
     # ------------------------------------------------------------------ #
     #  batch boolean pre-computation
@@ -326,8 +330,9 @@ class FloorModel(Model):
         from compas_tf.solid_union_modifier import SolidUnionModifier
 
         for element in self.elements():
-            diff_sources = []
-            union_sources = []
+            # Collect boolean modifiers in order: (mesh, operation)
+            bool_sources = []   # list of (Mesh, operation_str)
+            union_sources = []  # SolidUnionModifier sources (merged separately)
             other_modifiers = []  # (source_element, modifier)
 
             for nbr in self.graph.neighbors_in(element.graphnode):
@@ -336,10 +341,15 @@ class FloorModel(Model):
                 for modifier in modifiers:
                     if isinstance(modifier, SolidDifferenceModifier):
                         src_geom = source.modelgeometry
-                        if isinstance(src_geom, Mesh) and src_geom.is_closed():
-                            diff_sources.append(src_geom)
+                        op = getattr(modifier, "operation", "difference")
+                        if op == "union":
+                            # union via boolean modifier goes into the chain too
+                            if isinstance(src_geom, Mesh):
+                                bool_sources.append((src_geom, "union"))
+                        elif isinstance(src_geom, Mesh) and src_geom.is_closed():
+                            bool_sources.append((src_geom, op))
                         else:
-                            print(f"[precompute] skip diff source for '{getattr(element, 'name', '?')}': not a closed Mesh")
+                            print(f"[precompute] skip '{op}' source for '{getattr(element, 'name', '?')}': not a closed Mesh")
                     elif isinstance(modifier, SolidUnionModifier):
                         src_geom = source.modelgeometry
                         if isinstance(src_geom, Mesh):
@@ -347,7 +357,7 @@ class FloorModel(Model):
                     else:
                         other_modifiers.append((source, modifier))
 
-            if not diff_sources and not union_sources:
+            if not bool_sources and not union_sources:
                 continue
 
             xform = element.modeltransformation
@@ -356,8 +366,10 @@ class FloorModel(Model):
             if not isinstance(geometry, Mesh):
                 continue
 
-            if diff_sources and geometry.is_closed():
-                geometry = SolidDifferenceModifier.apply_batch(diff_sources, geometry)
+            if bool_sources and geometry.is_closed():
+                meshes = [m for m, _ in bool_sources]
+                operations = [op for _, op in bool_sources]
+                geometry = SolidDifferenceModifier.apply_batch(meshes, geometry, operations)
 
             if union_sources:
                 geometry = SolidUnionModifier.apply_batch(union_sources, geometry)

@@ -84,9 +84,9 @@ compas.json_dump(floor_model, data_dir / "floor_model_booleans.json")
 #  Contact detection
 # ------------------------------------------------------------------ #
 
-floor_model.compute_contacts(tolerance=1.0, minimum_area=1.0)
-contacts = list(floor_model.contacts())
-print(f"[contact] {len(contacts)} contact(s) found")
+# floor_model.compute_contacts(tolerance=1.0, minimum_area=1.0)
+# contacts = list(floor_model.contacts())
+# print(f"[contact] {len(contacts)} contact(s) found")
 
 # ------------------------------------------------------------------ #
 #  Viewer
@@ -99,8 +99,8 @@ viewer.renderer.rendermode = "lighted"
 
 add_model_to_viewer(floor_model, viewer)
 
-g_contacts = viewer.scene.add_group("contacts")
-for contact in contacts:
-    viewer.scene.add(contact.polygon, facecolor=Color.red(), linecolor=Color.red(), parent=g_contacts)
+# g_contacts = viewer.scene.add_group("contacts")
+# for contact in contacts:
+#     viewer.scene.add(contact.polygon, facecolor=Color.red(), linecolor=Color.red(), parent=g_contacts)
 
 viewer.show()
