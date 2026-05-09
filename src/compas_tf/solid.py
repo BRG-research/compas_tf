@@ -68,7 +68,7 @@ class Solid(Element):
         :class:`compas.geometry.Box`
             The axis-aligned bounding box.
         """
-        box = self.modelgeometry.aabb
+        box = self.modelgeometry.aabb()
         if inflate != 1.0:
             box.xsize *= inflate
             box.ysize *= inflate

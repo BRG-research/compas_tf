@@ -391,19 +391,8 @@ class PlateElement(Element):
             faces.append([i, next_i, next_i + n0, i + n0])
 
         if cap:
-            # Triangle and quad caps stay as a single n-gon face (no earclip).
-            # Larger polygons fall back to earclip triangulation.
-            if n0 <= 4:
-                faces.append(list(range(n0 - 1, -1, -1)))
-                faces.append(list(range(n0, 2 * n0)))
-            else:
-                bottom_triangles = PlateElement._earclip_polygon(Polygon(polyline0.points))
-                for tri in bottom_triangles:
-                    faces.append([tri[2], tri[1], tri[0]])
-
-                top_triangles = PlateElement._earclip_polygon(Polygon(polyline1.points))
-                for tri in top_triangles:
-                    faces.append([tri[0] + n0, tri[1] + n0, tri[2] + n0])
+            faces.append(list(range(n0 - 1, -1, -1)))
+            faces.append(list(range(n0, 2 * n0)))
 
         return Mesh.from_vertices_and_faces(vertices, faces)
 
@@ -447,7 +436,7 @@ class PlateElement(Element):
     # ------------------------------------------------------------------ #
 
     def compute_aabb(self, inflate: float = 1.0) -> Box:
-        box = self.modelgeometry.aabb
+        box = self.modelgeometry.aabb()
         if inflate != 1.0:
             box.xsize *= inflate
             box.ysize *= inflate

@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import Union
 
 from compas.datastructures import Mesh
@@ -5,7 +6,157 @@ from compas.geometry import Brep
 from compas_model.modifiers import Modifier
 
 
+def _triangulate_mesh(mesh):
+    """Fan-triangulate a compas Mesh, returning (vertices, triangles, tri_to_orig).
+
+    ``tri_to_orig[i]`` is the original face index that produced output triangle ``i``.
+    This lets us remap CGAL's per-triangle face_id back to the original polygon face.
+    """
+    vkeys = list(mesh.vertices())
+    vindex = {vk: i for i, vk in enumerate(vkeys)}
+    vertices = [mesh.vertex_coordinates(vk) for vk in vkeys]
+
+    triangles = []
+    tri_to_orig = {}
+    for orig_idx, fkey in enumerate(mesh.faces()):
+        fverts = [vindex[vk] for vk in mesh.face_vertices(fkey)]
+        n = len(fverts)
+        if n == 3:
+            triangles.append(fverts)
+            tri_to_orig[len(triangles) - 1] = orig_idx
+        else:
+            v0 = fverts[0]
+            for k in range(1, n - 1):
+                triangles.append([v0, fverts[k], fverts[k + 1]])
+                tri_to_orig[len(triangles) - 1] = orig_idx
+
+    return vertices, triangles, tri_to_orig
+
+
+def _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh):
+    """Reconstruct a polygonal mesh from boolean_chain_with_face_source output.
+
+    Each output triangle in F carries a source tag S[i] = [mesh_id, face_id]
+    where face_id is the index in the *triangulated* input mesh.
+    ``tri_to_orig_per_mesh[mesh_id]`` maps that triangulated face_id back to
+    the original polygon face index, so triangles that came from the same
+    polygon (but were split during triangulation) are grouped together.
+
+    Parameters
+    ----------
+    V : ndarray (N, 3)
+    F : ndarray (M, 3)  — triangle soup from CGAL
+    S : ndarray (M, 2)  — [mesh_id, face_id] per triangle
+    tri_to_orig_per_mesh : list[dict]
+        One dict per input mesh: ``tri_to_orig_per_mesh[mesh_id][tri_face_id]``
+        gives the original polygon face index.
+
+    Returns
+    -------
+    :class:`compas.datastructures.Mesh`
+        Polygonal mesh with one face per original input face.
+    """
+    vertices = V.tolist()
+    tris = F.tolist()
+
+    # Remap triangulated face_id → original polygon face_id
+    tags = []
+    for mesh_id, tri_fid in S.tolist():
+        orig_fid = tri_to_orig_per_mesh[mesh_id].get(tri_fid, tri_fid)
+        tags.append((mesh_id, orig_fid))
+
+    # Group triangle indices by (mesh_id, face_id)
+    groups = defaultdict(list)
+    for i, tag in enumerate(tags):
+        groups[tag].append(i)
+
+    new_faces = []
+    for tri_indices in groups.values():
+        if len(tri_indices) == 1:
+            new_faces.append(tris[tri_indices[0]])
+            continue
+
+        # Collect all directed half-edges for this group
+        half_edges = set()
+        for ti in tri_indices:
+            t = tris[ti]
+            half_edges.add((t[0], t[1]))
+            half_edges.add((t[1], t[2]))
+            half_edges.add((t[2], t[0]))
+
+        # Boundary: half-edges whose reverse is absent → outer polygon edges
+        adj = {a: b for (a, b) in half_edges if (b, a) not in half_edges}
+
+        if not adj:
+            for ti in tri_indices:
+                new_faces.append(tris[ti])
+            continue
+
+        # Trace one (or more) boundary loops
+        visited = set()
+        for start in list(adj):
+            if start in visited:
+                continue
+            loop = [start]
+            visited.add(start)
+            nxt = adj[start]
+            while nxt != start and nxt not in visited:
+                loop.append(nxt)
+                visited.add(nxt)
+                nxt = adj.get(nxt, start)
+            if len(loop) >= 3:
+                new_faces.append(loop)
+
+    return Mesh.from_vertices_and_faces(vertices, new_faces)
+
+
 class SolidDifferenceModifier(Modifier):
+    @staticmethod
+    def apply_batch(sources: list, targetgeometry: Mesh) -> Mesh:
+        """Apply all cutters in a single boolean_chain call (one C++ round-trip).
+
+        Uses ``boolean_chain_with_face_source`` so every output triangle carries
+        ``[mesh_id, face_id]`` provenance from CGAL.  Triangles sharing the same
+        source face are merged back into one n-gon polygon, producing a clean
+        polygonal mesh instead of a triangle soup.
+
+        Parameters
+        ----------
+        sources : list of :class:`compas.datastructures.Mesh`
+            Cutter meshes (must be closed).
+        targetgeometry : :class:`compas.datastructures.Mesh`
+            The mesh to cut into.
+
+        Returns
+        -------
+        :class:`compas.datastructures.Mesh`
+            Polygonal result mesh, or original if the operation fails.
+        """
+        from compas_cgal.booleans import boolean_chain_with_face_source
+
+        # Triangulate each mesh manually to track tri_face_id → original_face_id
+        all_vf = []
+        tri_to_orig_per_mesh = []
+        for mesh in [targetgeometry] + list(sources):
+            verts, tris, tri_to_orig = _triangulate_mesh(mesh)
+            all_vf.append((verts, tris))
+            tri_to_orig_per_mesh.append(tri_to_orig)
+
+        operations = ["difference"] * len(sources)
+        print(f"[batch-diff] boolean_chain: target + {len(sources)} cutter(s)")
+        try:
+            V, F, S = boolean_chain_with_face_source(all_vf, operations)
+        except Exception as exc:
+            print(f"[batch-diff] boolean_chain failed: {exc}")
+            return targetgeometry
+        if not V.size or not F.size:
+            print("[batch-diff] empty result, keeping original")
+            return targetgeometry
+        print(f"[batch-diff] OK -> V/F={len(V)}/{len(F)}")
+        result = _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh)
+        print(f"[batch-diff] polygonal -> V/F={result.number_of_vertices()}/{result.number_of_faces()}")
+        return result
+
     """Modifier for boolean difference between two geometries.
 
     Parameters

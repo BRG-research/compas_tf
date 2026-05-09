@@ -1,20 +1,28 @@
+"""example_1_floorguide.py
+
+Visualize the FloorGuide plate geometry for one quarter of the floor:
+beds, t-sections, outer/inner ribs, wedge blocks, wedge columns,
+inner beams, and sherpa connections.
+
+FloorGuide owns all parametric plate geometry for one quarter.
+It is independent of FloorBuilder and uses its own parameter set.
+"""
 import pathlib
 
 import compas
-from compas_viewer.config import Config
-from compas_viewer.viewer import Viewer
+from compas.colors import Color
 from compas.geometry import Point
 from compas.geometry import Vector
 from compas.geometry import Line
 from compas.geometry import Polyline
-from compas.colors import Color
+from compas_viewer.config import Config
+from compas_viewer.viewer import Viewer
 
 from compas_tf.floor_guide import FloorGuide
+from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+from compas_tf.plate import PlateElement
 
 
-# ------------------------------------------------------------------ #
-#  Filepath
-# ------------------------------------------------------------------ #
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 # ------------------------------------------------------------------ #
@@ -37,7 +45,7 @@ guide = FloorGuide(
 compas.json_dump(guide, data_dir / "floorguide.json")
 
 # ------------------------------------------------------------------ #
-#  Viewer — wireframe
+#  Viewer
 # ------------------------------------------------------------------ #
 
 config = Config()
@@ -46,149 +54,34 @@ viewer = Viewer(config)
 viewer.renderer.rendermode = "lighted"
 
 
-def add_plane(viewer, plane, parent=None, size=200):
-    o = Point(*plane.point)
-    n = Vector(*plane.normal)
-    ref = Vector(0, 0, 1) if abs(n.dot(Vector(0, 0, 1))) < 0.9 else Vector(1, 0, 0)
-    x = n.cross(ref)
-    x.unitize()
-    y = n.cross(x)
-    y.unitize()
-    c0 = Point(*(o - x * size - y * size))
-    c1 = Point(*(o + x * size - y * size))
-    c2 = Point(*(o + x * size + y * size))
-    c3 = Point(*(o - x * size + y * size))
-    tip = Point(*(o + n * size))
-    blue = Color.blue()
-    viewer.scene.add(Polyline([c0, c1, c2, c3, c0]), parent=parent, linecolor=blue)
-    viewer.scene.add(Line(o, tip), parent=parent, linecolor=blue)
-
-g = viewer.scene.add_group("oculus_points")
-for p in guide.oculus_points:
-    viewer.scene.add(p, parent=g)
-
-g = viewer.scene.add_group("quarter_polygon")
-viewer.scene.add(guide.quarter_polygon, parent=g)
-
-g = viewer.scene.add_group("quarter_column_polygon")
-viewer.scene.add( guide.quarter_column_polygon, parent=g)
-print(guide.quarter_column_polygon.points)
-
-g = viewer.scene.add_group("construction_planes")
-guide.construction_planes
-for key, planes_lists in guide.construction_planes.items():
-    for planes in planes_lists:
-        for plane in planes:
-            add_plane(viewer, plane, parent=g)
-
-g = viewer.scene.add_group("construction_quads")
-for key, polygons in guide.construction_quads.items():
-    for polygon in polygons:
-        viewer.scene.add(polygon, parent=g)
-        viewer.scene.add(polygon.points[0], anchor=polygon.points[0], parent=g)
-        viewer.scene.add(polygon.lines[0].point_at(0.25), anchor=polygon.points[0], parent=g)
-        viewer.scene.add(polygon.lines[0].point_at(0.125), anchor=polygon.points[0], parent=g)
-
-g = viewer.scene.add_group("boundary_parabolas")
-for parabolas in guide.boundary_parabolas:
-    for parabola in parabolas:
-        viewer.scene.add(parabola, parent=g, linecolor=Color.red())
-
-g = viewer.scene.add_group("beds")
-for i, plate in enumerate(guide.beds):
-    group = viewer.scene.add_group(f"bed_{i}", parent=g)
-    group.add(plate.elementgeometry, facecolor=Color.green(), show_lines=True)
-    group.add(plate.top_polyline, linecolor=Color.black())
-    group.add(plate.bottom_polyline, linecolor=Color.black())
-
-g = viewer.scene.add_group("tsections")
-for i, plate in enumerate(guide.tsections):
-    group = viewer.scene.add_group(f"tsection_{i}", parent=g)
-    group.add(plate.elementgeometry, facecolor=Color.orange(), show_lines=True)
-    group.add(plate.top_polyline, linecolor=Color.black())
-    group.add(plate.bottom_polyline, linecolor=Color.black())
+def add_plates(viewer, group_name, plates, facecolor):
+    g = viewer.scene.add_group(group_name)
+    for i, plate in enumerate(plates):
+        pg = viewer.scene.add_group(f"{group_name}_{i}", parent=g)
+        pg.add(plate.elementgeometry, facecolor=facecolor, show_lines=True)
+        if plate.top_polyline:
+            pg.add(plate.top_polyline, linecolor=Color.black())
+        if plate.bottom_polyline:
+            pg.add(plate.bottom_polyline, linecolor=Color.black())
 
 
-for i, plate in enumerate(guide.outer_ribs):
-    group = viewer.scene.add_group(f"plate_{i}", parent=g)
-    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
-    group.add(plate.top_polyline, linecolor=Color.black())
-    group.add(plate.bottom_polyline, linecolor=Color.black())
-
-
-for i, plate in enumerate(guide.inner_ribs):
-    group = viewer.scene.add_group(f"plate_{i}", parent=g)
-    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
-    group.add(plate.top_polyline, linecolor=Color.black())
-    group.add(plate.bottom_polyline, linecolor=Color.black())
-
-
-for i, plate in enumerate(guide.wedge_block):
-    group = viewer.scene.add_group(f"plate_{i}", parent=g)
-    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
-    group.add(plate.top_polyline, linecolor=Color.black())
-    group.add(plate.bottom_polyline, linecolor=Color.black())
-
-
-for i, plate in enumerate(guide.wedges_column):
-    group = viewer.scene.add_group(f"plate_{i}", parent=g)
-    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
-    group.add(plate.top_polyline, linecolor=Color.black())
-    group.add(plate.bottom_polyline, linecolor=Color.black())
-
-for i, plate in enumerate(guide.inner_beams):
-    group = viewer.scene.add_group(f"plate_{i}", parent=g)
-    group.add(plate.elementgeometry, facecolor=Color.yellow(), show_lines=True)
-    group.add(plate.top_polyline, linecolor=Color.black())
-    group.add(plate.bottom_polyline, linecolor=Color.black())
+add_plates(viewer, "beds", guide.beds, Color.green())
+add_plates(viewer, "tsections", guide.tsections, Color.orange())
+add_plates(viewer, "outer_ribs", guide.outer_ribs, Color.yellow())
+add_plates(viewer, "inner_ribs", guide.inner_ribs, Color.yellow())
+add_plates(viewer, "wedge_block", guide.wedge_block, Color.yellow())
+add_plates(viewer, "wedges_column", guide.wedges_column, Color.cyan())
+add_plates(viewer, "inner_beams", guide.inner_beams, Color.yellow())
 
 g = viewer.scene.add_group("sherpas")
 for i, sherpa in enumerate(guide.sherpas):
-    viewer.scene.add(sherpa.elementgeometry, facecolor=Color.red(), show_lines=True, parent=g)
-
+    if isinstance(sherpa, SherpaXL120Element):
+        viewer.scene.add(sherpa.elementgeometry, facecolor=Color.red(), show_lines=True, parent=g)
+    elif isinstance(sherpa, PlateElement):
+        viewer.scene.add(sherpa.elementgeometry, facecolor=Color(0.8, 0.2, 0.8), show_lines=True, parent=g)
 
 g = viewer.scene.add_group("debug")
 for o in guide.debug:
     viewer.scene.add(o, parent=g)
-
-
-# ------------------------------------------------------------------ #
-#  OBJ export
-# ------------------------------------------------------------------ #
-
-def export_meshes_to_obj(named_plates, filepath):
-    lines = []
-    vertex_offset = 1  # OBJ indices are 1-based
-
-    for name, plates in named_plates:
-        for i, plate in enumerate(plates):
-            mesh = plate.elementgeometry
-            if mesh is None:
-                continue
-            vertices, faces = mesh.to_vertices_and_faces()
-            lines.append(f"o {name}_{i}")
-            for v in vertices:
-                lines.append(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}")
-            for face in faces:
-                indices = " ".join(str(j + vertex_offset) for j in face)
-                lines.append(f"f {indices}")
-            vertex_offset += len(vertices)
-
-    with open(filepath, "w") as f:
-        f.write("\n".join(lines))
-    print(f"Exported OBJ: {filepath}")
-
-
-named_plates = [
-    ("bed", guide.beds),
-    ("tsection", guide.tsections),
-    ("outer_rib", guide.outer_ribs),
-    ("inner_rib", guide.inner_ribs),
-    ("wedge_block", guide.wedge_block),
-    ("wedge_column", guide.wedges_column),
-]
-
-export_meshes_to_obj(named_plates, data_dir / "floorguide.obj")
-
 
 viewer.show()

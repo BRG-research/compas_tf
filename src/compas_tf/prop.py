@@ -145,7 +145,7 @@ class PropElement(Element):
         return Mesh.from_vertices_and_faces(vertices, faces)
 
     def compute_aabb(self, inflate: float = 1.0) -> Box:
-        box = self.modelgeometry.aabb
+        box = self.modelgeometry.aabb()
         if inflate != 1.0:
             box.xsize *= inflate
             box.ysize *= inflate

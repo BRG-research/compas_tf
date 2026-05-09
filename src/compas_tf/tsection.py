@@ -55,7 +55,7 @@ class TSectionElement(Element):
         return self.mesh
 
     def compute_aabb(self, inflate: float = 1.0) -> Box:
-        box = self.modelgeometry.aabb
+        box = self.modelgeometry.aabb()
         if inflate != 1.0:
             box.xsize *= inflate
             box.ysize *= inflate

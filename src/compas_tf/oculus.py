@@ -106,11 +106,11 @@ class OculusElement(Element):
         return box
 
     def compute_aabb(self, inflate: float = 1.0) -> Box:
-        self._aabb = self._inflate_box(self.modelgeometry.aabb, inflate)
+        self._aabb = self._inflate_box(self.modelgeometry.aabb(), inflate)
         return self._aabb
 
     def compute_obb(self, inflate: float = 1.0) -> Box:
-        self._obb = self._inflate_box(self.modelgeometry.obb, inflate)
+        self._obb = self._inflate_box(self.modelgeometry.obb(), inflate)
         return self._obb
 
     def compute_point(self) -> Point:

@@ -99,591 +99,93 @@ class FloorModel(Model):
         self.story_height = story_height
 
     # ------------------------------------------------------------------ #
-    #  floor block
+    #  floor guide (plates + sherpas)
     # ------------------------------------------------------------------ #
-    @staticmethod
-    def _intersect_consecutive_planes(planes, reference_plane=None):
-        """Find intersection points of consecutive plane pairs with a reference plane.
+
+    def add_floor_guide(self, guide, column_index=0, transformation=None):
+        """Add all FloorGuide plate elements and sherpas to the model.
+
+        Follows the element sequence of example_2_floorguide.py: beds,
+        tsections, outer_ribs, inner_ribs, wedge_block, wedges_column,
+        inner_beams, and sherpas.
+
+        FloorGuide geometry is authored at z=0 (floor top surface). Pass
+        ``transformation`` to place the guide at the correct elevation in the
+        model — typically a translation by ``story_height`` so the plates sit
+        at the top of the columns:
+
+        .. code-block:: python
+
+            from compas.geometry import Translation, Vector
+            floor_model.add_floor_guide(
+                guide,
+                transformation=Translation.from_vector(Vector(0, 0, floor_model.story_height)),
+            )
+
+        SherpaXL120Element and PlateElement objects in the sherpas list are
+        all registered as SolidDifferenceModifier cutters against the column
+        at ``column_index``.
 
         Parameters
         ----------
-        planes : list[:class:`compas.geometry.Plane`]
-            List of planes to intersect pairwise.
-        reference_plane : :class:`compas.geometry.Plane`, optional
-            Plane to intersect the resulting lines with. Defaults to world XY.
+        guide : :class:`compas_tf.floor_guide.FloorGuide`
+            Quarter floor guide that owns the plate geometry.
+        column_index : int
+            Which column (by name suffix) the sherpa cutting blocks target.
+            Default is 0 (the bottom-left corner column).
+        transformation : :class:`compas.geometry.Transformation`, optional
+            Transformation applied to every plate and sherpa element so the
+            guide sits at the correct height in the model.  When *None* the
+            geometry remains at the z=0 origin of the FloorGuide.
 
         Returns
         -------
-        list[:class:`compas.geometry.Point`]
-            Intersection points.
+        :class:`compas_model.elements.group.Group`
+            The top-level floor_guide group added to the model.
         """
-        if reference_plane is None:
-            reference_plane = Plane.worldXY()
+        from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+        from compas_tf.plate import PlateElement
 
-        intersection_points = []
-        for i in range(len(planes) - 1):
-            result = intersection_plane_plane(planes[i], planes[i + 1])
-            if result:
-                line = Line(result[0], result[1])
-                pt = intersection_line_plane(line, reference_plane)
-                if pt:
-                    intersection_points.append(pt)
-        return intersection_points
-    
-    def add_floor_block(self):
-        """Add column blocks. """
-        
-        offset_planes = self.builder.compute_cut_planes(scale=self.builder.head_o, inclination=0)[3:6]
-        for i in range(len(offset_planes)):
-            offset_planes[i] = offset_planes[i].offset(-SherpaXL120Element.WIDTH*2)
+        guide_group = self.add_group("floor_guide")
 
-        corner_end_plane0 = Plane(self.builder.end_planes[3].point, Vector.Zaxis().cross(self.builder.end_planes[3].normal)).offset(self.builder.thick*-1.5)
-        corner_end_plane1 = Plane(self.builder.end_planes[0].point, Vector.Zaxis().cross(self.builder.end_planes[0].normal)).offset(self.builder.thick*1.5)
-        cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0] + self.builder.compute_cut_planes()[3:6][::-1] + [corner_end_plane1]
+        plate_sections = [
+            ("beds", guide.beds),
+            ("tsections", guide.tsections),
+            ("outer_ribs", guide.outer_ribs),
+            ("inner_ribs", guide.inner_ribs),
+            ("wedge_block", guide.wedge_block),
+            ("wedges_column", guide.wedges_column),
+            ("inner_beams", guide.inner_beams),
+        ]
+        for group_name, plates in plate_sections:
+            sub = Group(name=group_name)
+            self.add_element(sub, parent=guide_group)
+            for i, plate in enumerate(plates):
+                plate.name = f"{group_name}_{i}"
+                if transformation is not None:
+                    plate.transformation = transformation
+                self.add_element(plate, parent=sub)
 
-        top = Polygon(FloorModel._intersect_consecutive_planes(cut_planes, Plane.worldXY())).translated(Vector(0, 0, -self.builder.head_h))
-        bottom = top.translated(Vector(0, 0, -self.builder.head_b ))
+        # Sherpas: SherpaXL120Element → joint elements,
+        #          PlateElement → column cutter (SolidDifferenceModifier)
+        sherpas_group = Group(name="sherpas")
+        self.add_element(sherpas_group, parent=guide_group)
 
-        plate = PlateElement(top=top, bottom=bottom, name="add_floor_block")
-        plate.transformation = Translation.from_vector(Vector(0, 0, self.story_height))
-        
-
-        # Rotate 4 times, 90 degress
-        quarters = self.find_element_with_name("quarters")
-        
-        for i in range(4):
-            rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
-            copy = plate.copy()
-            copy.transformation = rot * plate.transformation
-            copy.name = f"floor_block{i}"
-            self.add_element(copy, parent=quarters)
-
-    # ------------------------------------------------------------------ #
-    #  column heads cuts
-    # ------------------------------------------------------------------ #
-
-    def add_column_cutter(self):
-        """Add column 3 cutter per column. """
-
-
-        # Columns are ordered 0..3 like the quarters (both rotated j * pi/2).
         columns = self.find_all_elements_of_type(ColumnElement)
         columns_by_index = {int(c.name.split("_")[-1]): c for c in columns}
-
-        # Cutters
-        offset_planes = self.builder.compute_cut_planes(scale=self.builder.head_o, inclination=0)[3:6]
-        for i in range(len(offset_planes)):
-            offset_planes[i] = offset_planes[i].offset(-SherpaXL120Element.WIDTH*2)
-        
-        corner_end_plane0 = Plane(self.builder.end_planes[3].point, Vector.Zaxis().cross(self.builder.end_planes[3].normal)).offset(self.builder.thick*-1.5)
-        corner_end_plane1 = Plane(self.builder.end_planes[0].point, Vector.Zaxis().cross(self.builder.end_planes[0].normal)).offset(self.builder.thick*1.5)
-        cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0] + self.builder.compute_cut_planes()[3:6][::-1] + [corner_end_plane1]
-        top = Polygon(FloorModel._intersect_consecutive_planes(cut_planes, Plane.worldXY())).translated(Vector(0, 0, 0))
-            
-
-        for i in range(3):
-            p00 = top[i]
-            p01 = top[i+1]
-            p10 = top[i+1] + Vector(0, 0, -self.builder.head_b-self.builder.head_h)
-            p11 = top[i] + Vector(0, 0, -self.builder.head_b-self.builder.head_h)
-            v0 = (p01 - p00).unitized()
-            p00 = p00 - v0 * self.builder.thick + Vector(0, 0, 10)
-            p01 = p01 + v0 * self.builder.thick + Vector(0, 0, 10)
-            p10 = p10 + v0 * self.builder.thick 
-            p11 = p11 - v0 * self.builder.thick 
-
-            poly0 = Polygon([p11, p10, p01, p00])
-            poly1 = poly0.translated(poly0.normal * SherpaXL120Element.WIDTH * 6)
-            bot_pl = Polyline(list(poly0.points) + [poly0.points[0]])
-            top_pl = Polyline(list(poly1.points) + [poly1.points[0]])
-            plate = PlateElement(bottom_polyline=bot_pl, top_polyline=top_pl, name="column_cutter")
-            plate.transformation = Translation.from_vector(Vector(0, 0, self.story_height))
-            quarters = self.find_element_with_name("quarters")
-
-            for j in range(4):
-                rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), j * math.pi / 2, Point(0, 0, 0))
-                copy = plate.copy()
-                copy.transformation = rot * plate.transformation
-                copy.name = f"column_cutter_{i}_{j}"
-                self.add_element(copy, parent=quarters)
-
-                column = columns_by_index.get(j)
-                if column is not None:
-                    self.add_modifier(copy, column, SolidDifferenceModifier())
-
-
-    # ------------------------------------------------------------------ #
-    #  sherpa joints
-    # ------------------------------------------------------------------ #
-
-    def add_sherpa_joints(self):
-        """Add 3 SherpaXL120 joints per column with solid difference cuts on the column."""
-        columns = self.find_all_elements_of_type(ColumnElement)
-        columns_by_index = {int(c.name.split("_")[-1]): c for c in columns}
-
-        connection_width = SherpaXL120Element.WIDTH
-
-        offset_planes = self.builder.compute_cut_planes(scale=self.builder.head_o, inclination=0)[3:6]
-        for k in range(len(offset_planes)):
-            offset_planes[k] = offset_planes[k].offset(-connection_width * 2)
-
-        corner_end_plane0 = Plane(self.builder.end_planes[3].point, Vector.Zaxis().cross(self.builder.end_planes[3].normal)).offset(self.builder.thick * -1.5)
-        corner_end_plane1 = Plane(self.builder.end_planes[0].point, Vector.Zaxis().cross(self.builder.end_planes[0].normal)).offset(self.builder.thick * 1.5)
-        cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0, corner_end_plane1]
-        top = Polyline(FloorModel._intersect_consecutive_planes(cut_planes, Plane.worldXY()))
-
-        sherpa_frames = []
-        for i in range(3):
-            p1 = top[i + 1]
-            p0 = top[i]
-            midpoint = (p0 + p1) * 0.5
-            if i == 0 or i == 2:
-                direction = (p1 - p0).unitized()
-                length = (p1 - p0).length * 0.5 - 80 * 0.5
-                direction = direction * length if i == 2 else direction * -length
-                midpoint = direction + midpoint
-            frame = Frame(midpoint, p0 - p1, -Vector.Zaxis().cross(p1 - p0))
-            sherpa_frames.append(frame)
-
-        quarters = self.find_element_with_name("quarters")
-        lift = Translation.from_vector(Vector(0, 0, self.story_height))
-
-        for i, frame in enumerate(sherpa_frames):
-            for j in range(4):
-                rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), j * math.pi / 2, Point(0, 0, 0))
-                sherpa = SherpaXL120Element(
-                    depth=80,
-                    height=370,
-                    transformation=rot * lift * Transformation.from_frame(frame),
-                    name=f"sherpaxl120_{i}_{j}",
-                )
-                self.add_element(sherpa, parent=quarters)
-
-                column = columns_by_index.get(j)
-                if column is not None:
-                    self.add_modifier(sherpa, column, SolidDifferenceModifier())
-
-    # ------------------------------------------------------------------ #
-    #  Ribs
-    # ------------------------------------------------------------------ #
-
-    def add_ribs(self, boundary_thick=None, inner_thick=None, inner_outward_signs=None):
-        """Add rib PlateElements (axes 0, 1, 2, 6) per quarter.
-
-        Boundary ribs (axes 0 and 6) keep their column-side face fixed at
-        +/-1.5*thick from the axis and grow inward until total width =
-        ``boundary_thick``.
-
-        Inner ribs (axes 1 and 2) keep their *outer* face fixed at
-        +/-0.5*thick from the axis (matching the original geometry on the
-        side facing the boundary) and grow inward until total width =
-        ``inner_thick``. Which side counts as outward depends on the target
-        plane's normal direction — pass ``inner_outward_signs`` as
-        ``{1: +1 or -1, 2: +1 or -1}`` to flip a rib that went the wrong
-        way. Default ``{1: -1, 2: +1}``.
-
-        Each plate is lifted by ``self.story_height`` and rotated 4x around
-        Z, nested under the ``quarters`` group.
-        """
-        if inner_outward_signs is None:
-            inner_outward_signs = {1: -1, 2: +1}
-        from compas.geometry import Projection
-        from compas_tf.geometry import PolylineCut
-        from compas_tf.geometry import PolylineLoft
-
-        builder = self.builder
-        if boundary_thick is None:
-            boundary_thick = builder.outer_thick
-        if inner_thick is None:
-            inner_thick = builder.inner_thick
-        rib_parabolas = builder.rib_parabolas
-        target_planes = builder.target_planes
-        cut_planes = builder.cut_planes
-        thick = builder.thick
-        head_h = builder.head_h
-        end_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
-        sherpa_width = SherpaXL120Element.WIDTH
-
-        # Retrieve the sherpa frames previously added by add_sherpa_joints.
-        # Each sherpa was placed with transformation = rot * lift * Transformation.from_frame(frame).
-        # Take j=0 (rot is identity at j=0), strip the lift, recover the local frame.
-        inv_lift = Translation.from_vector(Vector(0, 0, -self.story_height))
-        sherpa_frames = []
-        for i in range(3):
-            sherpa = self.find_element_with_name(f"sherpaxl120_{i}_0")
-            if sherpa is None:
-                raise RuntimeError(
-                    "add_sherpa_joints must be called before add_ribs so the rib "
-                    "ends can be cut at the sherpa frames."
-                )
-            local_xform = inv_lift * sherpa.transformation
-            sherpa_frames.append(Frame.from_transformation(local_xform))
-
-        # (axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx)
-        rib_configs = [
-            (0, 0, 0, 0, 0, 0),
-            (1, 1, 1, 0, 1, 1),
-            (2, 2, 2, 2, 1, 1),
-            (6, 3, 3, 2, 2, 2),
-        ]
-
-        quarters = self.find_element_with_name("quarters")
-        lift = Translation.from_vector(Vector(0, 0, self.story_height))
-
-        for axis_idx, parabola_idx, target_idx, boundary_cut_idx, rib_cut_idx, end_plane_idx in rib_configs:
-            # Per-axis offsets along target_plane normal, expressed as multiples of `thick`
-            # so the existing `* thick * offset` math below stays unchanged.
-            #
-            # Boundary ribs (0, 6): keep the OUTER face (column-side, at +/-1.5*thick from axis
-            # in the original geometry) fixed and grow the rib INWARD until total width = boundary_thick.
-            # Inner ribs (1, 2): centred on the axis with total width = inner_thick.
-            if axis_idx == 0:
-                # Outward = -normal. Column-side face stays at -1.5*thick; inner face moves toward +normal.
-                offset1 = -1.5
-                offset0 = offset1 + boundary_thick / thick
-            elif axis_idx == 6:
-                # Outward = +normal. Column-side face stays at +1.5*thick; inner face moves toward -normal.
-                offset0 = 1.5
-                offset1 = offset0 - boundary_thick / thick
-            else:
-                # Inner ribs: anchor the outer face at +/-0.5*thick (whichever side faces
-                # the boundary, per inner_outward_signs) and grow inward.
-                sign = inner_outward_signs.get(axis_idx, +1)
-                if sign > 0:
-                    offset0 = 0.5
-                    offset1 = 0.5 - inner_thick / thick
-                else:
-                    offset0 = -0.5 + inner_thick / thick
-                    offset1 = -0.5
-
-            # Rib end_plane = sherpa frame offset by sherpa width along its yaxis.
-            # Plane normal flipped so cut_by_plane(..., flip=True) keeps the rib
-            # body next to the column head (matches the original sign convention).
-            sherpa_frame = sherpa_frames[end_plane_idx]
-            end_plane = Plane(sherpa_frame.point + sherpa_frame.yaxis * sherpa_width, -sherpa_frame.yaxis)
-            cut_boundary = cut_planes[boundary_cut_idx]
-            cut_rib = cut_planes[rib_cut_idx + 3]
-
-            if axis_idx in (0, 6):
-                cut_boundary = cut_boundary.offset(-thick)
-
-            proj0 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset0)
-            proj1 = rib_parabolas[parabola_idx].translated(target_planes[target_idx].normal * thick * offset1)
-
-            cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj0, cut_rib), cut_boundary)
-            cut1 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(proj1, cut_rib), cut_boundary)
-
-            extension = 600
-            line0 = PolylineCut.cut_by_plane(Polyline([cut0[0], cut0[-1]]).extended([extension, 0]), end_plane, flip=True)
-            line1 = PolylineCut.cut_by_plane(Polyline([cut1[0], cut1[-1]]).extended([extension, 0]), end_plane, flip=True)
-
-            xy_proj = Projection.from_plane_and_direction(Plane.worldXY(), Vector.Zaxis())
-            mid_proj = Projection.from_plane_and_direction(Plane([0, 0, -head_h], [0, 0, 1]), Vector.Zaxis())
-
-            top0, top1 = line0.transformed(xy_proj), line1.transformed(xy_proj)
-            mid0 = PolylineCut.cut_by_plane(line0.transformed(mid_proj), cut_rib, flip=True)
-            mid1 = PolylineCut.cut_by_plane(line1.transformed(mid_proj), cut_rib, flip=True)
-
-            joined0 = Polyline(list(reversed(top0.points)) + mid0.points + cut0.points)
-            joined1 = Polyline(list(reversed(top1.points)) + mid1.points + cut1.points)
-            joined0.append(joined0.points[0])
-            joined1.append(joined1.points[0])
-
-            mesh = PolylineLoft.to_mesh(joined0, joined1)
-
-            for j in range(4):
-                rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), j * math.pi / 2, Point(0, 0, 0))
-                plate = PlateElement(
-                    top_polyline=joined0,
-                    bottom_polyline=joined1,
-                    mesh=mesh,
-                    name=f"rib_{axis_idx}_{j}",
-                )
-                plate.transformation = rot * lift
-                self.add_element(plate, parent=quarters)
-
-    # ------------------------------------------------------------------ #
-    #  Boundaries
-    # ------------------------------------------------------------------ #
-
-    def add_boundaries(self, boundary_thick=None):
-        """Add boundary PlateElements along the oculus perimeter (axes 3, 4, 5).
-
-        Boundaries are vertical wall plates running along the oculus-side edges
-        of the quarter polygon (q1[1] -> q1[2] -> q1[3] -> q1[4]). The 3 plates
-        meet at the two oculus points. Default thickness comes from
-        ``builder.inner_thick`` so it matches the inner ribs.
-        """
-        from compas_tf.geometry import PolylineLoft
-        from compas_tf.geometry import PolylineOffset
-        from compas.geometry import Polygon as _Polygon
-
-        builder = self.builder
-        if boundary_thick is None:
-            boundary_thick = builder.inner_thick
-        # Contract the boundary plate at the side that meets the boundary rib
-        # by the boundary rib's "inward extent" past the wall = outer_thick -
-        # column_head_offset. This puts the plate's start at the rib's inner
-        # face so they meet flush instead of overlapping.
-        contraction = builder.outer_thick - builder.column_head_offset
-        dist = builder.height - builder.rise
-
-        q1 = builder.quarter_polygon
-        # poly0: edge -> oculus_south -> oculus_west -> edge
-        poly0 = _Polygon([q1[1], q1[2], q1[3], q1[4]])
-        plates = PolylineOffset.offset_quarter_reciprocally(poly0, boundary_thick)
-
-        quarters = self.find_element_with_name("quarters")
-        lift = Translation.from_vector(Vector(0, 0, self.story_height))
-
-        for j, plate_poly in enumerate(plates):
-            axis_idx = j + 3  # axes 3, 4, 5
-            inner_pts = list(plate_poly.points)
-
-            # Contract the side meeting a boundary rib so the plate's start lies
-            # at the rib's inner face (parametric on outer_thick).
-            if j == 0:
-                dir03 = Vector.from_start_end(inner_pts[0], inner_pts[1]).unitized() * contraction
-                inner_pts[0] = inner_pts[0] + dir03
-                dir30 = Vector.from_start_end(inner_pts[3], inner_pts[2]).unitized() * contraction
-                inner_pts[3] = inner_pts[3] + dir30
-            elif j == 2:
-                dir01 = Vector.from_start_end(inner_pts[0], inner_pts[1]).unitized() * contraction
-                inner_pts[0] = inner_pts[0] + dir01
-                dir32 = Vector.from_start_end(inner_pts[3], inner_pts[2]).unitized() * contraction
-                inner_pts[3] = inner_pts[3] + dir32
-
-            # Build the two vertical face polylines of the boundary wall.
-            if j < 2:
-                s0 = Polyline([inner_pts[0], inner_pts[0] + Vector(0, 0, -dist), inner_pts[1] + Vector(0, 0, -dist), inner_pts[1], inner_pts[0]])
-                s1 = Polyline([inner_pts[3], inner_pts[3] + Vector(0, 0, -dist), inner_pts[2] + Vector(0, 0, -dist), inner_pts[2], inner_pts[3]])
-            else:
-                s0 = Polyline([inner_pts[0], inner_pts[1], inner_pts[1] + Vector(0, 0, -dist), inner_pts[0] + Vector(0, 0, -dist), inner_pts[0]])
-                s1 = Polyline([inner_pts[3], inner_pts[2], inner_pts[2] + Vector(0, 0, -dist), inner_pts[3] + Vector(0, 0, -dist), inner_pts[3]])
-
-            mesh = PolylineLoft.to_mesh(s1, s0)
-
-            for k in range(4):
-                rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), k * math.pi / 2, Point(0, 0, 0))
-                plate = PlateElement(
-                    top_polyline=s1,
-                    bottom_polyline=s0,
-                    mesh=mesh,
-                    name=f"boundary_{axis_idx}_{k}",
-                )
-                plate.transformation = rot * lift
-                self.add_element(plate, parent=quarters)
-
-    # ------------------------------------------------------------------ #
-    #  Wedges (small plates between ribs near the column head)
-    # ------------------------------------------------------------------ #
-
-    def add_wedges(self):
-        """Add 3 wedge PlateElements per quarter, between adjacent ribs at the
-        column head.
-
-        For each wedge k, the polygon is built by consecutive plane intersection
-        of 4 planes:
-          - left rib's wedge-facing vertical face plane (from rib polyline)
-          - outer column-head plane = ``compute_cut_planes()[3+k]``
-          - right rib's wedge-facing vertical face plane (from rib polyline)
-          - inner column-head plane = ``compute_cut_planes(scale=head_o)[3+k].offset(-WIDTH*2)``
-        These are the same plane pairs used by ``add_floor_block`` /
-        ``add_column_cutter``. Top polygon at z=0, bottom at z=-head_h.
-        """
-        from compas_tf.geometry import PolylineLoft
-
-        builder = self.builder
-        head_h = builder.head_h
-        sherpa_width = SherpaXL120Element.WIDTH
-
-        # Plane construction inspired by add_floor_block / add_column_cutter,
-        # but with one less sherpa thickness on the inner pair so it lines up
-        # with the rib end (rib end = sherpa_frame + yaxis * WIDTH, which is
-        # one sherpa thickness back from the cutter position at -2*WIDTH).
-        inner_planes = [p.offset(-sherpa_width) for p in builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]]
-        outer_planes = builder.compute_cut_planes()[3:6]
-
-        # (left_axis, left_polyline_attr, right_axis, right_polyline_attr).
-        # 'top'/'bottom' picks which rib polyline (joined0/joined1) is on the
-        # wedge side. axis 6 in add_ribs uses target_planes[3] (+n direction is
-        # n3, not n6), so its wedge-side polyline for wedge k=2 is 'bottom'.
-        wedge_configs = [
-            (0, 'top', 1, 'bottom'),
-            (1, 'top', 2, 'bottom'),
-            (2, 'top', 6, 'bottom'),
-        ]
-
-        quarters = self.find_element_with_name("quarters")
-        lift = Translation.from_vector(Vector(0, 0, self.story_height))
-
-        def _top_edge_pts(polyline, tol=1.0):
-            pts = polyline.points
-            max_z = max(p.z for p in pts)
-            top = [p for p in pts if abs(p.z - max_z) < tol]
-            seen = []
-            for p in top:
-                if not any(abs(p.x - q.x) < 1e-3 and abs(p.y - q.y) < 1e-3 for q in seen):
-                    seen.append(p)
-            return seen
-
-        def _vertical_plane_through_edge(p0, p1):
-            d = Vector.from_start_end(p0, p1).unitized()
-            return Plane(p0, Vector.Zaxis().cross(d))
-
-        for k, (left_axis, left_attr, right_axis, right_attr) in enumerate(wedge_configs):
-            rib_left = self.find_element_with_name(f"rib_{left_axis}_0")
-            rib_right = self.find_element_with_name(f"rib_{right_axis}_0")
-            if rib_left is None or rib_right is None:
-                raise RuntimeError("add_ribs must be called before add_wedges.")
-
-            left_poly = rib_left.top_polyline if left_attr == 'top' else rib_left.bottom_polyline
-            right_poly = rib_right.top_polyline if right_attr == 'top' else rib_right.bottom_polyline
-
-            l_pts = _top_edge_pts(left_poly)
-            r_pts = _top_edge_pts(right_poly)
-            if len(l_pts) < 2 or len(r_pts) < 2:
-                raise RuntimeError(
-                    f"wedge {k}: rib top-edge has {len(l_pts)} (left) and "
-                    f"{len(r_pts)} (right) unique points; expected >=2"
-                )
-
-            left_face = _vertical_plane_through_edge(l_pts[0], l_pts[1])
-            right_face = _vertical_plane_through_edge(r_pts[0], r_pts[1])
-
-            outer = outer_planes[k]
-            inner = inner_planes[k]
-
-            # Consecutive plane intersection: 4 planes -> 4 corners (closing back to first).
-            polygon_planes = [left_face, outer, right_face, inner, left_face]
-            pts = FloorModel._intersect_consecutive_planes(polygon_planes, Plane.worldXY())
-            if not pts or len(pts) < 4:
-                continue
-
-            top = Polyline([Point(p[0], p[1], 0) for p in pts] + [Point(pts[0][0], pts[0][1], 0)])
-            bottom = Polyline([Point(p[0], p[1], -head_h) for p in pts] + [Point(pts[0][0], pts[0][1], -head_h)])
-            # Skip earclip triangulation (it fails on self-intersecting/degenerate
-            # quads). Build a quad prism mesh directly: top quad + bottom quad +
-            # 4 side quads. The polylines themselves are stored on the plate.
-            from compas.datastructures import Mesh as _Mesh
-            n = len(pts)
-            mesh = _Mesh()
-            for p in pts:
-                mesh.add_vertex(x=p[0], y=p[1], z=0.0)
-            for p in pts:
-                mesh.add_vertex(x=p[0], y=p[1], z=-head_h)
-            mesh.add_face(list(range(n)))                       # top
-            mesh.add_face([n + i for i in range(n - 1, -1, -1)])  # bottom (reversed)
-            for i in range(n):
-                ni = (i + 1) % n
-                mesh.add_face([i, ni, n + ni, n + i])           # side
-
-            for j in range(4):
-                rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), j * math.pi / 2, Point(0, 0, 0))
-                plate = PlateElement(
-                    top_polyline=top,
-                    bottom_polyline=bottom,
-                    mesh=mesh,
-                    name=f"wedge_{k}_{j}",
-                )
-                plate.transformation = rot * lift
-                self.add_element(plate, parent=quarters)
-
-    # ------------------------------------------------------------------ #
-    #  TSections
-    # ------------------------------------------------------------------ #
-
-    # ------------------------------------------------------------------ #
-    #  Surfaces
-    # ------------------------------------------------------------------ #
-
-
-
-    # ------------------------------------------------------------------ #
-    #  quarters
-    # ------------------------------------------------------------------ #
-
-    def add_quarter_floor(self, angles=None):
-        """Add quarter floor elements for all quarters.
-
-        Parameters
-        ----------
-        angles : list[float], optional
-            Rotation angles in degrees. Default is [0, 90, 180, 270].
-
-        Returns
-        -------
-        list[QuarterResult]
-            Results for each quarter.
-        """
-        from compas_tf.quarter_floor import QuarterFloorElement
-
-        if angles is None:
-            angles = [0, 90, 180, 270]
-
-        quarters_group = self.model.add_group("quarters")
-        results = []
-
-        for angle in angles:
-            result = QuarterFloorElement.build(self.builder, angle=angle)
-            quarter_group = Group(name=f"quarter_{angle}")
-            self.model.add_element(quarter_group, parent=quarters_group)
-
-            # Ribs (axes 0, 1, 2, 6)
-            ribs_group = Group(name="ribs")
-            self.model.add_element(ribs_group, parent=quarter_group)
-            for axis_idx in [0, 1, 2, 6]:
-                if axis_idx in result.axis_elements:
-                    self.model.add_element(result.axis_elements[axis_idx], parent=ribs_group)
-
-            # Boundaries (axes 3, 4, 5)
-            boundaries_group = Group(name="boundaries")
-            self.model.add_element(boundaries_group, parent=quarter_group)
-            for axis_idx in [3, 4, 5]:
-                if axis_idx in result.axis_elements:
-                    self.model.add_element(result.axis_elements[axis_idx], parent=boundaries_group)
-
-            # T-sections
-            tsections_group = Group(name="tsections")
-            self.model.add_element(tsections_group, parent=quarter_group)
-            for element in result.tsection_elements:
-                self.model.add_element(element, parent=tsections_group)
-
-            # Surfaces
-            surfaces_group = Group(name="surfaces")
-            self.model.add_element(surfaces_group, parent=quarter_group)
-            for element in result.surface_elements:
-                self.model.add_element(element, parent=surfaces_group)
-
-            # Corner blocks
-            corners_group = Group(name="corner_blocks")
-            self.model.add_element(corners_group, parent=quarter_group)
-            for element in result.corner_block_elements:
-                self.model.add_element(element, parent=corners_group)
-
-            # Connectors
-            connectors_group = Group(name="connectors")
-            self.model.add_element(connectors_group, parent=quarter_group)
-            for screw in result.screws:
-                self.model.add_element(screw, parent=connectors_group)
-            for dowel in result.dowels:
-                self.model.add_element(dowel, parent=connectors_group)
-            for strip in result.strips:
-                self.model.add_element(strip, parent=connectors_group)
-            for hilti in result.hilti_joints:
-                self.model.add_element(hilti, parent=connectors_group)
-
-            # Interactions
-            for connector, element in result.interactions:
-                self.model.add_interaction(connector, element)
-
-            # Modifiers
-            for source, target, modifier in result.modifiers:
-                self.model.add_modifier(source, target, modifier)
-
-            results.append(result)
-
-        return results
+        target_column = columns_by_index.get(column_index)
+
+        for i, sherpa in enumerate(guide.sherpas):
+            if not getattr(sherpa, "name", None):
+                sherpa.name = f"sherpa_{i}"
+            if transformation is not None:
+                sherpa.transformation = transformation
+            sherpa.skip_contacts = True
+            self.add_element(sherpa, parent=sherpas_group)
+            if isinstance(sherpa, (PlateElement, SherpaXL120Element)) and target_column is not None:
+                self.add_modifier(sherpa, target_column, SolidDifferenceModifier())
+
+        return guide_group
 
     # ------------------------------------------------------------------ #
     #  oculus
@@ -764,6 +266,107 @@ class FloorModel(Model):
             rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
             column = ColumnElement(column_size, column_size, column_height, rot * Transformation.from_frame(base_frame), name=f"column_{i}")
             self.add_element(column, parent=columns_group)
+
+    # ------------------------------------------------------------------ #
+    #  BVH / contact detection (skip Group elements — they have no geometry)
+    # ------------------------------------------------------------------ #
+
+    def _skip_contacts(self, element):
+        """Return True if the element should be excluded from contact detection."""
+        return isinstance(element, Group) or getattr(element, "skip_contacts", False)
+
+    def compute_bvh(self, nodetype=None, max_depth=None, leafsize=1):
+        from compas_model.models.bvh import ElementBVH, ElementAABBNode
+        if nodetype is None:
+            nodetype = ElementAABBNode
+        valid = [el for el in self.elements() if not self._skip_contacts(el)]
+        self._bvh = ElementBVH.from_elements(valid, nodetype=nodetype, max_depth=max_depth, leafsize=leafsize)
+        return self._bvh
+
+    def compute_contacts(self, tolerance=1e-6, minimum_area=1e-2, contacttype=None):
+        from compas_model.interactions.contact import Contact
+        if contacttype is None:
+            contacttype = Contact
+        for element in self.elements():
+            if self._skip_contacts(element):
+                continue
+            u = element.graphnode
+            for nbr in self.bvh.nearest_neighbors(element):
+                if self._skip_contacts(nbr):
+                    continue
+                v = nbr.graphnode
+                if not self.graph.has_edge((u, v), directed=False):
+                    contacts = element.compute_contacts(nbr, tolerance=tolerance, minimum_area=minimum_area, contacttype=contacttype)
+                    if contacts:
+                        self.graph.add_edge(u, v, contacts=contacts)
+                else:
+                    edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
+                    existing = self.graph.edge_attribute(edge, name="contacts")
+                    if not existing:
+                        contacts = element.compute_contacts(nbr, tolerance=tolerance, minimum_area=minimum_area, contacttype=contacttype)
+                        if contacts:
+                            self.graph.edge_attribute(edge, name="contacts", value=contacts)
+
+    # ------------------------------------------------------------------ #
+    #  batch boolean pre-computation
+    # ------------------------------------------------------------------ #
+
+    def precompute_boolean_modifiers(self):
+        """Batch all boolean difference/union modifiers per element using boolean_chain.
+
+        Groups all SolidDifferenceModifier and SolidUnionModifier sources for each
+        target element and sends them to CGAL in a single call, avoiding repeated
+        Python↔C++ round-trips. Non-boolean modifiers are applied individually after.
+
+        Must be called after all elements and modifiers are registered, and before
+        any element geometry is first accessed (e.g., before viewer.show()).
+        """
+        from compas.datastructures import Mesh
+        from compas_tf.solid_difference_modifier import SolidDifferenceModifier
+        from compas_tf.solid_union_modifier import SolidUnionModifier
+
+        for element in self.elements():
+            diff_sources = []
+            union_sources = []
+            other_modifiers = []  # (source_element, modifier)
+
+            for nbr in self.graph.neighbors_in(element.graphnode):
+                modifiers = self.graph.edge_attribute((nbr, element.graphnode), name="modifiers") or []
+                source = self.graph.node_element(nbr)
+                for modifier in modifiers:
+                    if isinstance(modifier, SolidDifferenceModifier):
+                        src_geom = source.modelgeometry
+                        if isinstance(src_geom, Mesh) and src_geom.is_closed():
+                            diff_sources.append(src_geom)
+                        else:
+                            print(f"[precompute] skip diff source for '{getattr(element, 'name', '?')}': not a closed Mesh")
+                    elif isinstance(modifier, SolidUnionModifier):
+                        src_geom = source.modelgeometry
+                        if isinstance(src_geom, Mesh):
+                            union_sources.append(src_geom)
+                    else:
+                        other_modifiers.append((source, modifier))
+
+            if not diff_sources and not union_sources:
+                continue
+
+            xform = element.modeltransformation
+            geometry = element.elementgeometry.transformed(xform)
+
+            if not isinstance(geometry, Mesh):
+                continue
+
+            if diff_sources and geometry.is_closed():
+                geometry = SolidDifferenceModifier.apply_batch(diff_sources, geometry)
+
+            if union_sources:
+                geometry = SolidUnionModifier.apply_batch(union_sources, geometry)
+
+            for source, modifier in other_modifiers:
+                geometry = modifier.apply(source, geometry)
+
+            # Inject into cache so compute_modelgeometry() is never called for this element
+            element._modelgeometry = geometry
 
 
 

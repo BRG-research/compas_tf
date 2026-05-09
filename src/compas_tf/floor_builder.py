@@ -168,7 +168,7 @@ class FloorBuilder(Data):
         -------
         :class:`compas.geometry.Point`
         """
-        d = self.size - (column_size * 0.5 - self.thick)
+        d = self.size - (column_size * 0.5 - self.thick*0)
         return Point(-d, -d, 0)
 
     @property
