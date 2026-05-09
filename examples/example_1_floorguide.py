@@ -57,8 +57,10 @@ viewer.renderer.rendermode = "lighted"
 def add_plates(viewer, group_name, plates, facecolor):
     g = viewer.scene.add_group(group_name)
     for i, plate in enumerate(plates):
+        if not isinstance(plate, PlateElement):
+            continue
         pg = viewer.scene.add_group(f"{group_name}_{i}", parent=g)
-        pg.add(plate.elementgeometry, facecolor=facecolor, show_lines=True)
+        pg.add(plate.elementgeometry, facecolor=facecolor, show_lines=False)
         if plate.top_polyline:
             pg.add(plate.top_polyline, linecolor=Color.black())
         if plate.bottom_polyline:
@@ -76,9 +78,9 @@ add_plates(viewer, "inner_beams", guide.inner_beams, Color.yellow())
 g = viewer.scene.add_group("sherpas")
 for i, sherpa in enumerate(guide.sherpas):
     if isinstance(sherpa, SherpaXL120Element):
-        viewer.scene.add(sherpa.elementgeometry, facecolor=Color.red(), show_lines=True, parent=g)
+        viewer.scene.add(sherpa.elementgeometry, facecolor=Color.red(), show_lines=False, parent=g)
     elif isinstance(sherpa, PlateElement):
-        viewer.scene.add(sherpa.elementgeometry, facecolor=Color(0.8, 0.2, 0.8), show_lines=True, parent=g)
+        viewer.scene.add(sherpa.elementgeometry, facecolor=Color(0.8, 0.2, 0.8), show_lines=False, parent=g)
 
 g = viewer.scene.add_group("debug")
 for o in guide.debug:

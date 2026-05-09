@@ -200,8 +200,7 @@ class SolidDifferenceModifier(Modifier):
             print("[batch-bool] empty result, keeping original")
             return targetgeometry
         print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
-        result = _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh)
-        print(f"[batch-bool] polygonal -> V/F={result.number_of_vertices()}/{result.number_of_faces()}")
+        result = Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
         return result
 
     """Modifier for boolean difference between two geometries.

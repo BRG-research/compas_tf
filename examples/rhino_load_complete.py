@@ -1,6 +1,8 @@
-"""example_5_complete.py
-#! python3
-# r: compas, compas_cgal
+"""rhino_load_complete.py
+
+Load floor model + schoring models from JSON and add all meshes to Rhino.
+Run inside Rhino's Python editor (EditPythonScript) or a GhPython component.
+"""
 import pathlib
 import sys
 sys.path.insert(0, r"C:\brg\compas_tf\src")
@@ -59,40 +61,3 @@ for model in schoring_models:
 
 sc.doc.Views.Redraw()
 print("Done.")
-
-"""
-import pathlib
-import sys
-
-import compas
-from compas_viewer.config import Config
-from compas_viewer.viewer import Viewer
-
-import compas_tf  # noqa: F401 — required for deserialization of TF types
-
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from model import add_model_to_viewer  # noqa: E402
-
-data_dir = pathlib.Path(__file__).parent.parent / "data"
-
-# ------------------------------------------------------------------ #
-#  Load models
-# ------------------------------------------------------------------ #
-
-floor_model = compas.json_load(data_dir / "floor_model_booleans.json")
-schoring_models = compas.json_load(data_dir / "schoring_models.json")
-
-# ------------------------------------------------------------------ #
-#  Viewer
-# ------------------------------------------------------------------ #
-
-config = Config()
-config.unit = "mm"
-viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"
-
-add_model_to_viewer(floor_model, viewer)
-for model in schoring_models:
-    add_model_to_viewer(model, viewer)
-
-viewer.show()

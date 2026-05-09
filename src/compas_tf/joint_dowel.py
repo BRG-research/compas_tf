@@ -85,19 +85,16 @@ class DowelElement(Element):
 
     def compute_mesh(self) -> Mesh:
         """Compute the detailed mesh geometry for boolean operations."""
-        w, d = self.width / 2, self.depth / 2
-        rect_bottom = Polyline([
-            Point(-w, -d, 0),
-            Point(w, -d, 0),
-            Point(w, d, 0),
-            Point(-w, d, 0),
-            Point(-w, -d, 0),
-        ])
-        rect_top = rect_bottom.translated([0, 0, self.height])
-        return PolylineLoft.to_mesh(rect_bottom, rect_top)
+        import math
+        n = 8
+        r = self.width / 2
+        pts = [Point(r * math.cos(2 * math.pi * k / n), r * math.sin(2 * math.pi * k / n), 0) for k in range(n)]
+        circle_bottom = Polyline(pts + [pts[0]])
+        circle_top = circle_bottom.translated([0, 0, self.height])
+        return PolylineLoft.to_mesh(circle_bottom, circle_top)
 
-    def compute_elementgeometry(self, include_features=False) -> Line:
-        return self._axis
+    def compute_elementgeometry(self, include_features=False) -> Mesh:
+        return self.compute_mesh()
 
     def compute_aabb(self, inflate: float = 1.0) -> Box:
         line = self.axis

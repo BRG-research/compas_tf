@@ -34,9 +34,9 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 #  Prop positions from FloorBuilder
 # ------------------------------------------------------------------ #
 
-column_size = 200
+column_size = 220
 prop_height = 2500
-story_height = 3000
+story_height = 3200
 builder = compas.json_load(data_dir / "floorbuilder.json")
 column_plan = builder.corner_point_column(column_size)
 

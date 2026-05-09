@@ -1,13 +1,53 @@
-"""example_2_floor_model_booleans.py
+"""
+#! python3
+# r: compas, compas_cgal
+import pathlib                                                                                                                                   
+import sys                                                                                                                                       
+sys.path.insert(0, r"C:\brg\compas_tf\src")                                                                                                      
+                                                                        
+import compas
+import scriptcontext as sc
+import rhinoscriptsyntax as rs
+from compas_rhino.conversions import mesh_to_rhino
+from compas_model.elements.group import Group
 
-Build a FloorModel, run boolean cuts via precompute_boolean_modifiers(),
-then run face-to-face contact detection and display contact polygons in red.
+data_path = pathlib.Path(r"C:\brg\compas_tf\data\floor_model_booleans.json")
+floor_model = compas.json_load(data_path)
+
+layer = "FloorModel"
+rs.AddLayer(layer)
+layer_idx = sc.doc.Layers.FindByFullPath(layer, -1)
+
+def add_element(element):
+    if isinstance(element, Group):
+        for child in element.children:
+            add_element(child)
+        return
+    mesh = element.modelgeometry
+    if mesh is None:
+        return
+    rh_mesh = mesh_to_rhino(mesh)
+    attr = sc.doc.CreateDefaultAttributes()
+    attr.LayerIndex = layer_idx
+    sc.doc.Objects.AddMesh(rh_mesh, attr)
+
+for node in floor_model.tree.root.children:
+    add_element(node.element)
+
+sc.doc.Views.Redraw()
+
+"C:/Users/Petras/.rhinocode/py39-rh8/python.exe" -m pip install --no-build-isolation -e C:/brg/compas_tf  
 """
 import pathlib
 import sys
 
+import math
+
 import compas
 from compas.colors import Color
+from compas.datastructures import Mesh
+from compas.geometry import Point
+from compas.geometry import Rotation
 from compas.geometry import Translation
 from compas.geometry import Vector
 from compas_viewer.config import Config
@@ -70,7 +110,10 @@ floor_model.add_support(column_size=column_size)
 floor_model.add_column(column_size=column_size)
 
 floor_level = Translation.from_vector(Vector(0, 0, floor_model.story_height))
-floor_model.add_floor_guide(guide, column_index=0, transformation=floor_level)
+floor_model.add_floor_guide(guide, column_index=0, transformation=floor_level, include_oculus=True)
+for i in range(1, 4):
+    rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
+    floor_model.add_floor_guide(guide, column_index=i, transformation=floor_level * rot, include_oculus=False)
 
 # ------------------------------------------------------------------ #
 #  Batch boolean cuts
@@ -79,6 +122,7 @@ floor_model.add_floor_guide(guide, column_index=0, transformation=floor_level)
 floor_model.precompute_boolean_modifiers()
 
 compas.json_dump(floor_model, data_dir / "floor_model_booleans.json")
+compas.json_dump(builder, data_dir / "floorbuilder.json")
 
 # ------------------------------------------------------------------ #
 #  Contact detection
@@ -98,6 +142,20 @@ viewer = Viewer(config)
 viewer.renderer.rendermode = "lighted"
 
 add_model_to_viewer(floor_model, viewer)
+
+screw_heads = Mesh.from_obj(str(data_dir / "CustomElements" / "ScrewHeads.obj"))
+viewer.scene.add(screw_heads, facecolor=(0.6, 0.6, 0.6), show_lines=False)
+
+debug_group = viewer.scene.add_group("debug")
+for item in guide.debug:
+    viewer.scene.add(item, parent=debug_group, linecolor=(1.0, 0.0, 0.0), linewidth=2)
+
+# dowels_group = viewer.scene.add_group("dowels")
+# for dowel in guide.make_dowels():
+#     mesh = dowel.compute_mesh()
+#     if dowel.transformation:
+#         mesh = mesh.transformed(dowel.transformation)
+#     viewer.scene.add(mesh, parent=dowels_group, facecolor=(0.2, 0.6, 1.0))
 
 # g_contacts = viewer.scene.add_group("contacts")
 # for contact in contacts:

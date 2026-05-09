@@ -107,7 +107,6 @@ class PlateElement(Element):
 
     @property
     def __data__(self) -> dict:
-        # Don't serialize mesh - let it regenerate with winding correction
         return {
             "polygon": self.polygon,
             "thickness": self.thickness,
@@ -118,7 +117,16 @@ class PlateElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            "modelgeometry": self._modelgeometry,
         }
+
+    @classmethod
+    def __from_data__(cls, data: dict) -> "PlateElement":
+        modelgeometry = data.pop("modelgeometry", None)
+        plate = cls(**data)
+        if modelgeometry is not None:
+            plate._modelgeometry = modelgeometry
+        return plate
 
     def __init__(
         self,
@@ -252,6 +260,43 @@ class PlateElement(Element):
         if self.transformation:
             return self._bottom_polyline.transformed(self.transformation)
         return self._bottom_polyline
+
+    @property
+    def face_polylines(self) -> dict[str, Union[Polyline, list[Polyline]]]:
+        """Face outlines as closed polylines.
+
+        Returns
+        -------
+        dict with keys:
+            ``"bottom"`` — closed polyline of the bottom face
+            ``"top"``    — closed polyline of the top face
+            ``"walls"``  — list of closed polylines, one per side wall
+        """
+        bot = self.bottom_polyline
+        top = self.top_polyline
+
+        if bot is None:
+            bot_pts = list(self.bottom.points)
+            bot = Polyline(bot_pts + [bot_pts[0]])
+        if top is None:
+            top_pts = list(self.top.points)
+            top = Polyline(top_pts + [top_pts[0]])
+
+        bot_pts = list(bot.points[:-1])
+        top_pts = list(top.points[:-1])
+        n = len(bot_pts)
+
+        walls = []
+        for i in range(n):
+            j = (i + 1) % n
+            quad = [bot_pts[i], bot_pts[j], top_pts[j], top_pts[i]]
+            walls.append(Polyline(quad + [quad[0]]))
+
+        return {
+            "bottom": bot,
+            "top": top,
+            "walls": walls,
+        }
 
     @property
     def base_frame(self) -> Frame:
@@ -462,6 +507,62 @@ class PlateElement(Element):
             box.zsize *= inflate
         self._obb = box
         return box
+
+    def _polygon_faces(self, xform):
+        """Return list of (points, normal) for each polygon face in world space.
+
+        Produces the top face, bottom face, and one quad per side edge — no
+        triangulation, regardless of how the mesh was constructed.
+        """
+        from compas.geometry import transform_points
+
+        faces = []
+
+        if self.top is not None:
+            pts = [Point(*p) for p in transform_points([list(p) for p in self.top.points], xform)]
+            faces.append((pts, Polygon(pts).normal))
+
+        if self.bottom is not None:
+            pts = [Point(*p) for p in transform_points([list(p) for p in self.bottom.points], xform)]
+            faces.append((pts, Polygon(pts).normal))
+
+        if self.top is not None and self.bottom is not None:
+            top_pts = [Point(*p) for p in transform_points([list(p) for p in self.top.points], xform)]
+            bot_pts = [Point(*p) for p in transform_points([list(p) for p in self.bottom.points], xform)]
+            n = min(len(top_pts), len(bot_pts))
+            for i in range(n):
+                j = (i + 1) % n
+                quad = [bot_pts[i], bot_pts[j], top_pts[j], top_pts[i]]
+                faces.append((quad, Polygon(quad).normal))
+
+        return faces
+
+    def compute_contacts(self, other, tolerance=1e-6, minimum_area=1e-1, contacttype=None):
+        """Contact detection on true polygon faces — no triangulation."""
+        from compas_model.algorithms.contacts import polygon_polygon_overlap
+        from compas_model.interactions import Contact
+
+        if contacttype is None:
+            contacttype = Contact
+
+        a_faces = self._polygon_faces(self.modeltransformation)
+
+        if isinstance(other, PlateElement):
+            b_faces = other._polygon_faces(other.modeltransformation)
+        elif isinstance(other.modelgeometry, Mesh):
+            b_mesh = other.modelgeometry
+            b_faces = [(b_mesh.face_coordinates(f), b_mesh.face_normal(f)) for f in b_mesh.faces()]
+        else:
+            raise NotImplementedError
+
+        contacts = []
+        for a_points, a_normal in a_faces:
+            for b_points, b_normal in b_faces:
+                result = polygon_polygon_overlap(a_points, a_normal, b_points, b_normal, tolerance, minimum_area)
+                if result:
+                    points, frame, area = result
+                    contacts.append(contacttype(points=points, frame=frame, size=area))
+        return contacts
 
     def compute_point(self) -> Point:
         return Point(*self.modelgeometry.centroid())

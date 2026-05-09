@@ -99,7 +99,6 @@ def add_element_to_viewer(viewer, viewer_parent, element, color):
     element_name = element.name or "element"
     element_group = viewer.scene.add_group(element_name) if viewer_parent is None else viewer.scene.add_group(element_name, parent=viewer_parent)
 
-    # Add mesh
     element_group.add(mesh, name="mesh", hide_coplanaredges=True, color=color)
 
     # Add top/bottom polylines for PlateElement
@@ -215,7 +214,8 @@ def add_model_to_viewer(model, viewer):
                 traverse_element(child, child_group)
             else:
                 # Skip elements absorbed by boolean union or used as difference cutters
-                if child in hidden_sources:
+                # but keep DowelElements visible even though they are cutter sources
+                if child in hidden_sources and not isinstance(child, DowelElement):
                     continue
                 # Add element geometry and get its viewer group
                 color = get_color_for_element(child)
@@ -227,8 +227,8 @@ def add_model_to_viewer(model, viewer):
                     if child in element_connectors:
                         connectors_group = viewer.scene.add_group("connectors", parent=child_viewer_group)
                         for connector in element_connectors[child]:
-                            # Skip modifier-only connectors (e.g., hilti cutters)
-                            if isinstance(connector, HiltiElement):
+                            # Skip modifier-only connectors (e.g., hilti/dowel cutters)
+                            if isinstance(connector, (HiltiElement, DowelElement)):
                                 continue
                             conn_color = get_color_for_element(connector)
                             add_element_to_viewer(viewer, connectors_group, connector, conn_color)
@@ -246,7 +246,7 @@ def add_model_to_viewer(model, viewer):
             group = viewer.scene.add_group(element.name or "group")
             traverse_element(element, group)
         else:
-            if element in hidden_sources:
+            if element in hidden_sources and not isinstance(element, DowelElement):
                 continue
             color = get_color_for_element(element)
             elem_group = add_element_to_viewer(viewer, None, element, color)

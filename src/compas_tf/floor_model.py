@@ -18,6 +18,7 @@ from compas_model.models import Model
 from compas_model.models.interactiongraph import InteractionGraph
 from compas_model.models.elementtree import ElementNode
 from compas_model.elements import ColumnElement
+from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.plate import PlateElement
 
@@ -102,7 +103,7 @@ class FloorModel(Model):
     #  floor guide (plates + sherpas)
     # ------------------------------------------------------------------ #
 
-    def add_floor_guide(self, guide, column_index=0, transformation=None):
+    def add_floor_guide(self, guide, column_index=0, transformation=None, include_oculus=True):
         """Add all FloorGuide plate elements and sherpas to the model.
 
         Follows the element sequence of example_2_floorguide.py: beds,
@@ -156,16 +157,48 @@ class FloorModel(Model):
             ("wedge_block", guide.wedge_block),
             ("wedges_column", guide.wedges_column),
             ("inner_beams", guide.inner_beams),
-            ("oculus", guide.oculus),
         ]
+        if include_oculus:
+            plate_sections.append(("oculus", guide.oculus))
+        elements_by_group = {}
+        dowels_group = Group(name="dowels")
+        self.add_element(dowels_group, parent=guide_group)
         for group_name, plates in plate_sections:
             sub = Group(name=group_name)
             self.add_element(sub, parent=guide_group)
+            group_elements = []
+            dowel_index = 0
             for i, plate in enumerate(plates):
-                plate.name = f"{group_name}_{i}"
-                if transformation is not None:
-                    plate.transformation = transformation
-                self.add_element(plate, parent=sub)
+                if isinstance(plate, DowelElement):
+                    plate.name = f"dowel_{dowel_index}"
+                    dowel_index += 1
+                    if transformation is not None:
+                        if plate.transformation is not None:
+                            plate.transformation = transformation * plate.transformation
+                        else:
+                            plate.transformation = transformation
+                    self.add_element(plate, parent=dowels_group)
+                else:
+                    plate.name = f"{group_name}_{i}"
+                    if transformation is not None:
+                        if plate.transformation is not None:
+                            plate.transformation = transformation * plate.transformation
+                        else:
+                            plate.transformation = transformation
+                    self.add_element(plate, parent=sub)
+                group_elements.append(plate)
+            elements_by_group[group_name] = group_elements
+
+        # Dowels cut through inner beam plates and wedges starting from index 3
+        # Dowels on line_index 1 (middle) also cut oculus side plates
+        dowels = [e for e in elements_by_group.get("wedges_column", []) if isinstance(e, DowelElement)]
+        wedge_plates = [e for e in elements_by_group.get("wedges_column", []) if isinstance(e, PlateElement)]
+        base_targets = wedge_plates[3:] + elements_by_group.get("inner_beams", [])
+        oculus_targets = elements_by_group.get("oculus", [])[:-1]  # side plates only
+        for dowel in dowels:
+            targets = base_targets + (oculus_targets if getattr(dowel, "line_index", None) == 1 else [])
+            for target in targets:
+                self.add_modifier(dowel, target, SolidDifferenceModifier())
 
         # Sherpas: SherpaXL120Element → joint elements,
         #          PlateElement → column cutter (SolidDifferenceModifier)
@@ -274,7 +307,7 @@ class FloorModel(Model):
 
     def _skip_contacts(self, element):
         """Return True if the element should be excluded from contact detection."""
-        return isinstance(element, Group) or getattr(element, "skip_contacts", False)
+        return isinstance(element, (Group, DowelElement)) or getattr(element, "skip_contacts", False)
 
     def compute_bvh(self, nodetype=None, max_depth=None, leafsize=1):
         from compas_model.models.bvh import ElementBVH, ElementAABBNode

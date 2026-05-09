@@ -10,12 +10,12 @@ import compas
 from compas.datastructures import Mesh
 from compas.geometry import Frame
 
-name = "schoring_vertical_body_end_0"
-base_dir = Path("C:/brg/code_python/compas_tf/data/SchoringElement")
+name = "schoring_head_custom"
+base_dir = Path(__file__).parent.parent / "data" / "SchoringElement"
 obj_path = base_dir / f"{name}.obj"
 json_path = base_dir / f"{name}.json"
 
-mesh = Mesh.from_obj(compas.get(str(obj_path)))
+mesh = Mesh.from_obj(str(obj_path))
 frame = Frame.worldXY()
 extension_length = mesh.aabb().zsize
 
