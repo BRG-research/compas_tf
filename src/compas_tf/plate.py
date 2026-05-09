@@ -391,8 +391,12 @@ class PlateElement(Element):
             faces.append([i, next_i, next_i + n0, i + n0])
 
         if cap:
-            faces.append(list(range(n0 - 1, -1, -1)))
-            faces.append(list(range(n0, 2 * n0)))
+            bottom_poly = Polygon(list(reversed(pts0)))
+            for tri in PlateElement._earclip_polygon(bottom_poly):
+                faces.append([n0 - 1 - tri[0], n0 - 1 - tri[1], n0 - 1 - tri[2]])
+            top_poly = Polygon(pts1)
+            for tri in PlateElement._earclip_polygon(top_poly):
+                faces.append([tri[0] + n0, tri[1] + n0, tri[2] + n0])
 
         return Mesh.from_vertices_and_faces(vertices, faces)
 
@@ -425,7 +429,13 @@ class PlateElement(Element):
         vertices: list[Point] = bottom_pts + top_pts  # type: ignore
         bottom: list[int] = list(range(offset))
         top: list[int] = [i + offset for i in bottom]
-        faces: list[list[int]] = [bottom[::-1], top]
+        faces: list[list[int]] = []
+        bottom_poly = Polygon(list(reversed(bottom_pts)))
+        for tri in PlateElement._earclip_polygon(bottom_poly):
+            faces.append([offset - 1 - tri[0], offset - 1 - tri[1], offset - 1 - tri[2]])
+        top_poly = Polygon(top_pts)
+        for tri in PlateElement._earclip_polygon(top_poly):
+            faces.append([tri[0] + offset, tri[1] + offset, tri[2] + offset])
         for (a, b), (c, d) in zip(pairwise(bottom + bottom[:1]), pairwise(top + top[:1])):
             faces.append([a, b, d, c])
         mesh: Mesh = Mesh.from_vertices_and_faces(vertices, faces)

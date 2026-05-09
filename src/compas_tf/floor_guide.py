@@ -1135,6 +1135,7 @@ class FloorGuide(Data):
         cp = self.construction_planes
         side0 = Plane((0, 0, 0), Vector(0, 0, 1))
         side1 = Plane((0, 0, -self.static_h+self.size_tsections), Vector(0, 0, 1))
+        side2 = Plane((0, 0, -self.static_h), Vector(0, 0, 1))
 
         # Rotate inner_beams[1] planes (middle diagonal beam) 4×90° around Z
         rotated = []
@@ -1150,13 +1151,13 @@ class FloorGuide(Data):
         for i in range(4):
             plates.append(_wedge(
                 [
-                 rotated[i],
+                 side2,
                  rotated[(i+1)%4],
-                 rotated[i].offset(-self.size_inner_beams),
+                 side0,
                  rotated[(i-1)%4].offset(-self.size_inner_beams)
                  ],
-                bottom_plane=side1,
-                top_plane=side0,
+                bottom_plane=rotated[i],
+                top_plane=rotated[i].offset(-self.size_inner_beams),
             ))
 
         # 1 inner plate – center diamond bounded by the 4 oculus faces
