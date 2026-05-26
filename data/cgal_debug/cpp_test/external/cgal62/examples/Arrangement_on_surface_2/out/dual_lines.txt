@@ -1,3 +1,0 @@
-The dual arrangement size:
-V = 4950 (+ 200 at infinity),  E = 10000,  F = 5051 (200 unbounded)
-No three collinear points are found in the input set.

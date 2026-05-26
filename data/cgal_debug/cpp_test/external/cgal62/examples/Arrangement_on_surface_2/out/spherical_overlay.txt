@@ -1,3 +1,0 @@
-No. of vertices: 2
-No. of vertices: 3
-No. of vertices: 3

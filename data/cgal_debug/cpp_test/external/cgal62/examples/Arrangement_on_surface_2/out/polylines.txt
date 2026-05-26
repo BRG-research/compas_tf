@@ -1,2 +1,0 @@
-The arrangement size:
-   |V| = 14,  |E| = 18,  |F| = 6
