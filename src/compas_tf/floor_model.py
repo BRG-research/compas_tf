@@ -27,6 +27,60 @@ from compas_tf.support import SupportElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 
+def merge_collinear_points(points, angle_tol=1e-3, closed=True):
+    """Drop intermediate points that lie on the line through their neighbors.
+
+    Iterates until a fixed point. Compas has no built-in for this.
+
+    Parameters
+    ----------
+    points : sequence of Point
+        Input vertices.
+    angle_tol : float
+        Collinearity tolerance expressed as ``sin(angle)`` between
+        consecutive edge directions. 1e-3 ≈ 0.057° (tight, only drops
+        machine-collinear points). Raise to merge near-collinear runs.
+    closed : bool
+        If True, treat the input as a closed polygon (wrap-around when
+        evaluating the first/last vertex). If False, the endpoints are
+        always kept.
+
+    Returns
+    -------
+    list[Point]
+    """
+    pts = list(points)
+    while True:
+        n = len(pts)
+        if n < 3:
+            return pts
+        kept = []
+        dropped = False
+        for i, curr in enumerate(pts):
+            if not closed and (i == 0 or i == n - 1):
+                kept.append(curr)
+                continue
+            prev = pts[(i - 1) % n]
+            nxt = pts[(i + 1) % n]
+            v1 = curr - prev
+            v2 = nxt - curr
+            l1, l2 = v1.length, v2.length
+            if l1 < 1e-9:
+                dropped = True
+                continue
+            if l2 < 1e-9:
+                kept.append(curr)
+                continue
+            sin_angle = v1.cross(v2).length / (l1 * l2)
+            if sin_angle < angle_tol:
+                dropped = True
+                continue
+            kept.append(curr)
+        if not dropped:
+            return kept
+        pts = kept
+
+
 class FloorModel(Model):
     """A timber floor model combining a Model tree with a FloorBuilder.
 
@@ -98,6 +152,7 @@ class FloorModel(Model):
         super(FloorModel, self).__init__(name=name)
         self.builder = builder
         self.story_height = story_height
+        self.debug = []  # debug geometry pushed by internal steps; iterate from caller (e.g. viewer)
 
     # ------------------------------------------------------------------ #
     #  floor guide (plates + sherpas)
@@ -155,50 +210,24 @@ class FloorModel(Model):
             ("outer_ribs", guide.outer_ribs),
             ("inner_ribs", guide.inner_ribs),
             ("wedge_block", guide.wedge_block),
-            ("wedges_column", guide.wedges_column),
+            ("wedges_inner_beams", guide.wedges_inner_beams),
             ("inner_beams", guide.inner_beams),
         ]
         if include_oculus:
             plate_sections.append(("oculus", guide.oculus))
-        elements_by_group = {}
-        dowels_group = Group(name="dowels")
-        self.add_element(dowels_group, parent=guide_group)
+
         for group_name, plates in plate_sections:
             sub = Group(name=group_name)
             self.add_element(sub, parent=guide_group)
-            group_elements = []
-            dowel_index = 0
             for i, plate in enumerate(plates):
-                if isinstance(plate, DowelElement):
-                    plate.name = f"dowel_{dowel_index}"
-                    dowel_index += 1
-                    if transformation is not None:
-                        if plate.transformation is not None:
-                            plate.transformation = transformation * plate.transformation
-                        else:
-                            plate.transformation = transformation
-                    self.add_element(plate, parent=dowels_group)
-                else:
-                    plate.name = f"{group_name}_{i}"
-                    if transformation is not None:
-                        if plate.transformation is not None:
-                            plate.transformation = transformation * plate.transformation
-                        else:
-                            plate.transformation = transformation
-                    self.add_element(plate, parent=sub)
-                group_elements.append(plate)
-            elements_by_group[group_name] = group_elements
-
-        # Dowels cut through inner beam plates and wedges starting from index 3
-        # Dowels on line_index 1 (middle) also cut oculus side plates
-        dowels = [e for e in elements_by_group.get("wedges_column", []) if isinstance(e, DowelElement)]
-        wedge_plates = [e for e in elements_by_group.get("wedges_column", []) if isinstance(e, PlateElement)]
-        base_targets = wedge_plates[3:] + elements_by_group.get("inner_beams", [])
-        oculus_targets = elements_by_group.get("oculus", [])[:-1]  # side plates only
-        for dowel in dowels:
-            targets = base_targets + (oculus_targets if getattr(dowel, "line_index", None) == 1 else [])
-            for target in targets:
-                self.add_modifier(dowel, target, SolidDifferenceModifier())
+                plate.name = f"{group_name}_{i}"
+                plate.contact_group = group_name
+                if transformation is not None:
+                    if plate.transformation is not None:
+                        plate.transformation = transformation * plate.transformation
+                    else:
+                        plate.transformation = transformation
+                self.add_element(plate, parent=sub)
 
         # Sherpas: SherpaXL120Element → joint elements,
         #          PlateElement → column cutter (SolidDifferenceModifier)
@@ -307,38 +336,218 @@ class FloorModel(Model):
 
     def _skip_contacts(self, element):
         """Return True if the element should be excluded from contact detection."""
-        return isinstance(element, (Group, DowelElement)) or getattr(element, "skip_contacts", False)
+        from compas_tf.wedge import WedgeElement
+        return isinstance(element, (Group, DowelElement, WedgeElement)) or getattr(element, "skip_contacts", False)
 
-    def compute_bvh(self, nodetype=None, max_depth=None, leafsize=1):
+    def compute_bvh(self, nodetype=None, max_depth=None, leafsize=1, where=None):
+        """Build a BVH from elements that pass _skip_contacts and the optional
+        ``where`` predicate. With ``where`` set, the BVH is returned but NOT
+        cached on the model, so subsequent unrestricted queries are unaffected.
+
+        Parameters
+        ----------
+        where : callable[(element), bool], optional
+            Predicate to further restrict which elements enter the BVH.
+            Example: ``where=lambda el: getattr(el, "contact_group", None) == "inner_beams"``.
+        """
         from compas_model.models.bvh import ElementBVH, ElementAABBNode
         if nodetype is None:
             nodetype = ElementAABBNode
-        valid = [el for el in self.elements() if not self._skip_contacts(el)]
-        self._bvh = ElementBVH.from_elements(valid, nodetype=nodetype, max_depth=max_depth, leafsize=leafsize)
-        return self._bvh
+        valid = [
+            el for el in self.elements()
+            if not self._skip_contacts(el) and (where is None or where(el))
+        ]
+        bvh = ElementBVH.from_elements(valid, nodetype=nodetype, max_depth=max_depth, leafsize=leafsize)
+        if where is None:
+            self._bvh = bvh
+        return bvh
 
-    def compute_contacts(self, tolerance=1e-6, minimum_area=1e-2, contacttype=None):
+    def compute_contacts_inner_beams(self, tolerance=1.0, minimum_area=1.0, contacttype=None, wedge_spacing=700):
+        """Contact detection restricted to the 16 plates that form the
+        inner_beam/oculus joint ring:
+
+        - 12 ``inner_beams`` plates (3 per quarter × 4 quarters)
+        - 4 oculus boundary plates (``oculus_0`` .. ``oculus_3``)
+
+        Only the two large PlateElement faces (top_polyline / bottom_polyline)
+        participate. The thin perimeter quads ("side" faces) are skipped on
+        both sides of every pair.
+
+        After detection, places a ``WedgeElement`` along each contact's
+        **longest top edge**, subdivided by ``wedge_spacing``. Each wedge is
+        registered as a ``SolidDifferenceModifier`` cutter against the two
+        plates that form the contact. No dowels are emitted.
+
+        Parameters
+        ----------
+        wedge_spacing : float
+            Approximate spacing between wedges along each contact's top edge.
+            Set to 0 or negative to disable wedge placement.
+        """
+        def _filter(el):
+            cg = getattr(el, "contact_group", None)
+            if cg == "inner_beams":
+                return True
+            if cg == "oculus":
+                name = getattr(el, "name", "") or ""
+                if name.startswith("oculus_"):
+                    try:
+                        return int(name.rsplit("_", 1)[-1]) < 4
+                    except ValueError:
+                        return False
+            return False
+
+        self.compute_contacts(
+            tolerance=tolerance,
+            minimum_area=minimum_area,
+            contacttype=contacttype,
+            where=_filter,
+            face_kinds={"top", "bottom"},
+        )
+
+        if wedge_spacing and wedge_spacing > 0:
+            self._add_wedges_along_contacts(wedge_spacing=wedge_spacing)
+
+    def _add_wedges_along_contacts(self, wedge_spacing=700):
+        """Place WedgeElements along the longest top edge of every contact.
+        Each is registered as a SolidDifferenceModifier cutter against the
+        two plates that form the contact.
+
+        Frame orientation:
+            X axis = edge direction (along the longest top edge)
+            Y axis = contact polygon normal
+            Z axis = X cross Y
+        """
+        from compas_tf.wedge import WedgeElement
+        from compas.geometry import Frame, Polygon as GeomPolygon, Transformation, Vector
+
+        # Snapshot edges with contacts before mutating the graph.
+        edge_contacts = []
+        for edge in self.graph.edges():
+            contacts = self.graph.edge_attribute(edge, name="contacts")
+            if contacts:
+                u, v = edge
+                el_a = self.graph.node_element(u)
+                el_b = self.graph.node_element(v)
+                for contact in contacts:
+                    edge_contacts.append((el_a, el_b, contact))
+
+        wedges_group = self.add_group("contact_wedges")
+        wedge_idx = 0
+
+        for el_a, el_b, contact in edge_contacts:
+            polygon = getattr(contact, "polygon", None)
+            if polygon is None:
+                continue
+            pts = list(polygon.points)
+            pts = merge_collinear_points(pts, angle_tol=1e-3, closed=True)
+            n_pts = len(pts)
+            if n_pts < 3:
+                continue
+
+            contact_normal = GeomPolygon(pts).normal
+
+            centroid_z = sum(p[2] for p in pts) / n_pts
+            scored = []
+            for i in range(n_pts):
+                a, b = pts[i], pts[(i + 1) % n_pts]
+                mid_z = (a[2] + b[2]) / 2
+                length = (b - a).length
+                is_top = mid_z >= centroid_z
+                scored.append((is_top, length, a, b))
+            scored.sort(key=lambda e: (not e[0], -e[1]))
+            _, length, start, end = scored[0]
+            if length < 1e-6:
+                continue
+
+            direction = (end - start).unitized()
+
+            n = round(length / (wedge_spacing / 2))
+            n = n if n % 2 == 0 else n + 1
+            if n == 0:
+                continue
+            new_spacing = length / n
+
+            for k in range(1, n):
+                if k % 2 == 0:
+                    continue
+                pt = start + direction * (new_spacing * k)
+                frame = Frame(pt, direction, contact_normal)
+
+                wedge = WedgeElement(transformation=Transformation.from_frame(frame))
+                wedge.name = f"contact_wedge_{wedge_idx}"
+                self.add_element(wedge, parent=wedges_group)
+
+                self.add_modifier(wedge, el_a, SolidDifferenceModifier())
+                self.add_modifier(wedge, el_b, SolidDifferenceModifier())
+
+                wedge_idx += 1
+
+        self.precompute_boolean_modifiers()
+        return wedges_group
+
+    def compute_contacts(self, tolerance=1e-6, minimum_area=1e-2, contacttype=None, where=None, face_kinds=None):
+        """Compute pairwise contacts. With ``where`` set, only elements that
+        match the predicate participate on both sides (subject and neighbor),
+        and a temporary filtered BVH is built so neighbor queries stay tight.
+
+        Parameters
+        ----------
+        where : callable[(element), bool], optional
+            Predicate to restrict the contact set. Example to detect contacts
+            only among inner_beams plates (tagged via ``plate.contact_group``)::
+
+                model.compute_contacts(
+                    where=lambda el: getattr(el, "contact_group", None) == "inner_beams",
+                )
+
+            The full-model cached BVH (if any) is not invalidated by a
+            filtered call.
+
+        face_kinds : set[str], optional
+            Forwarded to ``element.compute_contacts``. Restrict pair
+            evaluation to a subset of ``{"top", "bottom", "side"}`` —
+            e.g. ``{"top", "bottom"}`` keeps only the two large
+            PlateElement faces and drops the thin perimeter quads.
+            Only elements whose ``compute_contacts`` accepts ``face_kinds``
+            (currently ``PlateElement``) will honor it.
+        """
         from compas_model.interactions.contact import Contact
         if contacttype is None:
             contacttype = Contact
-        for element in self.elements():
-            if self._skip_contacts(element):
-                continue
+
+        if where is None:
+            bvh = self.bvh
+            subjects = (el for el in self.elements() if not self._skip_contacts(el))
+        else:
+            bvh = self.compute_bvh(where=where)
+            subjects = (
+                el for el in self.elements()
+                if not self._skip_contacts(el) and where(el)
+            )
+
+        extra = {}
+        if face_kinds is not None:
+            extra["face_kinds"] = face_kinds
+
+        for element in subjects:
             u = element.graphnode
-            for nbr in self.bvh.nearest_neighbors(element):
+            for nbr in bvh.nearest_neighbors(element):
                 if self._skip_contacts(nbr):
+                    continue
+                if where is not None and not where(nbr):
                     continue
                 v = nbr.graphnode
                 try:
                     if not self.graph.has_edge((u, v), directed=False):
-                        contacts = element.compute_contacts(nbr, tolerance=tolerance, minimum_area=minimum_area, contacttype=contacttype)
+                        contacts = element.compute_contacts(nbr, tolerance=tolerance, minimum_area=minimum_area, contacttype=contacttype, **extra)
                         if contacts:
                             self.graph.add_edge(u, v, contacts=contacts)
                     else:
                         edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
                         existing = self.graph.edge_attribute(edge, name="contacts")
                         if not existing:
-                            contacts = element.compute_contacts(nbr, tolerance=tolerance, minimum_area=minimum_area, contacttype=contacttype)
+                            contacts = element.compute_contacts(nbr, tolerance=tolerance, minimum_area=minimum_area, contacttype=contacttype, **extra)
                             if contacts:
                                 self.graph.edge_attribute(edge, name="contacts", value=contacts)
                 except NotImplementedError:
@@ -373,10 +582,9 @@ class FloorModel(Model):
                 source = self.graph.node_element(nbr)
                 for modifier in modifiers:
                     if isinstance(modifier, SolidDifferenceModifier):
-                        src_geom = source.modelgeometry
+                        src_geom = getattr(source, "boolean_geometry", None) or source.modelgeometry
                         op = getattr(modifier, "operation", "difference")
                         if op == "union":
-                            # union via boolean modifier goes into the chain too
                             if isinstance(src_geom, Mesh):
                                 bool_sources.append((src_geom, "union"))
                         elif isinstance(src_geom, Mesh) and src_geom.is_closed():

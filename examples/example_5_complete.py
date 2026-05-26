@@ -1,17 +1,18 @@
 """example_5_complete.py
 #! python3
-# r: compas, compas_cgal
+# r: compas, compas_cgal, compas_model, shapely
 import pathlib
 import sys
-sys.path.insert(0, r"C:\brg\compas_tf\src")
+sys.path.insert(0, r"C:\brg\code_python\compas_tf\src")
 
+import compas_tf  # surface real import error before json_load swallows it
 import compas
 import scriptcontext as sc
 import rhinoscriptsyntax as rs
 from compas_rhino.conversions import mesh_to_rhino
 from compas_model.elements.group import Group
 
-data_dir = pathlib.Path(r"C:\brg\compas_tf\data")
+data_dir = pathlib.Path(r"C:\brg\code_python\compas_tf\data")
 
 floor_model = compas.json_load(data_dir / "floor_model_booleans.json")
 schoring_models = compas.json_load(data_dir / "schoring_models.json")

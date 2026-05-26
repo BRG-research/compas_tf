@@ -298,12 +298,27 @@ class PlateElement(Element):
             "walls": walls,
         }
 
+    @staticmethod
+    def _longest_edge_direction(points) -> Vector:
+        """Return the unitized direction of the longest edge in a point sequence."""
+        best_len = -1.0
+        best_vec = Vector.from_start_end(points[0], points[1])
+        n = len(points)
+        for i in range(n):
+            j = (i + 1) % n
+            v = Vector.from_start_end(points[i], points[j])
+            l = v.length
+            if l > best_len:
+                best_len = l
+                best_vec = v
+        return best_vec.unitized()
+
     @property
     def base_frame(self) -> Frame:
         """Get the base frame from the bottom polyline, with transformation applied.
 
         The z-axis (normal) points from bottom to top polyline.
-        The x-axis is aligned to the first edge of the bottom polyline.
+        The x-axis is aligned to the longest edge of the bottom polyline.
 
         Returns
         -------
@@ -311,14 +326,13 @@ class PlateElement(Element):
             Frame at centroid of bottom polyline with oriented axes.
         """
         if self._bottom_plane is not None and self._bottom_polyline is not None:
-            # Get first edge direction as x-axis
-            xaxis = Vector.from_start_end(self._bottom_polyline.points[0], self._bottom_polyline.points[1]).unitized()
+            pts = self._bottom_polyline.points[:-1] if self._bottom_polyline.is_closed else self._bottom_polyline.points
+            xaxis = PlateElement._longest_edge_direction(pts)
             zaxis = self._bottom_plane.normal
             yaxis = zaxis.cross(xaxis)
             frame = Frame(self._bottom_plane.point, xaxis, yaxis)
         else:
-            # Fallback for polygon-based plates
-            xaxis = Vector.from_start_end(self.bottom.points[0], self.bottom.points[1]).unitized()
+            xaxis = PlateElement._longest_edge_direction(self.bottom.points)
             zaxis = self.bottom.normal
             yaxis = zaxis.cross(xaxis)
             frame = Frame(self.bottom.centroid, xaxis, yaxis)
@@ -332,7 +346,7 @@ class PlateElement(Element):
         """Get the top frame from the top polyline, with transformation applied.
 
         The z-axis (normal) points same direction as base_frame (from bottom to top).
-        The x-axis is aligned to the first edge of the top polyline.
+        The x-axis is aligned to the longest edge of the top polyline.
 
         Returns
         -------
@@ -340,14 +354,13 @@ class PlateElement(Element):
             Frame at centroid of top polyline with oriented axes.
         """
         if self._top_plane is not None and self._top_polyline is not None:
-            # Get first edge direction as x-axis
-            xaxis = Vector.from_start_end(self._top_polyline.points[0], self._top_polyline.points[1]).unitized()
+            pts = self._top_polyline.points[:-1] if self._top_polyline.is_closed else self._top_polyline.points
+            xaxis = PlateElement._longest_edge_direction(pts)
             zaxis = self._top_plane.normal
             yaxis = zaxis.cross(xaxis)
             frame = Frame(self._top_plane.point, xaxis, yaxis)
         else:
-            # Fallback for polygon-based plates
-            xaxis = Vector.from_start_end(self.top.points[0], self.top.points[1]).unitized()
+            xaxis = PlateElement._longest_edge_direction(self.top.points)
             zaxis = self.top.normal
             yaxis = zaxis.cross(xaxis)
             frame = Frame(self.top.centroid, xaxis, yaxis)
@@ -509,10 +522,12 @@ class PlateElement(Element):
         return box
 
     def _polygon_faces(self, xform):
-        """Return list of (points, normal) for each polygon face in world space.
+        """Return list of (points, normal, kind) for each polygon face in
+        world space. ``kind`` is one of ``"top"`` (face from top_polyline),
+        ``"bottom"`` (face from bottom_polyline), or ``"side"`` (one quad
+        per perimeter edge connecting the two polylines).
 
-        Produces the top face, bottom face, and one quad per side edge — no
-        triangulation, regardless of how the mesh was constructed.
+        No triangulation, regardless of how the mesh was constructed.
         """
         from compas.geometry import transform_points
 
@@ -520,11 +535,11 @@ class PlateElement(Element):
 
         if self.top is not None:
             pts = [Point(*p) for p in transform_points([list(p) for p in self.top.points], xform)]
-            faces.append((pts, Polygon(pts).normal))
+            faces.append((pts, Polygon(pts).normal, "top"))
 
         if self.bottom is not None:
             pts = [Point(*p) for p in transform_points([list(p) for p in self.bottom.points], xform)]
-            faces.append((pts, Polygon(pts).normal))
+            faces.append((pts, Polygon(pts).normal, "bottom"))
 
         if self.top is not None and self.bottom is not None:
             top_pts = [Point(*p) for p in transform_points([list(p) for p in self.top.points], xform)]
@@ -533,12 +548,22 @@ class PlateElement(Element):
             for i in range(n):
                 j = (i + 1) % n
                 quad = [bot_pts[i], bot_pts[j], top_pts[j], top_pts[i]]
-                faces.append((quad, Polygon(quad).normal))
+                faces.append((quad, Polygon(quad).normal, "side"))
 
         return faces
 
-    def compute_contacts(self, other, tolerance=1e-6, minimum_area=1e-1, contacttype=None):
-        """Contact detection on true polygon faces — no triangulation."""
+    def compute_contacts(self, other, tolerance=1e-6, minimum_area=1e-1, contacttype=None, face_kinds=None):
+        """Contact detection on true polygon faces — no triangulation.
+
+        Parameters
+        ----------
+        face_kinds : set[str], optional
+            Restrict to these face kinds, a subset of
+            ``{"top", "bottom", "side"}``. Applies to BOTH sides of every
+            pair. Default ``None`` = all kinds. For ``other`` being a
+            non-PlateElement (Mesh source), all its mesh faces are tagged
+            ``"side"`` for filtering purposes.
+        """
         from compas_model.algorithms.contacts import polygon_polygon_overlap
         from compas_model.interactions import Contact
 
@@ -551,13 +576,17 @@ class PlateElement(Element):
             b_faces = other._polygon_faces(other.modeltransformation)
         elif isinstance(other.modelgeometry, Mesh):
             b_mesh = other.modelgeometry
-            b_faces = [(b_mesh.face_coordinates(f), b_mesh.face_normal(f)) for f in b_mesh.faces()]
+            b_faces = [(b_mesh.face_coordinates(f), b_mesh.face_normal(f), "side") for f in b_mesh.faces()]
         else:
             raise NotImplementedError
 
+        if face_kinds is not None:
+            a_faces = [f for f in a_faces if f[2] in face_kinds]
+            b_faces = [f for f in b_faces if f[2] in face_kinds]
+
         contacts = []
-        for a_points, a_normal in a_faces:
-            for b_points, b_normal in b_faces:
+        for a_points, a_normal, _ in a_faces:
+            for b_points, b_normal, _ in b_faces:
                 result = polygon_polygon_overlap(a_points, a_normal, b_points, b_normal, tolerance, minimum_area)
                 if result:
                     points, frame, area = result

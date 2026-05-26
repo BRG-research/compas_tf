@@ -15,6 +15,7 @@ from compas_viewer.viewer import Viewer
 from compas_tf.column_head import ColumnHeadElement
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.joint_dowel import DowelElement
+from compas_tf.wedge import WedgeElement
 from compas_tf.joint_hilti import HiltiElement
 from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
@@ -215,7 +216,7 @@ def add_model_to_viewer(model, viewer):
             else:
                 # Skip elements absorbed by boolean union or used as difference cutters
                 # but keep DowelElements visible even though they are cutter sources
-                if child in hidden_sources and not isinstance(child, DowelElement):
+                if child in hidden_sources and not isinstance(child, (DowelElement, WedgeElement)):
                     continue
                 # Add element geometry and get its viewer group
                 color = get_color_for_element(child)
@@ -246,7 +247,7 @@ def add_model_to_viewer(model, viewer):
             group = viewer.scene.add_group(element.name or "group")
             traverse_element(element, group)
         else:
-            if element in hidden_sources and not isinstance(element, DowelElement):
+            if element in hidden_sources and not isinstance(element, (DowelElement, WedgeElement)):
                 continue
             color = get_color_for_element(element)
             elem_group = add_element_to_viewer(viewer, None, element, color)

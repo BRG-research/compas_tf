@@ -2,14 +2,12 @@ from compas.data import Data
 from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Point
-from compas.geometry import Transformation
 from compas.geometry import Polygon
 from compas.geometry import Polyline
 from compas.geometry import Plane
 from compas.geometry import Rotation
 from compas.geometry import Vector
 from compas.geometry import Projection
-from compas.geometry import intersection_segment_segment
 from compas.geometry import intersection_plane_plane_plane
 from compas.geometry import intersection_line_plane
 import math
@@ -17,7 +15,6 @@ import math
 from compas_tf.geometry import BezierCurve
 from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineOffset
-from compas_tf.joint_dowel import DowelElement
 from compas_tf.plate import PlateElement
 
 
@@ -84,6 +81,9 @@ class FloorGuide(Data):
         self._block_level_top = None
 
         self.debug = []
+
+        # on/off elements
+        self.output_wedges = False
 
     @property
     def __data__(self) -> dict:
@@ -312,7 +312,6 @@ class FloorGuide(Data):
 
             self._construction_planes = construction_planes
         return self._construction_planes
-    
     
     @property
     def quad_planes(self):
@@ -899,70 +898,8 @@ class FloorGuide(Data):
 
         return [PlateElement(top_polyline=top_polyline, bottom_polyline=bottom_polyline)]
 
-    def make_dowels(self, spacing=500):
-        """Create DowelElements along quarter_polygon lines 1–3.
-
-        Parameters
-        ----------
-        spacing : float
-            Approximate spacing between dowels.
-
-        Returns
-        -------
-        list of DowelElement
-        """
-        # Construct middle polyline by intersecting inner_beams planes
-        # with translated world XY plane,
-        # outer rib first rib first plane and outer second rib second plane
-
-        plane = Plane((0, 0, -self.static_h*0.5), Vector(0, 0, 1))
-
-        p0 = Point(*intersection_plane_plane_plane(plane, self.construction_planes["outer_ribs"][0][0], self.construction_planes["inner_beams"][0][0]))
-        p1 = Point(*intersection_plane_plane_plane(plane, self.construction_planes["inner_beams"][0][0], self.construction_planes["inner_beams"][1][0]))
-        p2 = Point(*intersection_plane_plane_plane(plane, self.construction_planes["inner_beams"][1][0], self.construction_planes["inner_beams"][2][0]))
-        p3 = Point(*intersection_plane_plane_plane(plane, self.construction_planes["inner_beams"][2][0], self.construction_planes["outer_ribs"][1][0]))
-        polyline = Polyline([p0, p1, p2, p3])
-        self.debug.append(polyline)
-
-        lines = self.quarter_polygon.lines[1:4]
-        lines = [Line(polyline[i], polyline[i+1]) for i in range(3)]
-        dowels = []
-        z_down = Vector(0, 0, -1)
-        for line_index, line in enumerate(lines):
-            direction = (line.end - line.start).unitized()
-            length = line.length
-            self.debug.append(line)
-
-            dowel_height = self.size_inner_beams * 6
-            n = round(length / (spacing / 2))
-            n = n if n % 2 == 0 else n + 1  # Ensure n is odd to have a dowel at the midpoint
-            if n == 0:
-                continue
-            new_spacing = length / n
-
-            x_axis = direction
-            y_axis = Vector.Zaxis()
-            z_axis = Vector.cross(line.end - line.start, Vector.Zaxis()).unitized()
-
-            for k in range(1, n):
-                if k % 2 == 0:
-                    continue
-                pt = line.start + direction * new_spacing * k
-                origin = pt 
-                frame = Frame(origin, x_axis, y_axis)
-                dowel = DowelElement(
-                    width=20,
-                    depth=20,
-                    height=dowel_height,
-                    transformation=Transformation.from_frame(frame.translated(z_axis * dowel_height * -0.5)),
-                )
-                dowel.line_index = line_index
-                dowels.append(dowel)
-
-        return dowels
-
     @property
-    def wedges_column(self):
+    def wedges_inner_beams(self):
         """3 wedges + 2 sherpa connections + 3 collumn cutting blocks"""
 
         top_plane = Plane((0, 0, 0), Vector(0, 0, 1))
@@ -994,7 +931,17 @@ class FloorGuide(Data):
         ]
 
         wedges = []
-        for group, bot in [(range(3), bottom_plane0), (range(3, 6), bottom_plane1)]:
+        if self.output_wedges:
+            for group, bot in [(range(3, 6), bottom_plane1)]:
+                for i in group:
+                    left, right = rib_pairs[i % 3]
+                    wedges.append(_wedge(
+                        [left, bot, right, top_plane],
+                        bottom_plane=cp["wedges"][i][0],
+                        top_plane=cp["wedges"][i][1],
+                    ))
+
+        for group, bot in [(range(3), bottom_plane0)]:
             for i in group:
                 left, right = rib_pairs[i % 3]
                 wedges.append(_wedge(
@@ -1003,11 +950,7 @@ class FloorGuide(Data):
                     top_plane=cp["wedges"][i][1],
                 ))
 
-        dowels = self.make_dowels()
-
-        return wedges + dowels
-    
-
+        return wedges
     
     @property
     def sherpas(self):
@@ -1069,8 +1012,6 @@ class FloorGuide(Data):
             SherpaXL120Element(depth=80, height=height, frame=frame2, name="sherpa_2"),
             *plates
         ]
-    
-
 
     @property
     def inner_beams(self):
@@ -1133,14 +1074,6 @@ class FloorGuide(Data):
 
         return wedges
 
-
-
-    @property
-    def wedges_inner_beam(self):
-        """3 wedges + Bolts connection to inner beams"""
-        pass
-
-
     @property
     def oculus(self):
         """Oculus constructed from the inner beam 2 beam first plane rotated around origin 4 times.
@@ -1199,16 +1132,17 @@ class FloorGuide(Data):
             ))
 
         # 4 boundary inner wedges beams
-        for i in range(4):
-            plates.append(_wedge(
-                [
-                    side3, 
-                    rotated_inner[(i + 1) % 4], 
-                    side0, 
-                    rotated_inner[(i - 1) % 4].offset(-self.size_inner_beams)],
-                bottom_plane=rotated_inner[i],
-                top_plane=rotated_inner[i].offset(-self.size_inner_beams),
-            ))
+        if self.output_wedges:
+            for i in range(4):
+                plates.append(_wedge(
+                    [
+                        side3, 
+                        rotated_inner[(i + 1) % 4], 
+                        side0, 
+                        rotated_inner[(i - 1) % 4].offset(-self.size_inner_beams)],
+                    bottom_plane=rotated_inner[i],
+                    top_plane=rotated_inner[i].offset(-self.size_inner_beams),
+                ))
 
         # 4 boundary inner bottom wedges beams
         for i in range(4):
@@ -1224,5 +1158,4 @@ class FloorGuide(Data):
 
         # 1 inner plate – center diamond bounded by the 4 oculus faces
         plates.append(_wedge(rotated_inner, bottom_plane=side1, top_plane=side3))
-
         return plates

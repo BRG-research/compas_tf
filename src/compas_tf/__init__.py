@@ -22,6 +22,7 @@ from compas_tf.prop import PropElement
 from compas_tf.support import SupportElement
 from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_dowel import DowelElement
+from compas_tf.wedge import WedgeElement
 from compas_tf.joint_strip import AlignmentStripElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.joint_hilti import HiltiElement
@@ -47,6 +48,7 @@ __all__ = [
     "SupportElement",
     "ScrewElement",
     "DowelElement",
+    "WedgeElement",
     "AlignmentStripElement",
     "SherpaXL120Element",
     "HiltiElement",

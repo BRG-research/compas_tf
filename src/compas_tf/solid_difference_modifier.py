@@ -6,15 +6,22 @@ from compas.geometry import Brep
 from compas_model.modifiers import Modifier
 
 
-def _triangulate_mesh(mesh):
+def _triangulate_mesh(mesh, precision=12):
     """Fan-triangulate a compas Mesh, returning (vertices, triangles, tri_to_orig).
 
     ``tri_to_orig[i]`` is the original face index that produced output triangle ``i``.
     This lets us remap CGAL's per-triangle face_id back to the original polygon face.
+
+    Vertex coordinates are rounded to ``precision`` decimal places to eliminate
+    sub-ULP floating-point noise from chained transformations that can cause
+    CGAL corefinement to fail on near-coplanar faces.
     """
     vkeys = list(mesh.vertices())
     vindex = {vk: i for i, vk in enumerate(vkeys)}
-    vertices = [mesh.vertex_coordinates(vk) for vk in vkeys]
+    vertices = [
+        [round(c, precision) for c in mesh.vertex_coordinates(vk)]
+        for vk in vkeys
+    ]
 
     triangles = []
     tri_to_orig = {}
@@ -161,21 +168,21 @@ class SolidDifferenceModifier(Modifier):
 
         has_xor = any(op == "xor" for op in operations)
 
-        all_vf = []
-        for mesh in [targetgeometry] + list(sources):
-            verts, tris, _ = _triangulate_mesh(mesh)
-            all_vf.append((verts, tris))
-
         op_summary = "+".join(sorted(set(operations)))
         print(f"[batch-bool] boolean_chain ({op_summary}): target + {len(sources)} mesh(es)")
 
         if has_xor:
-            # xor is only supported by boolean_chain (no face-source tracking)
             from compas_cgal.booleans import boolean_chain
+
+            all_vf = []
+            for mesh in [targetgeometry] + list(sources):
+                verts, tris, _ = _triangulate_mesh(mesh)
+                all_vf.append((verts, tris))
+
             try:
                 V, F = boolean_chain(all_vf, operations)
             except Exception as exc:
-                print(f"[batch-bool] boolean_chain (xor) failed: {exc}")
+                print(f"[batch-bool] boolean_chain failed: {exc}")
                 return targetgeometry
             if not V.size or not F.size:
                 print("[batch-bool] empty result, keeping original")
@@ -184,24 +191,42 @@ class SolidDifferenceModifier(Modifier):
             return Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
 
         from compas_cgal.booleans import boolean_chain_with_face_source
-        tri_to_orig_per_mesh = []
-        all_vf_tracked = []
+
+        all_vf = []
         for mesh in [targetgeometry] + list(sources):
-            verts, tris, tri_to_orig = _triangulate_mesh(mesh)
-            all_vf_tracked.append((verts, tris))
-            tri_to_orig_per_mesh.append(tri_to_orig)
+            verts, tris, _ = _triangulate_mesh(mesh)
+            all_vf.append((verts, tris))
 
         try:
-            V, F, S = boolean_chain_with_face_source(all_vf_tracked, operations)
+            V, F, S = boolean_chain_with_face_source(all_vf, operations)
         except Exception as exc:
             print(f"[batch-bool] boolean_chain_with_face_source failed: {exc}")
-            return targetgeometry
-        if not V.size or not F.size:
-            print("[batch-bool] empty result, keeping original")
-            return targetgeometry
-        print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
-        result = Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
-        return result
+            V, F = None, None
+        else:
+            if not V.size or not F.size:
+                V, F = None, None
+
+        if V is not None:
+            print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
+            return Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
+
+        from compas_cgal.booleans import boolean_difference_mesh_mesh
+        print("[batch-bool] chain returned empty, falling back to sequential")
+        result_mesh = targetgeometry
+        for i, src in enumerate(sources):
+            T = result_mesh.to_vertices_and_faces(triangulated=True)
+            C = src.to_vertices_and_faces(triangulated=True)
+            try:
+                V, F = boolean_difference_mesh_mesh(T, C)
+            except Exception as exc:
+                print(f"[batch-bool] sequential step {i} failed: {exc}")
+                return targetgeometry
+            if not V.size or not F.size:
+                print(f"[batch-bool] sequential step {i} empty, keeping original")
+                return targetgeometry
+            result_mesh = Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
+        print(f"[batch-bool] sequential OK -> V/F={result_mesh.number_of_vertices()}/{result_mesh.number_of_faces()}")
+        return result_mesh
 
     """Modifier for boolean difference between two geometries.
 

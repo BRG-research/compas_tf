@@ -1,3 +1,4 @@
 compas >= 2
 compas_model
 compas_viewer
+shapely

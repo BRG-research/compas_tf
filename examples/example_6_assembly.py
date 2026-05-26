@@ -28,6 +28,7 @@ from compas_tf.floor_builder import FloorBuilder
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.floor_model import FloorModel
 from compas_tf.joint_dowel import DowelElement
+from compas_tf.wedge import WedgeElement
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from model import (  # noqa: E402
@@ -119,7 +120,7 @@ def add_group_offset(group, viewer_parent, z_offset, skip_subgroup=None):
             child_vg = viewer.scene.add_group(child.name or "group", parent=viewer_parent)
             add_group_offset(child, child_vg, z_offset)
         else:
-            if child in hidden_sources or isinstance(child, DowelElement):
+            if child in hidden_sources or isinstance(child, (DowelElement, WedgeElement)):
                 continue
             mesh = child.modelgeometry
             if mesh is None:
