@@ -39,7 +39,7 @@ class FloorGuide(Data):
         height=650,
         rise=453,
         size_oculus=1000,
-        wedge_plane_angle=5,
+        wedge_plane_angle=-10,
     ):
         super().__init__()
 
@@ -227,6 +227,16 @@ class FloorGuide(Data):
             plane1 = Plane(self.quarter_column_polygon.lines[2].midpoint, Vector.cross(self.quarter_column_polygon.lines[2].direction, Vector.Zaxis()))
             plane2 = Plane(self.quarter_column_polygon.lines[3].midpoint, Vector.cross(self.quarter_column_polygon.lines[3].direction, Vector.Zaxis()))
 
+            # Tilt each wedge plane by wedge_plane_angle, pivoting about its top
+            # edge (column-head polygon edge at z=0). The tilt propagates into
+            # the offset planes and the central plane1_offset built below, so all
+            # cuts derived from the wedge planes (ribs, wedges, beds, t-sections)
+            # use the tilted plane.
+            wedge_angle = self.wedge_plane_angle * math.pi / 180
+            plane0.rotate(wedge_angle, self.quarter_column_polygon.lines[1].direction, self.quarter_column_polygon.lines[1].midpoint)
+            plane1.rotate(wedge_angle, self.quarter_column_polygon.lines[2].direction, self.quarter_column_polygon.lines[2].midpoint)
+            plane2.rotate(wedge_angle, self.quarter_column_polygon.lines[3].direction, self.quarter_column_polygon.lines[3].midpoint)
+
             line0 = Line(p0, self.quarter_column_polygon[2])
             line1 = Line(p1, self.quarter_column_polygon[3])
             plane_p0 = Point(*intersection_line_plane(line0, plane0.offset(self.size_wedge)))
@@ -269,41 +279,6 @@ class FloorGuide(Data):
 
             self._construction_planes = construction_planes
         return self._construction_planes
-
-    def rotated_wedge_planes(self, angle=None):
-        """Return the 3 wedge cut planes tilted about their top edge, for viz.
-
-        Each of the wedge planes ``construction_planes["wedges"][0..2][0]`` is
-        copied and rotated by *angle* (degrees, default ``self.wedge_plane_angle``)
-        about its column-head polygon edge (the line at z=0), so the plane
-        pivots from the top and leans away from vertical going downward.
-
-        This does NOT change any geometry — it is only for inspecting what the
-        tilt would look like before wiring it into the cuts. Visualize e.g.::
-
-            from compas.geometry import Frame
-            for p in guide.rotated_wedge_planes():
-                guide.debug.append(Frame.from_plane(p))
-
-        Returns
-        -------
-        list[:class:`compas.geometry.Plane`]
-            The 3 tilted wedge planes (order matches wedges 0, 1, 2).
-        """
-        if angle is None:
-            angle = self.wedge_plane_angle
-        rad = angle * math.pi / 180.0
-        edges = [
-            self.quarter_column_polygon.lines[1],
-            self.quarter_column_polygon.lines[2],
-            self.quarter_column_polygon.lines[3],
-        ]
-        planes = []
-        for k, edge in enumerate(edges):
-            plane = self.construction_planes["wedges"][k][0].copy()
-            plane.rotate(rad, edge.direction, edge.midpoint)
-            planes.append(plane)
-        return planes
 
     @property
     def quad_planes(self):
@@ -859,9 +834,21 @@ class FloorGuide(Data):
             # (wedges[k][0]); a small extension stops short and the cut is skipped.
             cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(parabola, amount=1000), cut_plane0), cut_plane1)
 
+            # Normalize so cut0[0] is the wedge-plane (cut_plane0) end regardless
+            # of the parabola's orientation.
+            d0 = abs((Point(*cut0[0]) - cut_plane0.point).dot(cut_plane0.normal))
+            d1 = abs((Point(*cut0[-1]) - cut_plane0.point).dot(cut_plane0.normal))
+            if d0 > d1:
+                cut0 = Polyline(list(cut0.points)[::-1])
+
             # Clean rib: follow the trimmed parabola down to a flat base at z=0,
-            # without the raised wedge-block seat tab.
-            p0 = Point(cut0[0][0], cut0[0][1], 0)
+            # without the raised wedge-block seat tab. The wedge-end base point
+            # is placed on cut_plane0 (which may be tilted) within the rib's own
+            # vertical plane, so the end face follows the cut instead of staying
+            # vertical. At 0deg tilt this is identical to dropping straight down.
+            dxy = Vector(cut0[-1][0] - cut0[0][0], cut0[-1][1] - cut0[0][1], 0)
+            rib_plane = Plane(Point(*cut0[0]), dxy.cross(Vector(0, 0, 1)))
+            p0 = Point(*intersection_plane_plane_plane(cut_plane0, Plane.worldXY(), rib_plane))
             p1 = Point(cut0[-1][0], cut0[-1][1], 0)
 
             polyline0 = Polyline([p1, p0] + cut0.points + [p1])
@@ -903,9 +890,21 @@ class FloorGuide(Data):
             # (wedges[k][0]); a small extension stops short and the cut is skipped.
             cut0 = PolylineCut.cut_by_plane(PolylineCut.cut_by_plane(_extend_polyline_ends(parabola, amount=1000), cut_plane0), cut_plane1)
 
+            # Normalize so cut0[0] is the wedge-plane (cut_plane0) end regardless
+            # of the parabola's orientation.
+            d0 = abs((Point(*cut0[0]) - cut_plane0.point).dot(cut_plane0.normal))
+            d1 = abs((Point(*cut0[-1]) - cut_plane0.point).dot(cut_plane0.normal))
+            if d0 > d1:
+                cut0 = Polyline(list(cut0.points)[::-1])
+
             # Clean rib: follow the trimmed parabola down to a flat base at z=0,
-            # without the raised wedge-block seat tab.
-            p0 = Point(cut0[0][0], cut0[0][1], 0)
+            # without the raised wedge-block seat tab. The wedge-end base point
+            # is placed on cut_plane0 (which may be tilted) within the rib's own
+            # vertical plane, so the end face follows the cut instead of staying
+            # vertical. At 0deg tilt this is identical to dropping straight down.
+            dxy = Vector(cut0[-1][0] - cut0[0][0], cut0[-1][1] - cut0[0][1], 0)
+            rib_plane = Plane(Point(*cut0[0]), dxy.cross(Vector(0, 0, 1)))
+            p0 = Point(*intersection_plane_plane_plane(cut_plane0, Plane.worldXY(), rib_plane))
             p1 = Point(cut0[-1][0], cut0[-1][1], 0)
             p1 = Point(*intersection_line_plane(Line(p0, p1), cut_plane1))
 
@@ -1035,17 +1034,23 @@ class FloorGuide(Data):
         # Frame origina
         base_plane = Plane((0, 0, -height * 0.5), Vector(0, 0, 1))
 
+        # Sherpas are positioned/oriented from the UN-tilted (vertical) wedge
+        # planes, so the wedge_plane_angle rib-cut tilt does not rotate them.
+        edge0 = self.quarter_column_polygon.lines[1]
+        edge2 = self.quarter_column_polygon.lines[3]
+        flat0 = Plane(edge0.midpoint, Vector.cross(edge0.direction, Vector.Zaxis()))
+        flat2 = Plane(edge2.midpoint, Vector.cross(edge2.direction, Vector.Zaxis()))
+
         p0 = Point(
-            *intersection_plane_plane_plane(base_plane, self.construction_planes["outer_ribs"][0][0].offset(self.size_outer_ribs * 0.5), self.construction_planes["wedges"][0][0])
+            *intersection_plane_plane_plane(base_plane, self.construction_planes["outer_ribs"][0][0].offset(self.size_outer_ribs * 0.5), flat0)
         )
 
         p2 = Point(
-            *intersection_plane_plane_plane(base_plane, self.construction_planes["outer_ribs"][1][0].offset(self.size_outer_ribs * 0.5), self.construction_planes["wedges"][2][0])
+            *intersection_plane_plane_plane(base_plane, self.construction_planes["outer_ribs"][1][0].offset(self.size_outer_ribs * 0.5), flat2)
         )
 
-        frame0 = Frame.from_plane(self.construction_planes["wedges"][0][0])
-        # frame1 = Frame.from_plane(self.construction_planes["wedges"][1][0]).translated(Vector(0, 0, -height*0.5))  # noqa: E501 — paired with disabled sherpa_1 below
-        frame2 = Frame.from_plane(self.construction_planes["wedges"][2][0])
+        frame0 = Frame.from_plane(flat0)
+        frame2 = Frame.from_plane(flat2)
         frame0 = Frame(p0, frame0.xaxis, frame0.yaxis)
         frame2 = Frame(p2, frame2.xaxis, frame2.yaxis)
 
