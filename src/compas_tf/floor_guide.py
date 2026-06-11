@@ -227,14 +227,6 @@ class FloorGuide(Data):
             plane1 = Plane(self.quarter_column_polygon.lines[2].midpoint, Vector.cross(self.quarter_column_polygon.lines[2].direction, Vector.Zaxis()))
             plane2 = Plane(self.quarter_column_polygon.lines[3].midpoint, Vector.cross(self.quarter_column_polygon.lines[3].direction, Vector.Zaxis()))
 
-            # Tilt each wedge plane by a fixed angle, pivoting about its top edge
-            # (the column-head polygon edge at z=0). The tilt propagates into the
-            # offset planes and the central plane1_offset built from them below.
-            wedge_angle = self.wedge_plane_angle * math.pi / 180
-            plane0.rotate(wedge_angle, self.quarter_column_polygon.lines[1].direction, self.quarter_column_polygon.lines[1].midpoint)
-            plane1.rotate(wedge_angle, self.quarter_column_polygon.lines[2].direction, self.quarter_column_polygon.lines[2].midpoint)
-            plane2.rotate(wedge_angle, self.quarter_column_polygon.lines[3].direction, self.quarter_column_polygon.lines[3].midpoint)
-
             line0 = Line(p0, self.quarter_column_polygon[2])
             line1 = Line(p1, self.quarter_column_polygon[3])
             plane_p0 = Point(*intersection_line_plane(line0, plane0.offset(self.size_wedge)))
@@ -277,6 +269,41 @@ class FloorGuide(Data):
 
             self._construction_planes = construction_planes
         return self._construction_planes
+
+    def rotated_wedge_planes(self, angle=None):
+        """Return the 3 wedge cut planes tilted about their top edge, for viz.
+
+        Each of the wedge planes ``construction_planes["wedges"][0..2][0]`` is
+        copied and rotated by *angle* (degrees, default ``self.wedge_plane_angle``)
+        about its column-head polygon edge (the line at z=0), so the plane
+        pivots from the top and leans away from vertical going downward.
+
+        This does NOT change any geometry — it is only for inspecting what the
+        tilt would look like before wiring it into the cuts. Visualize e.g.::
+
+            from compas.geometry import Frame
+            for p in guide.rotated_wedge_planes():
+                guide.debug.append(Frame.from_plane(p))
+
+        Returns
+        -------
+        list[:class:`compas.geometry.Plane`]
+            The 3 tilted wedge planes (order matches wedges 0, 1, 2).
+        """
+        if angle is None:
+            angle = self.wedge_plane_angle
+        rad = angle * math.pi / 180.0
+        edges = [
+            self.quarter_column_polygon.lines[1],
+            self.quarter_column_polygon.lines[2],
+            self.quarter_column_polygon.lines[3],
+        ]
+        planes = []
+        for k, edge in enumerate(edges):
+            plane = self.construction_planes["wedges"][k][0].copy()
+            plane.rotate(rad, edge.direction, edge.midpoint)
+            planes.append(plane)
+        return planes
 
     @property
     def quad_planes(self):
