@@ -105,7 +105,7 @@ guide = FloorGuide(
     height=650,
     rise=453,
     size_oculus=1000,
-    size_wedge=120,
+    size_wedge=240,
 )
 
 
