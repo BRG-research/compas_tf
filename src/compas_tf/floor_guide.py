@@ -11,6 +11,7 @@ from compas.geometry import Projection
 from compas.geometry import Rotation
 from compas.geometry import Vector
 from compas.geometry import intersection_line_plane
+from compas.geometry import intersection_plane_plane
 from compas.geometry import intersection_plane_plane_plane
 
 from compas_tf.geometry import BezierCurve
@@ -233,17 +234,23 @@ class FloorGuide(Data):
             # cuts derived from the wedge planes (ribs, wedges, beds, t-sections)
             # use the tilted plane.
             wedge_angle = self.wedge_plane_angle * math.pi / 180
-            plane0.rotate(wedge_angle, self.quarter_column_polygon.lines[1].direction, self.quarter_column_polygon.lines[1].midpoint)
+            # plane0.rotate(wedge_angle, self.quarter_column_polygon.lines[1].direction, self.quarter_column_polygon.lines[1].midpoint)
             plane1.rotate(wedge_angle, self.quarter_column_polygon.lines[2].direction, self.quarter_column_polygon.lines[2].midpoint)
-            plane2.rotate(wedge_angle, self.quarter_column_polygon.lines[3].direction, self.quarter_column_polygon.lines[3].midpoint)
+            result0 = intersection_plane_plane(construction_planes["inner_ribs"][0][1], plane1)
+            result1 = intersection_plane_plane(construction_planes["inner_ribs"][1][1], plane1)
+            line0 = Line(result0[0], result0[1])
+            line2 = Line(result1[1], result1[0])
+            line0 = Line(line0.start, line0.end+line0.direction*1000)
+            line2 = Line(line2.start, line2.end+line2.direction*1000)
+            plane0 = Plane(plane0.point, Vector.cross(line0.direction, self.quarter_column_polygon.lines[1].direction))
+            plane2 = Plane(plane2.point, Vector.cross(line2.direction, self.quarter_column_polygon.lines[3].direction))
+            # plane2.rotate(wedge_angle, self.quarter_column_polygon.lines[3].direction, self.quarter_column_polygon.lines[3].midpoint)
 
             line0 = Line(p0, self.quarter_column_polygon[2])
             line1 = Line(p1, self.quarter_column_polygon[3])
             plane_p0 = Point(*intersection_line_plane(line0, plane0.offset(self.size_wedge)))
             plane_p1 = Point(*intersection_line_plane(line1, plane2.offset(self.size_wedge)))
             plane1_offset = Plane(plane_p0, Vector.cross(plane_p1 - plane_p0, Vector.Zaxis()))
-            self.debug.append(plane_p0)
-            self.debug.append(plane_p1)
 
             plane4 = construction_planes["inner_beams"][0][1]
             plane5 = construction_planes["inner_beams"][1][1]
