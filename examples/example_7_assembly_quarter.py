@@ -14,7 +14,6 @@ Assembly order:
   sherpas       → +2100
   oculus        → +2400  (highest / last)
 """
-import pathlib
 
 from compas.colors import Color
 from compas.geometry import Translation
@@ -70,15 +69,13 @@ def add_plates_offset(group_name, plates, facecolor, step):
 
 
 sections = [
-    
-    ("wedge_block",   guide.wedge_block,   Color.yellow()),
-    ("tsections",     guide.tsections,     Color.orange()),
-    ("outer_ribs",    guide.outer_ribs,    Color.yellow()),
-    ("inner_ribs",    guide.inner_ribs,    Color.yellow()),
-    
+    ("wedge_block", guide.wedge_block, Color.yellow()),
+    ("tsections", guide.tsections, Color.orange()),
+    ("outer_ribs", guide.outer_ribs, Color.yellow()),
+    ("inner_ribs", guide.inner_ribs, Color.yellow()),
     ("wedges_column", guide.wedges_column, Color.cyan()),
-    ("inner_beams",   guide.inner_beams,   Color.yellow()),
-    ("beds",          guide.beds,          Color.lime()),
+    ("inner_beams", guide.inner_beams, Color.yellow()),
+    ("beds", guide.beds, Color.lime()),
 ]
 
 for step, (name, plates, color) in enumerate(sections):
@@ -92,12 +89,16 @@ for i, sherpa in enumerate(guide.sherpas):
     if isinstance(sherpa, SherpaXL120Element):
         viewer.scene.add(
             sherpa.elementgeometry.transformed(extra_sherpas),
-            facecolor=Color.red(), show_lines=False, parent=g,
+            facecolor=Color.red(),
+            show_lines=False,
+            parent=g,
         )
     elif isinstance(sherpa, PlateElement):
         viewer.scene.add(
             sherpa.elementgeometry.transformed(extra_sherpas),
-            facecolor=Color(0.8, 0.2, 0.8), show_lines=False, parent=g,
+            facecolor=Color(0.8, 0.2, 0.8),
+            show_lines=False,
+            parent=g,
         )
 
 # Oculus — last / highest

@@ -11,6 +11,7 @@ Build order:
   quarter_3 → +3000 mm extra
   oculus    → +4000 mm extra  (from floor_guide 0, guide.oculus plates)
 """
+
 import math
 import pathlib
 import sys
@@ -31,12 +32,10 @@ from compas_tf.joint_dowel import DowelElement
 from compas_tf.wedge import WedgeElement
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from model import (  # noqa: E402
-    add_element_to_viewer,
-    get_color_for_element,
-    get_difference_source_elements,
-    get_union_source_elements,
-)
+from model import add_element_to_viewer  # noqa: E402
+from model import get_color_for_element  # noqa: E402
+from model import get_difference_source_elements  # noqa: E402
+from model import get_union_source_elements  # noqa: E402
 
 ASSEMBLY_OFFSET = 300  # mm between each quarter
 
@@ -142,11 +141,7 @@ for node in floor_model.tree.root.children:
             add_element_to_viewer(viewer, vg, child, get_color_for_element(child))
 
 # Floor guide quarters — each quarter lifted by q_idx * ASSEMBLY_OFFSET
-floor_guide_groups = [
-    node.element
-    for node in floor_model.tree.root.children
-    if isinstance(node.element, Group) and node.element.name == "floor_guide"
-]
+floor_guide_groups = [node.element for node in floor_model.tree.root.children if isinstance(node.element, Group) and node.element.name == "floor_guide"]
 
 quarters_vg = viewer.scene.add_group("quarters")
 for q_idx, fg in enumerate(floor_guide_groups):

@@ -7,21 +7,17 @@ inner beams, and sherpa connections.
 FloorGuide owns all parametric plate geometry for one quarter.
 It is independent of FloorBuilder and uses its own parameter set.
 """
+
 import pathlib
 
 import compas
 from compas.colors import Color
-from compas.geometry import Point
-from compas.geometry import Vector
-from compas.geometry import Line
-from compas.geometry import Polyline
 from compas_viewer.config import Config
 from compas_viewer.viewer import Viewer
 
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.plate import PlateElement
-
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 

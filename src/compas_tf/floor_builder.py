@@ -1,6 +1,4 @@
 from compas.data import Data
-from compas.geometry import Box
-from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Plane
 from compas.geometry import Point
@@ -142,13 +140,15 @@ class FloorBuilder(Data):
     def quarter_polygon(self):
         """The main polygon of the floor."""
         if self._q1_poly is None:
-            self._q1_poly = Polygon([
-                Point(-self.size, -self.size, 0),
-                Point(0, -self.size, 0),
-                self.oculus_points[0],
-                self.oculus_points[3],
-                Point(-self.size, 0, 0),
-            ])
+            self._q1_poly = Polygon(
+                [
+                    Point(-self.size, -self.size, 0),
+                    Point(0, -self.size, 0),
+                    self.oculus_points[0],
+                    self.oculus_points[3],
+                    Point(-self.size, 0, 0),
+                ]
+            )
         return self._q1_poly
 
     @property
@@ -168,7 +168,7 @@ class FloorBuilder(Data):
         -------
         :class:`compas.geometry.Point`
         """
-        d = self.size - (column_size * 0.5 - self.thick*0)
+        d = self.size - (column_size * 0.5 - self.thick * 0)
         return Point(-d, -d, 0)
 
     @property
@@ -215,9 +215,9 @@ class FloorBuilder(Data):
                 extended_axes.append(line)
 
             # OPTIONAL: Move axes outward a bit to avoid double cut on the plate
-            direction0 = Vector.Zaxis().cross(extended_axes[1].direction).unitized()*self.thick*0.5
+            direction0 = Vector.Zaxis().cross(extended_axes[1].direction).unitized() * self.thick * 0.5
             extended_axes[1].translate(-direction0)
-            direction1 = Vector.Zaxis().cross(extended_axes[2].direction).unitized()*self.thick*0.5
+            direction1 = Vector.Zaxis().cross(extended_axes[2].direction).unitized() * self.thick * 0.5
             extended_axes[2].translate(direction1)
             self._axes = extended_axes
 
@@ -249,9 +249,9 @@ class FloorBuilder(Data):
                 # # self.head_h = abs(bezier[-2][2]) * 0.845 - 3.5
                 # self.head_h = abs(bezier[-2][2]) * 0.84 - 3.5
                 # self.head_h = 500
-                
+
                 # # self.head_h += 100
-                
+
                 q1_parabolas.append(bezier)
 
             self._bound_parabolas = q1_parabolas
@@ -287,7 +287,6 @@ class FloorBuilder(Data):
 
             self._rib_parabolas = [parabola0, parabola1, parabola2, parabola3]
         return self._rib_parabolas
-   
 
     @staticmethod
     def _offset_polyline(polyline, distance, baseplane=None):
@@ -370,7 +369,6 @@ class FloorBuilder(Data):
         lofted_top = []
 
         for i in range(len(rib_parabolas) - 1):
-
             lofted_bottom_lines = []
             for j in range(len(offset_axes[i][0])):
                 lofted_bottom_lines.append(Line(offset_axes[i][0][j], offset_axes[i + 1][0][j]))
@@ -384,8 +382,6 @@ class FloorBuilder(Data):
 
         return [lofted_bottom, lofted_top]
 
-
-    
     # ------------------------------------------------------------------ #
     #  Column head (transition from ribs to column)
     # ------------------------------------------------------------------ #
@@ -503,28 +499,27 @@ class FloorBuilder(Data):
     def top_corner_block_points(self):
         """Points defining the top block of the column head."""
         if self._top_corner_block_points is None:
-            polyline = Polyline(self.quarter_polygon.points+[self.quarter_polygon.points[0]])
+            polyline = Polyline(self.quarter_polygon.points + [self.quarter_polygon.points[0]])
             result = intersection_polyline_plane(polyline, self.end_planes[1], 2)
             p0 = Point(*result[0])
             p1 = Point(*result[1])
             if p1[1] < p0[1]:
                 p1, p0 = p0, p1
-            
+
             p2 = p1 + Vector(-1, 0, 0) * self.beam_w
-            p3 = Point(-self.beam_w-self.size, -self.beam_w-self.size, 0)
+            p3 = Point(-self.beam_w - self.size, -self.beam_w - self.size, 0)
             p4 = p0 + Vector(0, -1, 0) * self.beam_w
             self._top_corner_block_points = [p4, p0, p1, p2, p3]
         return self._top_corner_block_points
-    
+
     @property
     def top_end_planes(self):
         """Planes at midpoints of corner block edges."""
         if self._top_end_planes is None:
-
             p0 = (self.top_corner_block_points[0] + self.top_corner_block_points[1]) * 0.5
             p1 = (self.top_corner_block_points[1] + self.top_corner_block_points[2]) * 0.5
             p2 = (self.top_corner_block_points[2] + self.top_corner_block_points[3]) * 0.5
-            
+
             n0 = Vector.Zaxis().cross(self.top_corner_block_points[1] - self.top_corner_block_points[0])
             n1 = Vector.Zaxis().cross(self.top_corner_block_points[2] - self.top_corner_block_points[1])
             n2 = Vector.Zaxis().cross(self.top_corner_block_points[3] - self.top_corner_block_points[2])
@@ -532,16 +527,15 @@ class FloorBuilder(Data):
             plane0 = Plane(p0, n0)
             plane1 = Plane(p1, n1)
             plane2 = Plane(p2, n2)
-        
+
             self._top_end_planes = [plane0, plane1, plane2]
         return self._top_end_planes
 
     @property
     def end_planes(self):
-
         import math
-        """End planes for each rib (needed for column head)."""
 
+        """End planes for each rib (needed for column head)."""
 
         if self._end_planes is None:
             # NOTE: Accessing rib_parabolas triggers boundary_parabolas which computes head_h.
@@ -554,6 +548,6 @@ class FloorBuilder(Data):
                 p1 = Point(self.axes[id].end[0], self.axes[id].end[1], 0)
                 if i == 3:
                     p0, p1 = p1, p0
-                planes.append(Plane(p0, p0 - p1).offset(-self.thick * 10/math.sqrt(2)))
+                planes.append(Plane(p0, p0 - p1).offset(-self.thick * 10 / math.sqrt(2)))
             self._end_planes = planes
         return self._end_planes

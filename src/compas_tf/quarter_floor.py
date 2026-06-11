@@ -40,17 +40,20 @@ def _line_to_screw(line: Line) -> ScrewElement:
     xform = Transformation.from_frame(Frame.from_plane(plane))
     return ScrewElement(8, 25, line.length, transformation=xform)
 
+
 def _line_to_dowel(line: Line) -> DowelElement:
     """Create a DowelElement from a line."""
     plane = Plane(line.start, line.direction)
     xform = Transformation.from_frame(Frame.from_plane(plane))
     return DowelElement(20, 20, line.length, transformation=xform)
 
+
 def _line_to_strip(line: Line, height: float) -> AlignmentStripElement:
     """Create an AlignmentStripElement from a line."""
     frame = Frame(line.start, Vector.Zaxis().cross(line.direction), line.direction)
     xform = Transformation.from_frame(frame)
     return AlignmentStripElement(height=height, transformation=xform)
+
 
 def _create_hilti(origin: Point, rib_dir: Vector, boundary_dir: Vector, height: float = 120.0) -> HiltiElement:
     """Create a HiltiElement positioned at the rib-boundary interface.
@@ -118,12 +121,14 @@ def _compute_axis_boundary_planes(builder):
     axes = builder.axes
     return [Plane(axes[j].midpoint, Vector.Zaxis().cross(axes[j].direction)) for j in range(3, len(axes) - 1)]
 
+
 def _compute_axis_planes(builder):
     """Axis planes for T-sections (from slab.py:244-255)."""
     axes = builder.axes
     planes = [Plane(axes[j].start, Vector.Zaxis().cross(axes[j].direction)) for j in range(3)]
     planes.append(Plane(axes[-1].start, -Vector.Zaxis().cross(axes[-1].direction)))
     return planes
+
 
 def _compute_offset_axes(builder):
     """Offset axes for surface lofting (from slab.py:296-324)."""
@@ -149,6 +154,7 @@ def _compute_offset_axes(builder):
         [offset_3_bottom, offset_3_top],
     ]
 
+
 def _compute_lofted_lines(builder, offset_axes):
     """Lofted lines between offset axes (from slab.py:326-342)."""
     rib_parabolas = builder.rib_parabolas
@@ -160,6 +166,7 @@ def _compute_lofted_lines(builder, offset_axes):
         lofted_top.append(PolylineLoft.to_lines(offset_axes[i][1], offset_axes[i + 1][1]))
 
     return [lofted_bottom, lofted_top]
+
 
 def _build_ribs(builder):
     """Compute rib meshes and polyline pairs for quarter 1 (from slab.py:393-442).
@@ -183,8 +190,6 @@ def _build_ribs(builder):
         (6, 3, 3, 2, 2, 2),  # axis 6: parabola[3], target[3], boundary_cut[2], rib_cut[2+3], end_plane[2]
     ]
 
-
-
     rib_parabolas = builder.rib_parabolas
     target_planes = builder.target_planes
     cut_planes = builder.cut_planes
@@ -192,7 +197,6 @@ def _build_ribs(builder):
     head_h = builder.head_h
 
     end_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
-
 
     quarter_meshes = {}
     list_rib_polylines = {}
@@ -244,6 +248,7 @@ def _build_ribs(builder):
 
     return quarter_meshes, list_rib_polylines, polyline_pairs
 
+
 def _build_tsections(builder, axis_planes, lofted_lines):
     """Compute T-section meshes and polyline pairs for quarter 1 (from slab.py:444-485).
 
@@ -290,6 +295,7 @@ def _build_tsections(builder, axis_planes, lofted_lines):
 
     return quarter_meshes, polyline_pairs
 
+
 def _build_surfaces(builder, axis_planes, lofted_lines, continuous=False):
     """Compute surface meshes, edge polylines, and polyline pairs for quarter 1.
 
@@ -333,8 +339,8 @@ def _build_surfaces(builder, axis_planes, lofted_lines, continuous=False):
         quarter_edge_polylines.append([tl, bl, tr, br])
 
         if continuous:
-            quarter_meshes.append(PolylineLoft.to_mesh(poly0, poly1)) # this
-            polyline_pairs.append((poly0, poly1)) # this
+            quarter_meshes.append(PolylineLoft.to_mesh(poly0, poly1))  # this
+            polyline_pairs.append((poly0, poly1))  # this
         else:
             # Individual plates
             for j in range(len(bl.points) - 1):
@@ -345,6 +351,7 @@ def _build_surfaces(builder, axis_planes, lofted_lines, continuous=False):
                 polyline_pairs.append((poly_t, poly_b))
 
     return quarter_meshes, quarter_edge_polylines, polyline_pairs
+
 
 def _build_corners_blocks(builder, axis_planes, offset_axes):
     """Build 3 corner blocks filling the gap between ribs at the column head.
@@ -396,6 +403,7 @@ def _build_corners_blocks(builder, axis_planes, offset_axes):
         polyline_pairs.append((top, bottom))
 
     return meshes, polyline_pairs
+
 
 def _build_boundaries(builder, surface_edge_polys):
     """Compute boundary beam meshes and polyline pairs for quarter 1.
@@ -570,9 +578,7 @@ class QuarterFloorElement(Element):
             screws, dowels, strips, and interactions.
         """
         # Create rotation transformation around Z-axis at origin
-        rotation_xform = Rotation.from_axis_and_angle(
-            [0, 0, 1], math.radians(angle), point=[0, 0, 0]
-        ) if angle != 0 else None
+        rotation_xform = Rotation.from_axis_and_angle([0, 0, 1], math.radians(angle), point=[0, 0, 0]) if angle != 0 else None
 
         # Compute internal helper geometry (only used by quarter floor)
         axis_planes = _compute_axis_planes(builder)
@@ -589,10 +595,7 @@ class QuarterFloorElement(Element):
         # Apply rotation to polylines if needed (dicts for ribs/boundaries, lists for others)
         if rotation_xform:
             rib_polys = {axis_idx: [p.transformed(rotation_xform) for p in polys] for axis_idx, polys in rib_polys.items()}
-            surface_edge_polys = [
-                [poly.transformed(rotation_xform) for poly in edge_group]
-                for edge_group in surface_edge_polys
-            ]
+            surface_edge_polys = [[poly.transformed(rotation_xform) for poly in edge_group] for edge_group in surface_edge_polys]
             rib_polyline_pairs = {axis_idx: (p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for axis_idx, (p0, p1) in rib_polyline_pairs.items()}
             tsection_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in tsection_polyline_pairs]
             surface_polyline_pairs = [(p0.transformed(rotation_xform), p1.transformed(rotation_xform)) for p0, p1 in surface_polyline_pairs]
@@ -608,7 +611,7 @@ class QuarterFloorElement(Element):
                 top_polyline=rib_polyline_pairs[axis_idx][0],
                 bottom_polyline=rib_polyline_pairs[axis_idx][1],
                 mesh=m.transformed(rotation_xform) if rotation_xform else m,
-                name=f"axis_{axis_idx}"
+                name=f"axis_{axis_idx}",
             )
             axis_polys[axis_idx] = rib_polys[axis_idx]
 
@@ -618,18 +621,21 @@ class QuarterFloorElement(Element):
                 top_polyline=boundary_polyline_pairs[axis_idx][0],
                 bottom_polyline=boundary_polyline_pairs[axis_idx][1],
                 mesh=m.transformed(rotation_xform) if rotation_xform else m,
-                name=f"axis_{axis_idx}"
+                name=f"axis_{axis_idx}",
             )
             axis_polys[axis_idx] = [boundary_polyline_pairs[axis_idx][0], boundary_polyline_pairs[axis_idx][1]]
 
         tsection_elements = [
-            PlateElement(top_polyline=tsection_polyline_pairs[i][0], bottom_polyline=tsection_polyline_pairs[i][1],
-                        name=f"tsection_{i}")
+            PlateElement(top_polyline=tsection_polyline_pairs[i][0], bottom_polyline=tsection_polyline_pairs[i][1], name=f"tsection_{i}")
             for i in range(len(tsection_polyline_pairs))
         ]
         surface_elements = [
-            PlateElement(top_polyline=surface_polyline_pairs[i][0], bottom_polyline=surface_polyline_pairs[i][1],
-                        mesh=m.transformed(rotation_xform) if rotation_xform else m, name=f"surface_{i}")
+            PlateElement(
+                top_polyline=surface_polyline_pairs[i][0],
+                bottom_polyline=surface_polyline_pairs[i][1],
+                mesh=m.transformed(rotation_xform) if rotation_xform else m,
+                name=f"surface_{i}",
+            )
             for i, m in enumerate(surface_meshes)
         ]
 
@@ -698,9 +704,9 @@ class QuarterFloorElement(Element):
         #     strip_line = Line(strip_point, strip_point + builder.axes[offset_axis].direction +  # noqa: E501
         #         builder.axes[intersect_axis].direction).translated(Vector.Zaxis() * -height_middle)
         #     strip = apply_rotation(_line_to_strip(strip_line, height_middle * 2))
-            # strips.append(strip)
-            # interactions.append((strip, axis_elements[offset_axis]))
-            # interactions.append((strip, axis_elements[intersect_axis]))
+        # strips.append(strip)
+        # interactions.append((strip, axis_elements[offset_axis]))
+        # interactions.append((strip, axis_elements[intersect_axis]))
         axis_pairs_strips = [(3, 4), (5, 4)]
         for offset_axis, intersect_axis in axis_pairs_strips:
             offset_line = LineOffset.offset_xy(builder.axes[offset_axis], builder.thick * -0.5)
@@ -786,7 +792,7 @@ class QuarterFloorElement(Element):
         hilti_joints = []
         modifiers = []
         hilti_configs = [
-            (3, 0, 1),   # boundary axis 3, rib axis 0, +rib_dir
+            (3, 0, 1),  # boundary axis 3, rib axis 0, +rib_dir
             (5, 6, -1),  # boundary axis 5, rib axis 6, -rib_dir
         ]
         for boundary_axis, rib_axis, rib_dir_sign in hilti_configs:
@@ -794,9 +800,11 @@ class QuarterFloorElement(Element):
             pt = Point(*intersection_line_line(builder.axes[rib_axis], builder.axes[boundary_axis])[0])
             boundary_normal = builder.axes[boundary_axis].direction.unitized()
             boundary_normal_ortho = Vector.Zaxis().cross(boundary_normal).unitized()
-            origin = Point(pt.x + boundary_normal.x * 0.5 * builder.thick + boundary_normal_ortho.x * -0.5 * builder.thick,
-                           pt.y + boundary_normal.y * -0.5 * builder.thick + boundary_normal_ortho.y * -0.5 * builder.thick,
-                           -height_middle)
+            origin = Point(
+                pt.x + boundary_normal.x * 0.5 * builder.thick + boundary_normal_ortho.x * -0.5 * builder.thick,
+                pt.y + boundary_normal.y * -0.5 * builder.thick + boundary_normal_ortho.y * -0.5 * builder.thick,
+                -height_middle,
+            )
             rib_dir = builder.axes[rib_axis].direction * rib_dir_sign
             boundary_dir = builder.axes[boundary_axis].direction
             hilti = _create_hilti(origin, rib_dir, boundary_dir, height=builder.thick * 2.1)

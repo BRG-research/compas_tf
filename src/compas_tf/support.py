@@ -67,7 +67,7 @@ class SupportElement(Element):
         super().__init__(transformation=transformation, features=features, name=name)
 
         self.mesh = Mesh.from_obj(self.DATA_DIR / self.MESH_FILE)
-        self.top_polygon = Polygon.from_sides_and_radius_xy(32, 106*0.5)
+        self.top_polygon = Polygon.from_sides_and_radius_xy(32, 106 * 0.5)
         self.top_polygon.translate([0, 0, 150])
         self.bottom_polygon = Polygon.from_rectangle(Point(70, 70, 0), 140, 140)
 
@@ -118,11 +118,7 @@ class SupportElement(Element):
         """
         # Get mesh bounding box to find bottom center
         aabb = self.mesh.aabb()
-        bottom_center = Point(
-            (aabb.xmin + aabb.xmax) / 2,
-            (aabb.ymin + aabb.ymax) / 2,
-            aabb.zmin
-        )
+        bottom_center = Point((aabb.xmin + aabb.xmax) / 2, (aabb.ymin + aabb.ymax) / 2, aabb.zmin)
         frame = Frame(bottom_center, Vector.Xaxis(), Vector.Yaxis())
         if self.transformation:
             frame.transform(self.transformation)

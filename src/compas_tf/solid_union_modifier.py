@@ -42,7 +42,6 @@ class SolidUnionModifier(Modifier):
         print(f"[batch-union] OK -> V/F={len(V)}/{len(F)}")
         return Polyhedron(V.tolist(), F.tolist()).to_mesh()
 
-
     """Modifier for boolean union between two geometries.
 
     Parameters

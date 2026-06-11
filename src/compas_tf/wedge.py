@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Optional
 
 from compas.datastructures import Mesh
@@ -17,10 +16,12 @@ class WedgeFeature(Feature):
 
 
 class WedgeElement(Element):
-    """Class representing a wedge connector loaded from an OBJ file.
+    """Class representing a wedge connector built from a lofted triangular profile.
 
-    The OBJ contains two objects: a wedge mesh and a line (bspline deg 1)
-    representing the dowel axis. Both are loaded and cached.
+    The wedge is a triangular prism: the profile (a triangle in the local YZ
+    plane) is copied to ``x = -HALF_WIDTH`` and ``x = +HALF_WIDTH`` and lofted
+    into a closed mesh. A screw / dowel axis runs through the body along the
+    local Y direction.
 
     Parameters
     ----------
@@ -32,70 +33,52 @@ class WedgeElement(Element):
         Name of the element.
     """
 
-    DATA_DIR = Path(__file__).parent.parent.parent / "data" / "Wedge"
-    MESH_FILE = "wedge_minimal.obj"
-    BOOLEAN_FILE = "wedge_boolean.obj"
+    # Triangular profile in the local YZ plane (x = 0).
+    PROFILE = [
+        Point(0, 0, -197),
+        Point(0, -31.75593, 11.530606),
+        Point(0, 31.75593, 11.530606),
+    ]
+
+    # The profile is copied to x = -HALF_WIDTH and x = +HALF_WIDTH, then lofted.
+    HALF_WIDTH = 80.0
+    # Screw / dowel axis endpoints (local coordinates).
+    DOWEL_START = Point(0, -80.0, -100)
+    DOWEL_END = Point(0, 80.0, -100)
 
     _mesh_cache: Optional[Mesh] = None
-    _boolean_cache: Optional[Mesh] = None
     _line_cache: Optional[Line] = None
-    _parsed: bool = False
 
-    @staticmethod
-    def _clean_mesh(mesh: Mesh) -> Mesh:
-        face_verts = set()
-        for f in mesh.faces():
-            face_verts.update(mesh.face_vertices(f))
-        for v in set(mesh.vertices()) - face_verts:
-            mesh.delete_vertex(v)
-        return mesh
+    def build_mesh(self) -> Mesh:
+        """Loft the triangular profile between x = -HALF_WIDTH and +HALF_WIDTH."""
+        hw = 0.5 * self.target_length
+        n = len(self.PROFILE)
+        neg = [[-hw, p.y, p.z] for p in self.PROFILE]
+        pos = [[hw, p.y, p.z] for p in self.PROFILE]
+        vertices = neg + pos  # 0..n-1 = neg cap, n..2n-1 = pos cap
 
-    @classmethod
-    def _parse_obj(cls):
-        """Parse OBJ once: extract visual mesh, boolean mesh, and curve line."""
-        if cls._parsed:
-            return
-        cls._mesh_cache = cls._clean_mesh(Mesh.from_obj(cls.DATA_DIR / cls.MESH_FILE))
-        cls._boolean_cache = cls._clean_mesh(Mesh.from_obj(cls.DATA_DIR / cls.BOOLEAN_FILE))
+        faces = [list(range(n))]  # neg end cap
+        faces.append([n + i for i in reversed(range(n))])  # pos end cap (reversed)
+        for i in range(n):  # side quads
+            j = (i + 1) % n
+            faces.append([j, i, n + i, n + j])
+        return Mesh.from_vertices_and_faces(vertices, faces)
 
-        vertices = []
-        curve_indices = None
-        with open(cls.DATA_DIR / cls.MESH_FILE) as f:
-            for raw in f:
-                line = raw.strip()
-                if line.startswith("v "):
-                    parts = line.split()
-                    vertices.append(Point(float(parts[1]), float(parts[2]), float(parts[3])))
-                elif line.startswith("curv "):
-                    parts = line.split()
-                    curve_indices = [int(p) for p in parts[3:]]
+    def _load_mesh(self) -> Mesh:
+        if self._mesh_cache is None:
+            self._mesh_cache = self.build_mesh()
+        return self._mesh_cache.copy()
 
-        if curve_indices and len(curve_indices) >= 2:
-            p0 = vertices[curve_indices[0] - 1]
-            p1 = vertices[curve_indices[1] - 1]
-            cls._line_cache = Line(p0, p1)
-
-        cls._parsed = True
-
-    @classmethod
-    def _load_mesh(cls) -> Mesh:
-        cls._parse_obj()
-        return cls._mesh_cache.copy()
-
-    @classmethod
-    def _load_boolean_mesh(cls) -> Mesh:
-        cls._parse_obj()
-        return cls._boolean_cache.copy()
-
-    @classmethod
-    def _load_line(cls) -> Optional[Line]:
-        cls._parse_obj()
-        return cls._line_cache
+    def _load_line(self) -> Line:
+        if self._line_cache is None:
+            self._line_cache = Line(self.DOWEL_START, self.DOWEL_END)
+        return self._line_cache.copy()
 
     @property
     def __data__(self) -> dict:
         return {
             "transformation": self.transformation,
+            "target_length": self.target_length,
             "features": self._features,
             "name": self.name,
         }
@@ -103,63 +86,98 @@ class WedgeElement(Element):
     def __init__(
         self,
         transformation: Optional[Transformation] = None,
+        target_length: Optional[float] = 80.0,
         features: Optional[list[WedgeFeature]] = None,
         name: Optional[str] = None,
     ):
         super().__init__(transformation=transformation, features=features, name=name)
+        self.target_length = target_length
         self.mesh = self._load_mesh()
-        self._boolean_mesh = self._load_boolean_mesh()
 
     @property
     def boolean_geometry(self) -> Mesh:
-        """Boolean cutter mesh (from wedge_boolean.obj) with transformation applied."""
+        """Boolean cutter mesh with transformation applied."""
         if self.transformation:
-            return self._boolean_mesh.transformed(self.transformation)
-        return self._boolean_mesh
+            return self.mesh.transformed(self.transformation)
+        return self.mesh
 
     @property
-    def dowel_line(self) -> Optional[Line]:
-        """The dowel axis line in local coordinates."""
-        return self._load_line()
+    def boolean_geometries(self) -> list[Mesh]:
+        """Boolean cutter meshes contributed by the wedge."""
+        return [self.boolean_geometry]
 
-    def create_dowel(self, width=20):
-        """Create a DowelElement positioned along the OBJ curve line.
+    def dowel_lines(self, step=80) -> list[Line]:
+        """Dowel axis lines distributed along the wedge length (local X)."""
+        line = self._load_line()
+        divisions = max(int(self.target_length / step), 1)
+        hw = 0.5 * self.target_length
+        lines = []
+        for i in range(divisions):
+            x = -hw + (i + 0.5) * (self.target_length / divisions)
+            lines.append(line.translated(Vector(x, 0, 0)))
+        return lines
 
-        The dowel's transformation composes the line's local placement
-        with this wedge's own transformation.
+    def create_dowels(self, width=20, step=80):
+        """Create DowelElements positioned along the screw axes.
+
+        Each dowel transformation composes the screw axis' local placement with
+        this wedge's own transformation.
 
         Parameters
         ----------
         width : float
             Dowel diameter in mm.
+        step : float
+            Spacing used to split the wedge into multiple dowel axes.
 
         Returns
         -------
-        :class:`compas_tf.joint_dowel.DowelElement` or None
+        list[:class:`compas_tf.joint_dowel.DowelElement`]
         """
         from compas_tf.joint_dowel import DowelElement
 
-        local_line = self._load_line()
-        if local_line is None:
-            return None
+        dowels = []
+        local_lines = self.dowel_lines(step=step)
 
-        direction = Vector.from_start_end(local_line.start, local_line.end)
-        height = direction.length
-        z = direction.unitized()
+        for local_line in local_lines:
+            direction = Vector.from_start_end(local_line.start, local_line.end)
+            height = direction.length
+            z = direction.unitized()
 
-        ref = Vector(1, 0, 0)
-        if abs(z.dot(ref)) > 0.99:
-            ref = Vector(0, 0, 1)
-        x = z.cross(ref).unitized()
-        y = z.cross(x).unitized()
+            ref = Vector(1, 0, 0)
+            if abs(z.dot(ref)) > 0.99:
+                ref = Vector(0, 0, 1)
+            x = z.cross(ref).unitized()
+            y = z.cross(x).unitized()
 
-        dowel_frame = Frame(local_line.start, x, y)
-        dowel_xform = Transformation.from_frame(dowel_frame)
+            dowel_frame = Frame(local_line.start, x, y)
+            dowel_xform = Transformation.from_frame(dowel_frame)
 
-        if self.transformation:
-            dowel_xform = self.transformation * dowel_xform
+            if self.transformation:
+                dowel_xform = self.transformation * dowel_xform
 
-        return DowelElement(width=width, depth=width, height=height, transformation=dowel_xform)
+            dowels.append(DowelElement(width=width, depth=width, height=height, transformation=dowel_xform))
+
+        return dowels
+
+    def create_dowel(self, width=20, step=80):
+        """Backward-compatible single-dowel accessor.
+
+        Returns the first generated dowel when older callers still expect a
+        single element.
+        """
+        dowels = self.create_dowels(width=width, step=step)
+        return dowels[0] if dowels else None
+
+    def dowel_meshes(self, width=20, step=80) -> list[Mesh]:
+        """Detailed boolean meshes for all generated dowels."""
+        meshes = []
+        for dowel in self.create_dowels(width=width, step=step):
+            mesh = dowel.compute_mesh()
+            if dowel.transformation:
+                mesh = mesh.transformed(dowel.transformation)
+            meshes.append(mesh)
+        return meshes
 
     def compute_elementgeometry(self, include_features: bool = False) -> Mesh:
         return self.mesh

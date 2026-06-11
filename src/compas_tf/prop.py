@@ -2,7 +2,6 @@ from typing import Optional
 
 from compas.datastructures import Mesh
 from compas.geometry import Box
-from compas.geometry import Frame
 from compas.geometry import Point
 from compas.geometry import Transformation
 from compas_model.elements.element import Element
@@ -90,44 +89,44 @@ class PropElement(Element):
         # 24 vertices: 8 per section (foot, body, head)
         vertices = [
             # foot plate  (0-7)
-            [-hp, -hp, 0],        # 0
-            [ hp, -hp, 0],        # 1
-            [ hp,  hp, 0],        # 2
-            [-hp,  hp, 0],        # 3
-            [-hp, -hp, pt],       # 4
-            [ hp, -hp, pt],       # 5
-            [ hp,  hp, pt],       # 6
-            [-hp,  hp, pt],       # 7
+            [-hp, -hp, 0],  # 0
+            [hp, -hp, 0],  # 1
+            [hp, hp, 0],  # 2
+            [-hp, hp, 0],  # 3
+            [-hp, -hp, pt],  # 4
+            [hp, -hp, pt],  # 5
+            [hp, hp, pt],  # 6
+            [-hp, hp, pt],  # 7
             # body  (8-15)
             [-hw, -hd, body_start],  # 8
-            [ hw, -hd, body_start],  # 9
-            [ hw,  hd, body_start],  # 10
-            [-hw,  hd, body_start],  # 11
-            [-hw, -hd, body_end],    # 12
-            [ hw, -hd, body_end],    # 13
-            [ hw,  hd, body_end],    # 14
-            [-hw,  hd, body_end],    # 15
+            [hw, -hd, body_start],  # 9
+            [hw, hd, body_start],  # 10
+            [-hw, hd, body_start],  # 11
+            [-hw, -hd, body_end],  # 12
+            [hw, -hd, body_end],  # 13
+            [hw, hd, body_end],  # 14
+            [-hw, hd, body_end],  # 15
             # head plate  (16-23)
-            [-hp, -hp, body_end],    # 16
-            [ hp, -hp, body_end],    # 17
-            [ hp,  hp, body_end],    # 18
-            [-hp,  hp, body_end],    # 19
-            [-hp, -hp, self.length], # 20
-            [ hp, -hp, self.length], # 21
-            [ hp,  hp, self.length], # 22
-            [-hp,  hp, self.length], # 23
+            [-hp, -hp, body_end],  # 16
+            [hp, -hp, body_end],  # 17
+            [hp, hp, body_end],  # 18
+            [-hp, hp, body_end],  # 19
+            [-hp, -hp, self.length],  # 20
+            [hp, -hp, self.length],  # 21
+            [hp, hp, self.length],  # 22
+            [-hp, hp, self.length],  # 23
         ]
 
         faces = [
             # foot plate
-            [0, 3, 2, 1],      # bottom
-            [4, 5, 6, 7],      # top
+            [0, 3, 2, 1],  # bottom
+            [4, 5, 6, 7],  # top
             [0, 1, 5, 4],
             [1, 2, 6, 5],
             [2, 3, 7, 6],
             [3, 0, 4, 7],
             # body
-            [8, 11, 10, 9],    # bottom
+            [8, 11, 10, 9],  # bottom
             [12, 13, 14, 15],  # top
             [8, 9, 13, 12],
             [9, 10, 14, 13],

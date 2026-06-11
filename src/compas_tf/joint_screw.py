@@ -92,12 +92,7 @@ class ScrewElement(Element):
         xform0 = Translation.from_vector([0, 0, self.diameter])
         xform1 = Translation.from_vector([0, 0, self.height])
 
-        polylines = [
-            rectangle1.transformed(xform_boolean_tolerance),
-            rectangle1.transformed(xform0),
-            rectangle0.transformed(xform0),
-            rectangle0.transformed(xform1)
-        ]
+        polylines = [rectangle1.transformed(xform_boolean_tolerance), rectangle1.transformed(xform0), rectangle0.transformed(xform0), rectangle0.transformed(xform1)]
         return PolylineLoft.multiple_to_mesh(polylines)
 
     def compute_elementgeometry(self, include_features=False) -> Line:

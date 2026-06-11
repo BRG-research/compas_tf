@@ -1,16 +1,16 @@
 """
 #! python3
 # r: compas, compas_cgal
-import pathlib                                                                                                                                   
-import sys                                                                                                                                       
+import pathlib
+import sys
 # sys.path.insert(0, r"C:\brg\compas_tf\src")
 sys.path.insert(0, r"C:\brg\code_python\compas_tf\src")
-                                                                        
+
 import compas
 import scriptcontext as sc
 import rhinoscriptsyntax as rs
 from compas_rhino.conversions import mesh_to_rhino
-from compas_model.elements.group import Group
+from compas_model.elements.group import Group+
 
 # data_path = pathlib.Path(r"C:\brg\compas_tf\data\floor_model_booleans.json")
 data_path = pathlib.Path(r"C:\brg\code_python\compas_tf\data\floor_model_booleans.json")
@@ -48,14 +48,13 @@ sc.doc.Views.Redraw()
 # "C:/Users/Petras/.rhinocode/py39-rh8/python.exe" -m pip install --no-build-isolation -e C:/brg/compas_tf
 "C:/Users/petrasv/.rhinocode/py39-rh8/python.exe" -m pip install --no-build-isolation -e C:/brg/code_python/compas_tf
 """
+
+import math
 import pathlib
 import sys
 
-import math
-
 import compas
 from compas.colors import Color
-from compas.datastructures import Mesh
 from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Translation

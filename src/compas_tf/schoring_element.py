@@ -1,14 +1,21 @@
 import pathlib
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 from compas import json_load
 from compas.datastructures import Mesh
-from compas.geometry import Box, Brep, Frame, Line, Point, Transformation, Vector
-from compas_model.elements.element import Element, Feature
-from compas_model.models import Model
-# from compas_occ import brep
+from compas.geometry import Box
 from compas.geometry import Brep
+from compas.geometry import Frame
+from compas.geometry import Line
+from compas.geometry import Point
+from compas.geometry import Transformation
+from compas.geometry import Vector
+from compas_model.elements.element import Element
+from compas_model.elements.element import Feature
+from compas_model.models import Model
 
+# from compas_occ import brep
 
 
 class Dataset(object):
@@ -39,10 +46,10 @@ class Dataset(object):
     @classmethod
     def select_by_type(cls, type="a", target_length=0):
         """Select dataset components by type and target length.
-        
+
         This method selects appropriate SchoringElement components based on the type
         and finds the best fitting body component based on the target length.
-        
+
         Parameters
         ----------
         type : str, optional
@@ -51,7 +58,7 @@ class Dataset(object):
         target_length : float, optional
             The target length for selecting the appropriate body component.
             Default is 0.
-            
+
         Returns
         -------
         list[str]
@@ -59,12 +66,7 @@ class Dataset(object):
             [foot, body_start, body_end, head]
         """
         if type == "a":
-            dataset_group = [
-                cls.schoring_foot_0,
-                cls.schoring_body_start_0,
-                cls.schoring_body_end_0,
-                cls.schoring_head_0
-                ]
+            dataset_group = [cls.schoring_foot_0, cls.schoring_body_start_0, cls.schoring_body_end_0, cls.schoring_head_0]
 
             dataset_choices = [
                 cls.schoring_body_start_0,
@@ -86,7 +88,7 @@ class Dataset(object):
                 start_length = data["extension_length"]
                 total_lengths.append(start_length + end_length)
                 indices.append(idx)
-            
+
             # Pair indices with their corresponding total_lengths
             paired = list(zip(indices, total_lengths))
             paired.sort(key=lambda x: x[1])
@@ -158,7 +160,7 @@ class SchoringElement(Element):
     max_extension_length : float
         The maximum extension length from the dataset.
     """
-    
+
     # Class-level cache for loaded data
     _json_cache = {}
     _brep_cache = {}
@@ -167,12 +169,12 @@ class SchoringElement(Element):
     @classmethod
     def _load_json_data(cls, dataset: str) -> dict:
         """Load JSON data from cache or file.
-        
+
         Parameters
         ----------
         dataset : str
             The dataset filename.
-            
+
         Returns
         -------
         dict
@@ -183,11 +185,12 @@ class SchoringElement(Element):
             json_file = here / "data" / "SchoringElement" / dataset
             cls._json_cache[dataset] = json_load(json_file)
         return cls._json_cache[dataset]
-    
+
     @classmethod
     def _load_geometry(cls, dataset: str, data: dict, geometry_as_brep: bool):
         """Load geometry from STEP (brep) or embedded JSON mesh."""
         import os
+
         if geometry_as_brep:
             step_path = data.get("step_path")
             if step_path and not os.path.exists(step_path):
@@ -206,7 +209,7 @@ class SchoringElement(Element):
         if dataset not in cls._mesh_cache:
             cls._mesh_cache[dataset] = data["meshes"][0]
         return cls._mesh_cache[dataset].copy()
-    
+
     @classmethod
     def clear_cache(cls):
         """Clear all cached data."""
@@ -216,13 +219,7 @@ class SchoringElement(Element):
 
     @property
     def __data__(self) -> dict:
-        return {
-            "dataset": self.dataset,
-            "transformation": self.transformation,
-            "features": self._features,
-            "name": self.name,
-            "geometry_as_brep": self.geometry_as_brep
-        }
+        return {"dataset": self.dataset, "transformation": self.transformation, "features": self._features, "name": self.name, "geometry_as_brep": self.geometry_as_brep}
 
     def __init__(
         self,
@@ -230,7 +227,7 @@ class SchoringElement(Element):
         transformation: Optional[Transformation] = None,
         features: Optional[list[SchoringElementFeature]] = None,
         name: Optional[str] = None,
-        geometry_as_brep: bool = False
+        geometry_as_brep: bool = False,
     ):
         super().__init__(transformation=transformation, features=features, name=name)
         # print("Element Created: " + dataset)
@@ -245,14 +242,13 @@ class SchoringElement(Element):
         self.geometry = self._load_geometry(dataset, data, geometry_as_brep)
 
         # Simplified: expect only COMPAS Frame objects (dict with dtype/data)
-        self.frames = data ["frames"]
+        self.frames = data["frames"]
         # Copy to prevent transformation of cached data (already in mm)
         aabb = self.geometry.aabb()
         self.xsize = aabb.xsize
         self.ysize = aabb.ysize
         self.zsize = abs(self.frames[0].point[2])
         self.max_extension_length = data["extension_length"]
-
 
     def compute_elementgeometry(self, include_features: bool = False) -> Union[Mesh, Brep]:
         """Compute the shape of the element from the loaded geometry.
@@ -270,6 +266,7 @@ class SchoringElement(Element):
 
         """
         from compas.geometry import Transformation
+
         if self.transformation is not None:
             if not isinstance(self.transformation, Transformation):
                 print("[DEBUG] self.transformation is not a Transformation:", type(self.transformation), self.transformation)
@@ -350,32 +347,33 @@ class SchoringElement(Element):
 
     @staticmethod
     def from_points_and_vectors(
-    p0: Point = Point(0, 0, 2500),
-    v0: Vector = Vector(0, 0, 1),
-    p1: Point = Point(2500, 0, 0),
-    v1: Vector = Vector(1, 0, 0),
-    dataset_foot: str = Dataset.schoring_foot_0, 
-    dataset_head: str = Dataset.schoring_head_0,
-    dataset_body0: str = Dataset.schoring_body_start_0,
-    dataset_body1: str = Dataset.schoring_body_end_0,
-    dataset_hat : str = None,
-    geometry_as_brep: bool = False):
+        p0: Point = Point(0, 0, 2500),
+        v0: Vector = Vector(0, 0, 1),
+        p1: Point = Point(2500, 0, 0),
+        v1: Vector = Vector(1, 0, 0),
+        dataset_foot: str = Dataset.schoring_foot_0,
+        dataset_head: str = Dataset.schoring_head_0,
+        dataset_body0: str = Dataset.schoring_body_start_0,
+        dataset_body1: str = Dataset.schoring_body_end_0,
+        dataset_hat: str = None,
+        geometry_as_brep: bool = False,
+    ):
         """Create SchoringElement instances for foot and head from given points and vectors."""
 
         # =============================================================================
         # Feet elements
         # =============================================================================
-        foot0 = SchoringElement(dataset_foot, geometry_as_brep=geometry_as_brep, transformation=Transformation.from_frame(Frame(p0, v0, Vector.cross(v0, -(p1-p0)))))
-        foot1 = SchoringElement(dataset_head, geometry_as_brep=geometry_as_brep, transformation=Transformation.from_frame(Frame(p1, v1, Vector.cross(v1, (p1-p0)))))
+        foot0 = SchoringElement(dataset_foot, geometry_as_brep=geometry_as_brep, transformation=Transformation.from_frame(Frame(p0, v0, Vector.cross(v0, -(p1 - p0)))))
+        foot1 = SchoringElement(dataset_head, geometry_as_brep=geometry_as_brep, transformation=Transformation.from_frame(Frame(p1, v1, Vector.cross(v1, (p1 - p0)))))
 
         # =============================================================================
         # Intermediate transformations, frames and direction
         # =============================================================================
-        xform0 = foot0.transformation*Transformation.from_frame(foot0.frames[0])
-        xform1 = foot1.transformation*Transformation.from_frame(foot1.frames[0])
+        xform0 = foot0.transformation * Transformation.from_frame(foot0.frames[0])
+        xform1 = foot1.transformation * Transformation.from_frame(foot1.frames[0])
         frame0 = Frame.worldXY().transformed(xform0)
         frame1 = Frame.worldXY().transformed(xform1)
-        direction = frame1.point-frame0.point
+        direction = frame1.point - frame0.point
 
         # =============================================================================
         # Body elements
@@ -386,14 +384,8 @@ class SchoringElement(Element):
         body1 = SchoringElement(dataset_body1, geometry_as_brep=geometry_as_brep)
 
         # Transformations
-        body0_frame = Frame(
-            frame0.point, 
-            frame0.yaxis, 
-            direction.cross(frame0.yaxis))
-        body1_frame = Frame(
-            frame1.point-body0_frame.zaxis*body1.frames[0].point[2], 
-            frame0.yaxis, 
-            direction.cross(frame0.yaxis))
+        body0_frame = Frame(frame0.point, frame0.yaxis, direction.cross(frame0.yaxis))
+        body1_frame = Frame(frame1.point - body0_frame.zaxis * body1.frames[0].point[2], frame0.yaxis, direction.cross(frame0.yaxis))
 
         # Apply transformations
         body0.transformation = Transformation.from_frame(body0_frame)
@@ -404,8 +396,7 @@ class SchoringElement(Element):
         # =============================================================================
 
         if dataset_hat:
-            hat = SchoringElement(dataset_hat, geometry_as_brep=geometry_as_brep, transformation=Transformation.from_frame(Frame(p1, v1, Vector.cross(v1, -(p1-p0)))))
-
+            hat = SchoringElement(dataset_hat, geometry_as_brep=geometry_as_brep, transformation=Transformation.from_frame(Frame(p1, v1, Vector.cross(v1, -(p1 - p0)))))
 
         # =============================================================================
         # Model
@@ -421,30 +412,30 @@ class SchoringElement(Element):
         model.transformation = Transformation()
 
         return model
-    
 
     @staticmethod
     def from_points_and_vectors_no_foot_no_head(
-    p0: Point = Point(0, 0, 2500),
-    v0: Vector = Vector(0, 0, 1),
-    p1: Point = Point(2500, 0, 0),
-    v1: Vector = Vector(1, 0, 0),
-    dataset_body0: str = Dataset.schoring_body_start_0,
-    dataset_body1: str = Dataset.schoring_body_end_0,
-    dataset_hat : str = None,
-    geometry_as_brep: bool = False):
+        p0: Point = Point(0, 0, 2500),
+        v0: Vector = Vector(0, 0, 1),
+        p1: Point = Point(2500, 0, 0),
+        v1: Vector = Vector(1, 0, 0),
+        dataset_body0: str = Dataset.schoring_body_start_0,
+        dataset_body1: str = Dataset.schoring_body_end_0,
+        dataset_hat: str = None,
+        geometry_as_brep: bool = False,
+    ):
         """Create SchoringElement instances for foot and head from given points and vectors."""
 
         # =============================================================================
         # Intermediate transformations, frames and direction
         # =============================================================================
-        footframe = Frame(p0, v0, Vector.cross(v0, -(p1-p0)))
-        headframe = Frame(p1, v1, Vector.cross(v1, (p1-p0)))
+        footframe = Frame(p0, v0, Vector.cross(v0, -(p1 - p0)))
+        headframe = Frame(p1, v1, Vector.cross(v1, (p1 - p0)))
         xform0 = Transformation.from_frame(footframe)
         xform1 = Transformation.from_frame(headframe)
         frame0 = Frame.worldXY().transformed(xform0)
         frame1 = Frame.worldXY().transformed(xform1)
-        direction = frame1.point-frame0.point
+        direction = frame1.point - frame0.point
 
         # =============================================================================
         # Body elements
@@ -455,14 +446,8 @@ class SchoringElement(Element):
         body1 = SchoringElement(dataset_body1, geometry_as_brep=geometry_as_brep)
 
         # Transformations
-        body0_frame = Frame(
-            frame0.point, 
-            frame0.yaxis, 
-            direction.cross(frame0.yaxis))
-        body1_frame = Frame(
-            frame1.point-body0_frame.zaxis*body1.frames[0].point[2], 
-            frame0.yaxis, 
-            direction.cross(frame0.yaxis))
+        body0_frame = Frame(frame0.point, frame0.yaxis, direction.cross(frame0.yaxis))
+        body1_frame = Frame(frame1.point - body0_frame.zaxis * body1.frames[0].point[2], frame0.yaxis, direction.cross(frame0.yaxis))
 
         # Apply transformations
         body0.transformation = Transformation.from_frame(body0_frame)
@@ -473,8 +458,7 @@ class SchoringElement(Element):
         # =============================================================================
 
         if dataset_hat:
-            hat = SchoringElement(dataset_hat, geometry_as_brep=geometry_as_brep, transformation=Transformation.from_frame(Frame(p1, v1, Vector.cross(v1, -(p1-p0)))))
-
+            hat = SchoringElement(dataset_hat, geometry_as_brep=geometry_as_brep, transformation=Transformation.from_frame(Frame(p1, v1, Vector.cross(v1, -(p1 - p0)))))
 
         # =============================================================================
         # Model
@@ -495,11 +479,11 @@ class SchoringElement(Element):
 
         # Orient lines vertically
         lines = []
-        for l in lines_unordered:
-            if l[0][2] > l[1][2]:
-                lines.append(Line(l[1], l[0]))
+        for ln in lines_unordered:
+            if ln[0][2] > ln[1][2]:
+                lines.append(Line(ln[1], ln[0]))
             else:
-                lines.append(l)
+                lines.append(ln)
 
         # Try to get the x and y axes
         xaxis = Vector(1, 0, 0)
@@ -515,13 +499,12 @@ class SchoringElement(Element):
             if direction[0] != 0 or direction[1] != 0:
                 xaxis = Vector(direction[0], direction[1], 0)
                 yaxis = Vector.Zaxis().cross(xaxis)
-            
+
         # SchoringElement prop parts - without transformation
         model = Model("scaffolding")
 
         groups = []
         for i in range(len(lines)):
-
             filenames = Dataset.select_by_type("a", lines[i].length)
             # return
             foot = SchoringElement(filenames[0], geometry_as_brep=geometry_as_brep)
@@ -533,13 +516,11 @@ class SchoringElement(Element):
                 groups.append([foot, body_start, body_end, head])
             else:
                 groups.append([foot, body_start, body_end])
-        
+
         for group in groups:
             model.add_elements(group)
 
-
         for idx, group in enumerate(groups):
-
             foot = group[0]
             body_start = group[1]
             body_end = group[2]
@@ -571,9 +552,7 @@ class SchoringElement(Element):
 
             # Get the second telescopic prop orientation
             body_end_frame = Frame(
-                end_point - body_start_frame.zaxis * body_end.frames[0].point[2],
-                body_start_frame_no_rotation.yaxis,
-                direction.cross(body_start_frame_no_rotation.yaxis)
+                end_point - body_start_frame.zaxis * body_end.frames[0].point[2], body_start_frame_no_rotation.yaxis, direction.cross(body_start_frame_no_rotation.yaxis)
             )
             xform_body_end = Transformation.from_frame(body_end_frame)
 

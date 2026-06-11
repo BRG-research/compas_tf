@@ -4,6 +4,7 @@ Convert a SchoringElement OBJ file to COMPAS JSON format.
 Run this once when new OBJ mesh data is available for a schoring body.
 The resulting JSON is consumed by SchoringElement at runtime.
 """
+
 from pathlib import Path
 
 import compas

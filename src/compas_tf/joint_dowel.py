@@ -83,9 +83,23 @@ class DowelElement(Element):
             return self._axis.transformed(self.transformation)
         return self._axis
 
+    @property
+    def boolean_geometry(self) -> Mesh:
+        """Boolean cutter mesh with transformation applied."""
+        mesh = self.compute_mesh()
+        if self.transformation:
+            return mesh.transformed(self.transformation)
+        return mesh
+
+    @property
+    def boolean_geometries(self) -> list[Mesh]:
+        """Boolean cutter meshes contributed by the dowel."""
+        return [self.boolean_geometry]
+
     def compute_mesh(self) -> Mesh:
         """Compute the detailed mesh geometry for boolean operations."""
         import math
+
         n = 8
         r = self.width / 2
         pts = [Point(r * math.cos(2 * math.pi * k / n), r * math.sin(2 * math.pi * k / n), 0) for k in range(n)]

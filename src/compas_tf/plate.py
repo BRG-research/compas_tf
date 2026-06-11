@@ -8,15 +8,14 @@ from compas.geometry import Plane
 from compas.geometry import Point
 from compas.geometry import Polygon
 from compas.geometry import Polyline
-from compas.geometry import Projection
 from compas.geometry import Transformation
 from compas.geometry import Vector
 from compas.geometry import bestfit_plane
-from compas.geometry import intersection_segment_plane
 from compas.geometry.triangulation_earclip import Earcut
 from compas.itertools import pairwise
 from compas_model.elements.element import Element
 from compas_model.elements.element import Feature
+
 from compas_tf.geometry import PolylineLoft
 
 
@@ -262,6 +261,19 @@ class PlateElement(Element):
         return self._bottom_polyline
 
     @property
+    def computed_thickness(self) -> float:
+        """Actual plate thickness, measured as the gap between the top and
+        bottom surfaces.
+
+        Plates built from top/bottom polylines keep the default ``thickness``
+        attribute (0.1), so the real value is recovered from the geometry here.
+        Falls back to ``self.thickness`` when no surfaces are available.
+        """
+        if self.top is not None and self.bottom is not None:
+            return (Point(*self.top.centroid) - Point(*self.bottom.centroid)).length
+        return self.thickness
+
+    @property
     def face_polylines(self) -> dict[str, Union[Polyline, list[Polyline]]]:
         """Face outlines as closed polylines.
 
@@ -307,9 +319,9 @@ class PlateElement(Element):
         for i in range(n):
             j = (i + 1) % n
             v = Vector.from_start_end(points[i], points[j])
-            l = v.length
-            if l > best_len:
-                best_len = l
+            length = v.length
+            if length > best_len:
+                best_len = length
                 best_vec = v
         return best_vec.unitized()
 

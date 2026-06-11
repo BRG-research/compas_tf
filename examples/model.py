@@ -15,7 +15,6 @@ from compas_viewer.viewer import Viewer
 from compas_tf.column_head import ColumnHeadElement
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.joint_dowel import DowelElement
-from compas_tf.wedge import WedgeElement
 from compas_tf.joint_hilti import HiltiElement
 from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
@@ -26,6 +25,7 @@ from compas_tf.quarter_floor import QuarterFloorElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 from compas_tf.solid_union_modifier import SolidUnionModifier
 from compas_tf.support import SupportElement
+from compas_tf.wedge import WedgeElement
 
 # Connector types for identification
 CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element, HiltiElement)
@@ -58,6 +58,7 @@ def get_base_frame_from_obb(element) -> Frame:
 def frame_rectangle(frame, scale=100):
     """Create a rectangle polygon and normal line from a frame."""
     from compas.geometry import Polygon as GeomPolygon
+
     p0 = frame.point - frame.xaxis * scale - frame.yaxis * scale
     p1 = frame.point + frame.xaxis * scale - frame.yaxis * scale
     p2 = frame.point + frame.xaxis * scale + frame.yaxis * scale
@@ -114,7 +115,7 @@ def add_element_to_viewer(viewer, viewer_parent, element, color):
     # Add base_frame visualization
     if isinstance(element, ColumnElement):
         base_frame = get_base_frame_from_obb(element)
-    elif hasattr(element, 'base_frame'):
+    elif hasattr(element, "base_frame"):
         base_frame = element.base_frame
     else:
         return element_group  # No base frame to visualize
@@ -234,10 +235,16 @@ def add_model_to_viewer(model, viewer):
                             conn_color = get_color_for_element(connector)
                             add_element_to_viewer(viewer, connectors_group, connector, conn_color)
 
-                    # Still recurse for any non-connector children (e.g., nested groups)
+                    # Recurse into all tree children (groups and plain elements alike)
+                    # This covers e.g. DowelElement children of WedgeElement for debug display.
                     for grandchild in child.children:
                         if isinstance(grandchild, Group):
                             traverse_element(grandchild, child_viewer_group)
+                        else:
+                            if grandchild in hidden_sources and not isinstance(grandchild, DowelElement):
+                                continue
+                            gc_color = (0.2, 0.5, 1.0) if isinstance(grandchild, DowelElement) else get_color_for_element(grandchild)
+                            add_element_to_viewer(viewer, child_viewer_group, grandchild, gc_color)
 
     # Traverse from root's direct children (top-level groups)
     # model.tree.root.children returns nodes, so access .element
@@ -274,7 +281,7 @@ def build_model():
     thick = 40.0
     corner_block_height0 = 500  # Extra height below column head
     corner_block_height1 = 100  # Extra height below column head
-    corner_block_offset = 141#141
+    corner_block_offset = 141  # 141
     builder = FloorBuilder(
         size=3000,
         height=650,
@@ -286,8 +293,9 @@ def build_model():
         column_head_inclination=0,
         head_h=corner_block_height0,
         head_b=corner_block_height1,
-        head_o=corner_block_offset )
-    box = Box(grid_size-(column_size*0.5-thick)*2, grid_size-(column_size*0.5-thick)*2, height+floor_thickness, Frame([0,0,-(height+floor_thickness)*0.5]))
+        head_o=corner_block_offset,
+    )
+    box = Box(grid_size - (column_size * 0.5 - thick) * 2, grid_size - (column_size * 0.5 - thick) * 2, height + floor_thickness, Frame([0, 0, -(height + floor_thickness) * 0.5]))
 
     # Model with hierarchical groups
     model = Model(name="Example Model")
@@ -314,7 +322,7 @@ def build_model():
         corner = box.corner(corner_id)
         frame = Frame(corner, [1, 0, 0], [0, 1, 0])
         xform = Transformation.from_frame(frame) * Translation.from_vector([0, 0, SupportElement.HEIGHT])
-        column = ColumnElement(column_size, column_size, height-builder.head_b, xform)
+        column = ColumnElement(column_size, column_size, height - builder.head_b, xform)
         column.name = f"column_{i}"
         model.add_element(column, parent=columns_group)
         columns.append(column)
@@ -325,12 +333,11 @@ def build_model():
     # 4. Build column head elements with nested groups
     offset = builder.size + builder.beam_w * 0.5
     xforms_columnhead = [
-        Transformation.from_frame(Frame([-offset, -offset, 0], [1,0,0], [0,1,0])),
-        Transformation.from_frame(Frame([-offset, offset, 0], [0,-1,0], [1,0,0])),
-        Transformation.from_frame(Frame([offset, offset, 0], [-1,0,0], [0,-1,0])),
-        Transformation.from_frame(Frame([offset, -offset, 0], [0,1,0], [-1,0,0])),
+        Transformation.from_frame(Frame([-offset, -offset, 0], [1, 0, 0], [0, 1, 0])),
+        Transformation.from_frame(Frame([-offset, offset, 0], [0, -1, 0], [1, 0, 0])),
+        Transformation.from_frame(Frame([offset, offset, 0], [-1, 0, 0], [0, -1, 0])),
+        Transformation.from_frame(Frame([offset, -offset, 0], [0, 1, 0], [-1, 0, 0])),
     ]
-
 
     for i, xform in enumerate(xforms_columnhead):
         column = columns[i]
@@ -365,7 +372,6 @@ def build_model():
         # Add modifiers (boolean union: source geometry merged into target)
         for source, target in modifiers:
             model.add_modifier(source, target, SolidUnionModifier())
-
 
     # 5. Build quarter floor elements
     for q_idx in range(4):
@@ -425,7 +431,6 @@ def build_model():
         for source, target, modifier in quarter_result.modifiers:
             model.add_modifier(source, target, modifier)
 
-
     # 7. Build oculus element
     oculus_result = OculusElement.build(builder)
 
@@ -455,7 +460,6 @@ def build_model():
         model.add_interaction(connector, element)
 
     return model
-
 
 
 if __name__ == "__main__":

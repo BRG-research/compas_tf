@@ -3,8 +3,12 @@ from typing import Optional
 
 from compas import json_load
 from compas.datastructures import Mesh
-from compas.geometry import Box, Frame, Point, Transformation
-from compas_model.elements.element import Element, Feature
+from compas.geometry import Box
+from compas.geometry import Frame
+from compas.geometry import Point
+from compas.geometry import Transformation
+from compas_model.elements.element import Element
+from compas_model.elements.element import Feature
 
 
 class TowerElementFeature(Feature):

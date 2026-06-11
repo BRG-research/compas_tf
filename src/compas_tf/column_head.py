@@ -116,13 +116,14 @@ class ColumnHeadElement(Element):
         Returns: (head_element, top_element, connections, interactions, modifiers)
         """
         from compas_tf.joint_sherpaxl120 import SherpaXL120Element
+
         connection_width = SherpaXL120Element.WIDTH
 
         #############################################################################################
         # Transformation to origin
         #############################################################################################
 
-        xform = Translation.from_vector([builder.size+builder.beam_w/2, builder.size+builder.beam_w/2, 0])        
+        xform = Translation.from_vector([builder.size + builder.beam_w / 2, builder.size + builder.beam_w / 2, 0])
 
         #############################################################################################
         # Bottom block
@@ -135,20 +136,17 @@ class ColumnHeadElement(Element):
         _beam_w = builder.beam_w  # noqa: F841
         _height = builder.height  # noqa: F841
 
-
-
-        corner_end_plane0 = Plane(builder.end_planes[3].point, Vector.Zaxis().cross(builder.end_planes[3].normal)).offset(builder.thick*-1.5)
-        corner_end_plane1 = Plane(builder.end_planes[0].point, Vector.Zaxis().cross(builder.end_planes[0].normal)).offset(builder.thick*1.5)
+        corner_end_plane0 = Plane(builder.end_planes[3].point, Vector.Zaxis().cross(builder.end_planes[3].normal)).offset(builder.thick * -1.5)
+        corner_end_plane1 = Plane(builder.end_planes[0].point, Vector.Zaxis().cross(builder.end_planes[0].normal)).offset(builder.thick * 1.5)
         offset_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
         for i in range(len(offset_planes)):
             offset_planes[i] = offset_planes[i].offset(-connection_width)
         cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0] + builder.compute_cut_planes()[3:6][::-1] + [corner_end_plane1]
         top = Polyline(PlaneIntersect.intersect_consecutive_planes(cut_planes, Plane.worldXY())).translated(Vector(0, 0, -builder.head_h))
-        bottom = top.translated(Vector(0, 0, -builder.head_b ))
-
+        bottom = top.translated(Vector(0, 0, -builder.head_b))
 
         # top = Polyline(builder.top_corner_block_points + [builder.top_corner_block_points[0]])
-        
+
         head_mesh = PolylineLoft.to_mesh(bottom, top, True)
         head_mesh.transform(xform)
         # Transform polylines for PlateElement
@@ -158,17 +156,16 @@ class ColumnHeadElement(Element):
         #############################################################################################
         # Top block
         #############################################################################################
-        corner_end_plane0 = Plane(builder.end_planes[3].point, Vector.Zaxis().cross(builder.end_planes[3].normal)).offset(builder.thick*-1.5)
-        corner_end_plane1 = Plane(builder.end_planes[0].point, Vector.Zaxis().cross(builder.end_planes[0].normal)).offset(builder.thick*1.5)
+        corner_end_plane0 = Plane(builder.end_planes[3].point, Vector.Zaxis().cross(builder.end_planes[3].normal)).offset(builder.thick * -1.5)
+        corner_end_plane1 = Plane(builder.end_planes[0].point, Vector.Zaxis().cross(builder.end_planes[0].normal)).offset(builder.thick * 1.5)
         offset_planes = builder.compute_cut_planes(scale=builder.head_o, inclination=0)[3:6]
         for i in range(len(offset_planes)):
             offset_planes[i] = offset_planes[i].offset(-connection_width)
         cut_planes = [corner_end_plane1] + offset_planes + [corner_end_plane0, corner_end_plane1]
         top = Polyline(PlaneIntersect.intersect_consecutive_planes(cut_planes, Plane.worldXY()))
 
-
         # top = Polyline(builder.top_corner_block_points + [builder.top_corner_block_points[0]])
-        bottom = top.translated(Vector(0, 0, -builder.head_h-builder.head_b))
+        bottom = top.translated(Vector(0, 0, -builder.head_h - builder.head_b))
         top_mesh = PolylineLoft.to_mesh(bottom, top, True)
         top_mesh.transform(xform)
         # Transform polylines for PlateElement
@@ -184,30 +181,24 @@ class ColumnHeadElement(Element):
         screw_frames = []
         screw_diameter = 8
         for i in range(2):
-            origin = Point(
-                -builder.size- builder.thick*1,
-                -builder.size- builder.thick*(-2.75+i*3),
-                -builder.head_h - builder.head_b)
+            origin = Point(-builder.size - builder.thick * 1, -builder.size - builder.thick * (-2.75 + i * 3), -builder.head_h - builder.head_b)
             z = -builder.head_h - builder.head_b * 0.5 - screw_diameter
             # Screw 1: on -X face, extends in +X
-            screw_frames.append(Frame(Point(origin.x-screw_diameter, origin.y, z+screw_diameter*0.5), -Vector.Zaxis(), Vector.Yaxis()))
-            screw_frames.append(Frame(Point(origin.y, origin.x-screw_diameter, z-screw_diameter*0.5), Vector.Zaxis(), screw_frames[-1].zaxis))
-
+            screw_frames.append(Frame(Point(origin.x - screw_diameter, origin.y, z + screw_diameter * 0.5), -Vector.Zaxis(), Vector.Yaxis()))
+            screw_frames.append(Frame(Point(origin.y, origin.x - screw_diameter, z - screw_diameter * 0.5), Vector.Zaxis(), screw_frames[-1].zaxis))
 
         # 3x sherpaXL120 - column-head-top
         sherpa_frames = []
         for i in range(3):
-            p1 = top[i+1]
+            p1 = top[i + 1]
             p0 = top[i]
             midpoint = (p0 + p1) * 0.5
 
             if i == 0 or i == 2:
                 direction = (p1 - p0).unitized()
-                length = (p1 - p0).length*0.5 - 80*0.5
+                length = (p1 - p0).length * 0.5 - 80 * 0.5
                 direction = direction * length if i == 2 else direction * -length
-                midpoint = direction + midpoint 
-
-
+                midpoint = direction + midpoint
 
             frame = Frame(midpoint, p0 - p1, -Vector.Zaxis().cross(p1 - p0))
             # frame = Frame(midpoint, p1 - p0, Vector.Zaxis().cross(p1 - p0))
@@ -221,13 +212,10 @@ class ColumnHeadElement(Element):
         head_element = ColumnHeadElement(mesh=head_mesh, name="column_head")
         top_element = ColumnHeadElement(mesh=top_mesh, name="column_head_top")
 
-        from compas_tf.joint_screw import ScrewElement       
+        from compas_tf.joint_screw import ScrewElement
 
-        screws = [
-            ScrewElement(transformation=xform * Transformation.from_frame(frame), name=f"screw_columnhead_{i}")
-            for i, frame in enumerate(screw_frames)
-        ]
-        
+        screws = [ScrewElement(transformation=xform * Transformation.from_frame(frame), name=f"screw_columnhead_{i}") for i, frame in enumerate(screw_frames)]
+
         sherpas = []
         for i, frame in enumerate(sherpa_frames):
             depth = 120 if i == 1 else 80

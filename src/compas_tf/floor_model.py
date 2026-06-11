@@ -5,26 +5,18 @@ from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
-from compas.geometry import Plane
-from compas.geometry import Polyline
-from compas.geometry import Polygon
-from compas.geometry import Line
-from compas.geometry import Translation
-from compas.geometry import intersection_plane_plane
-from compas.geometry import intersection_line_plane
-from compas.geometry import intersection_line_line
+from compas_model.elements import ColumnElement
 from compas_model.elements.group import Group
 from compas_model.models import Model
-from compas_model.models.interactiongraph import InteractionGraph
 from compas_model.models.elementtree import ElementNode
-from compas_model.elements import ColumnElement
+from compas_model.models.interactiongraph import InteractionGraph
+
+from compas_tf.floor_builder import FloorBuilder
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.plate import PlateElement
-
-from compas_tf.floor_builder import FloorBuilder
-from compas_tf.support import SupportElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
+from compas_tf.support import SupportElement
 
 
 def merge_collinear_points(points, angle_tol=1e-3, closed=True):
@@ -93,8 +85,7 @@ class FloorModel(Model):
         Parametric floor geometry.
     name : str
         Name passed to the inner ``Model``.
-    """ 
-
+    """
 
     @property
     def __data__(self) -> dict:
@@ -105,7 +96,7 @@ class FloorModel(Model):
             "tree": self._tree.__data__,
             "graph": self._graph.__data__,
             "builder": self.builder.__data__,
-            "story_height": self.story_height
+            "story_height": self.story_height,
         }
         return data
 
@@ -173,6 +164,7 @@ class FloorModel(Model):
         .. code-block:: python
 
             from compas.geometry import Translation, Vector
+
             floor_model.add_floor_guide(
                 guide,
                 transformation=Translation.from_vector(Vector(0, 0, floor_model.story_height)),
@@ -199,8 +191,6 @@ class FloorModel(Model):
         :class:`compas_model.elements.group.Group`
             The top-level floor_guide group added to the model.
         """
-        from compas_tf.joint_sherpaxl120 import SherpaXL120Element
-        from compas_tf.plate import PlateElement
 
         guide_group = self.add_group("floor_guide")
 
@@ -337,6 +327,7 @@ class FloorModel(Model):
     def _skip_contacts(self, element):
         """Return True if the element should be excluded from contact detection."""
         from compas_tf.wedge import WedgeElement
+
         return isinstance(element, (Group, DowelElement, WedgeElement)) or getattr(element, "skip_contacts", False)
 
     def compute_bvh(self, nodetype=None, max_depth=None, leafsize=1, where=None):
@@ -350,19 +341,18 @@ class FloorModel(Model):
             Predicate to further restrict which elements enter the BVH.
             Example: ``where=lambda el: getattr(el, "contact_group", None) == "inner_beams"``.
         """
-        from compas_model.models.bvh import ElementBVH, ElementAABBNode
+        from compas_model.models.bvh import ElementAABBNode
+        from compas_model.models.bvh import ElementBVH
+
         if nodetype is None:
             nodetype = ElementAABBNode
-        valid = [
-            el for el in self.elements()
-            if not self._skip_contacts(el) and (where is None or where(el))
-        ]
+        valid = [el for el in self.elements() if not self._skip_contacts(el) and (where is None or where(el))]
         bvh = ElementBVH.from_elements(valid, nodetype=nodetype, max_depth=max_depth, leafsize=leafsize)
         if where is None:
             self._bvh = bvh
         return bvh
 
-    def compute_contacts_inner_beams(self, tolerance=1.0, minimum_area=1.0, contacttype=None, wedge_spacing=700):
+    def compute_contacts_inner_beams(self, tolerance=1.0, minimum_area=1.0, contacttype=None, wedge_spacing=700, single_wedge_or_division=True):
         """Contact detection restricted to the 16 plates that form the
         inner_beam/oculus joint ring:
 
@@ -374,9 +364,10 @@ class FloorModel(Model):
         both sides of every pair.
 
         After detection, places a ``WedgeElement`` along each contact's
-        **longest top edge**, subdivided by ``wedge_spacing``. Each wedge is
-        registered as a ``SolidDifferenceModifier`` cutter against the two
-        plates that form the contact. No dowels are emitted.
+        **longest top edge**, subdivided by ``wedge_spacing``. Each wedge body
+        and its dowels are registered as ``SolidDifferenceModifier`` cutters
+        against the two plates that form the contact, so both the wedge slot
+        and the dowel holes are produced as boolean differences.
 
         Parameters
         ----------
@@ -384,6 +375,7 @@ class FloorModel(Model):
             Approximate spacing between wedges along each contact's top edge.
             Set to 0 or negative to disable wedge placement.
         """
+
         def _filter(el):
             cg = getattr(el, "contact_group", None)
             if cg == "inner_beams":
@@ -406,20 +398,43 @@ class FloorModel(Model):
         )
 
         if wedge_spacing and wedge_spacing > 0:
-            self._add_wedges_along_contacts(wedge_spacing=wedge_spacing)
+            if single_wedge_or_division:
+                self._add_single_wedge_per_contact()
+            else:
+                self._add_wedges_along_contacts(wedge_spacing=wedge_spacing)
 
-    def _add_wedges_along_contacts(self, wedge_spacing=700):
+    def _add_wedge_dowels(self, wedge, group, cut_elements=(), width=20, step=320):
+        """Add dowel elements into *group* and register them as cutters.
+
+        Dowels are placed as siblings of the wedge (not children) so that the
+        model transformation is not compounded with the wedge's own transform.
+        Each dowel is registered as a ``SolidDifferenceModifier`` cutter against
+        every element in ``cut_elements`` (typically the two plates that form
+        the contact), so dowels drill holes through the plates as a boolean
+        difference, exactly like the wedge body.
+        """
+        for index, dowel in enumerate(wedge.create_dowels(width=width, step=step)):
+            dowel.name = f"{wedge.name}_dowel_{index}"
+            self.add_element(dowel, parent=group)
+            for el in cut_elements:
+                self.add_modifier(dowel, el, SolidDifferenceModifier())
+
+    def _add_single_wedge_per_contact(self):
         """Place WedgeElements along the longest top edge of every contact.
-        Each is registered as a SolidDifferenceModifier cutter against the
-        two plates that form the contact.
+        Each wedge body and its dowels are registered as SolidDifferenceModifier
+        cutters against the two plates that form the contact, so the dowels
+        drill holes through the plates as a boolean difference.
 
         Frame orientation:
             X axis = edge direction (along the longest top edge)
             Y axis = contact polygon normal
             Z axis = X cross Y
         """
+        from compas.geometry import Frame
+        from compas.geometry import Polygon as GeomPolygon
+        from compas.geometry import Transformation
+
         from compas_tf.wedge import WedgeElement
-        from compas.geometry import Frame, Polygon as GeomPolygon, Transformation, Vector
 
         # Snapshot edges with contacts before mutating the graph.
         edge_contacts = []
@@ -433,6 +448,91 @@ class FloorModel(Model):
                     edge_contacts.append((el_a, el_b, contact))
 
         wedges_group = self.add_group("contact_wedges")
+        dowels_group = self.add_group("contact_dowels")
+        wedge_idx = 0
+
+        for el_a, el_b, contact in edge_contacts:
+            polygon = getattr(contact, "polygon", None)
+            if polygon is None:
+                continue
+            pts = list(polygon.points)
+            pts = merge_collinear_points(pts, angle_tol=1e-3, closed=True)
+            n_pts = len(pts)
+            if n_pts < 3:
+                continue
+
+            contact_normal = GeomPolygon(pts).normal
+
+            centroid_z = sum(p[2] for p in pts) / n_pts
+            scored = []
+            for i in range(n_pts):
+                a, b = pts[i], pts[(i + 1) % n_pts]
+                mid_z = (a[2] + b[2]) / 2
+                length = (b - a).length
+                is_top = mid_z >= centroid_z
+                scored.append((is_top, length, a, b))
+            scored.sort(key=lambda e: (not e[0], -e[1]))
+            _, length, start, end = scored[0]
+            if length < 1e-6:
+                continue
+
+            direction = (end - start).unitized()
+
+            # One wedge at the midpoint of the longest top edge, scaled along
+            # the edge so its length matches the contact length minus twice the
+            # plate thickness.
+
+            pt = start + direction * (length / 2)
+            frame = Frame(pt, direction, contact_normal)
+
+            plate_thickness = max(el_a.computed_thickness, el_b.computed_thickness)
+            target_length = max(length - 3.0 * plate_thickness, 1e-6)
+
+            xform = Transformation.from_frame(frame)
+
+            wedge = WedgeElement(target_length=target_length, transformation=xform)
+            wedge.name = f"contact_wedge_{wedge_idx}"
+            self.add_element(wedge, parent=wedges_group)
+            self._add_wedge_dowels(wedge, dowels_group, cut_elements=(el_a, el_b))
+
+            self.add_modifier(wedge, el_a, SolidDifferenceModifier())
+            self.add_modifier(wedge, el_b, SolidDifferenceModifier())
+
+            wedge_idx += 1
+
+        self.precompute_boolean_modifiers()
+        return wedges_group
+
+    def _add_wedges_along_contacts(self, wedge_spacing=700):
+        """Place WedgeElements along the longest top edge of every contact.
+        Each wedge body and its dowels are registered as SolidDifferenceModifier
+        cutters against the two plates that form the contact, so the dowels
+        drill holes through the plates as a boolean difference.
+
+        Frame orientation:
+            X axis = edge direction (along the longest top edge)
+            Y axis = contact polygon normal
+            Z axis = X cross Y
+        """
+        from compas.geometry import Frame
+        from compas.geometry import Polygon as GeomPolygon
+        from compas.geometry import Transformation
+
+        from compas_tf.wedge import WedgeElement
+
+        # Snapshot edges with contacts before mutating the graph.
+        edge_contacts = []
+        for edge in self.graph.edges():
+            contacts = self.graph.edge_attribute(edge, name="contacts")
+            if contacts:
+                u, v = edge
+                el_a = self.graph.node_element(u)
+                el_b = self.graph.node_element(v)
+                for contact in contacts:
+                    edge_contacts.append((el_a, el_b, contact))
+
+        wedges_group = self.add_group("contact_wedges")
+        dowels_group = self.add_group("contact_dowels")
         wedge_idx = 0
 
         for el_a, el_b, contact in edge_contacts:
@@ -477,6 +577,7 @@ class FloorModel(Model):
                 wedge = WedgeElement(transformation=Transformation.from_frame(frame))
                 wedge.name = f"contact_wedge_{wedge_idx}"
                 self.add_element(wedge, parent=wedges_group)
+                self._add_wedge_dowels(wedge, dowels_group, cut_elements=(el_a, el_b))
 
                 self.add_modifier(wedge, el_a, SolidDifferenceModifier())
                 self.add_modifier(wedge, el_b, SolidDifferenceModifier())
@@ -513,6 +614,7 @@ class FloorModel(Model):
             (currently ``PlateElement``) will honor it.
         """
         from compas_model.interactions.contact import Contact
+
         if contacttype is None:
             contacttype = Contact
 
@@ -521,10 +623,7 @@ class FloorModel(Model):
             subjects = (el for el in self.elements() if not self._skip_contacts(el))
         else:
             bvh = self.compute_bvh(where=where)
-            subjects = (
-                el for el in self.elements()
-                if not self._skip_contacts(el) and where(el)
-            )
+            subjects = (el for el in self.elements() if not self._skip_contacts(el) and where(el))
 
         extra = {}
         if face_kinds is not None:
@@ -568,12 +667,13 @@ class FloorModel(Model):
         any element geometry is first accessed (e.g., before viewer.show()).
         """
         from compas.datastructures import Mesh
+
         from compas_tf.solid_difference_modifier import SolidDifferenceModifier
         from compas_tf.solid_union_modifier import SolidUnionModifier
 
         for element in self.elements():
             # Collect boolean modifiers in order: (mesh, operation)
-            bool_sources = []   # list of (Mesh, operation_str)
+            bool_sources = []  # list of (Mesh, operation_str)
             union_sources = []  # SolidUnionModifier sources (merged separately)
             other_modifiers = []  # (source_element, modifier)
 
@@ -582,15 +682,20 @@ class FloorModel(Model):
                 source = self.graph.node_element(nbr)
                 for modifier in modifiers:
                     if isinstance(modifier, SolidDifferenceModifier):
-                        src_geom = getattr(source, "boolean_geometry", None) or source.modelgeometry
                         op = getattr(modifier, "operation", "difference")
-                        if op == "union":
-                            if isinstance(src_geom, Mesh):
-                                bool_sources.append((src_geom, "union"))
-                        elif isinstance(src_geom, Mesh) and src_geom.is_closed():
-                            bool_sources.append((src_geom, op))
-                        else:
-                            print(f"[precompute] skip '{op}' source for '{getattr(element, 'name', '?')}': not a closed Mesh")
+                        src_geoms = getattr(source, "boolean_geometries", None)
+                        if src_geoms is None:
+                            src_geom = getattr(source, "boolean_geometry", None) or source.modelgeometry
+                            src_geoms = [src_geom]
+
+                        for src_geom in src_geoms:
+                            if op == "union":
+                                if isinstance(src_geom, Mesh):
+                                    bool_sources.append((src_geom, "union"))
+                            elif isinstance(src_geom, Mesh) and src_geom.is_closed():
+                                bool_sources.append((src_geom, op))
+                            else:
+                                print(f"[precompute] skip '{op}' source for '{getattr(element, 'name', '?')}': not a closed Mesh")
                     elif isinstance(modifier, SolidUnionModifier):
                         src_geom = source.modelgeometry
                         if isinstance(src_geom, Mesh):
@@ -620,6 +725,3 @@ class FloorModel(Model):
 
             # Inject into cache so compute_modelgeometry() is never called for this element
             element._modelgeometry = geometry
-
-
-

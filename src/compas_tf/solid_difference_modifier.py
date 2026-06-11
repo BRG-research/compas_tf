@@ -18,10 +18,7 @@ def _triangulate_mesh(mesh, precision=12):
     """
     vkeys = list(mesh.vertices())
     vindex = {vk: i for i, vk in enumerate(vkeys)}
-    vertices = [
-        [round(c, precision) for c in mesh.vertex_coordinates(vk)]
-        for vk in vkeys
-    ]
+    vertices = [[round(c, precision) for c in mesh.vertex_coordinates(vk)] for vk in vkeys]
 
     triangles = []
     tri_to_orig = {}
@@ -118,7 +115,6 @@ def _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh):
 
 
 class SolidDifferenceModifier(Modifier):
-
     SUPPORTED_WITH_FACE_SOURCE = {"union", "difference", "intersection"}
 
     def __init__(self, operation: str = "difference", name: str = None):
@@ -211,6 +207,7 @@ class SolidDifferenceModifier(Modifier):
             return Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
 
         from compas_cgal.booleans import boolean_difference_mesh_mesh
+
         print("[batch-bool] chain returned empty, falling back to sequential")
         result_mesh = targetgeometry
         for i, src in enumerate(sources):
@@ -273,7 +270,6 @@ class SolidDifferenceModifier(Modifier):
         if not isinstance(targetgeometry, Mesh):
             print(f"[diff] skip '{source_name}': target is {type(targetgeometry).__name__}, not Mesh")
             return targetgeometry
-
 
         # Watertight inputs are required; an open mesh will abort CGAL hard.
         src_closed = source_geom.is_closed()

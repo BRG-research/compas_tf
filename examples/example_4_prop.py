@@ -6,6 +6,7 @@ around the floor column positions, plus a central tower element.
 Reads floorbuilder.json written by example_2_floor_model_booleans.py so that
 the prop positions are driven by the same parametric geometry.
 """
+
 import math
 import pathlib
 import sys
@@ -15,13 +16,13 @@ from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Translation
 from compas.geometry import Vector
+from compas_model.models import Model
 from compas_viewer.config import Config
 from compas_viewer.viewer import Viewer
 
 from compas_tf.schoring_element import Dataset
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.tower_element import TowerElement
-from compas_model.models import Model
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from model import add_model_to_viewer  # noqa: E402
@@ -59,10 +60,7 @@ model_scaffolding0 = SchoringElement.from_points_and_vectors(
 model_scaffolding0.transformation *= Translation.from_vector(Vector(column_plan.x, column_plan.y, 0))
 
 model_scaffolding1 = model_scaffolding0.copy()
-model_scaffolding1.transformation = (
-    Translation.from_vector(Vector(column_plan.x, column_plan.y, 0))
-    * Rotation.from_axis_and_angle(Vector(0, 0, 1), math.pi / 2, Point(0, 0, 0))
-)
+model_scaffolding1.transformation = Translation.from_vector(Vector(column_plan.x, column_plan.y, 0)) * Rotation.from_axis_and_angle(Vector(0, 0, 1), math.pi / 2, Point(0, 0, 0))
 
 for i in range(4):
     rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))

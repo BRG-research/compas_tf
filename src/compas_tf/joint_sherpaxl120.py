@@ -50,7 +50,7 @@ class SherpaXL120Element(Element):
         self._depth = depth
         self._height = height
         self._box = Box.from_width_height_depth(depth, w, height)
-        self._box.frame = Frame([0, 0, -w/2], [1, 0, 0], [0, 1, 0])
+        self._box.frame = Frame([0, 0, -w / 2], [1, 0, 0], [0, 1, 0])
         if frame is not None:
             self._box.transform(Transformation.from_frame(frame))
 
