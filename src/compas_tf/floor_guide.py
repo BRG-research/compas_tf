@@ -39,6 +39,7 @@ class FloorGuide(Data):
         height=650,
         rise=453,
         size_oculus=1000,
+        wedge_plane_angle=5,
     ):
         super().__init__()
 
@@ -57,6 +58,11 @@ class FloorGuide(Data):
         self.size_inner_beams = size_inner_beams
         self.size_wedge = size_wedge
         self.size_tsections = size_tsections
+
+        # Gentle tilt (degrees) of the wedge planes that cut the ribs / wedges /
+        # beds / t-sections. The plane pivots about its top edge (at z=0), so
+        # the cut leans away from vertical going downward.
+        self.wedge_plane_angle = wedge_plane_angle
 
         # parabolas parameters
         self.height = height
@@ -95,6 +101,7 @@ class FloorGuide(Data):
             "height": self.height,
             "rise": self.rise,
             "size_oculus": self.size_oculus,
+            "wedge_plane_angle": self.wedge_plane_angle,
         }
 
     @classmethod
@@ -219,6 +226,14 @@ class FloorGuide(Data):
             plane0 = Plane(self.quarter_column_polygon.lines[1].midpoint, Vector.cross(self.quarter_column_polygon.lines[1].direction, Vector.Zaxis()))
             plane1 = Plane(self.quarter_column_polygon.lines[2].midpoint, Vector.cross(self.quarter_column_polygon.lines[2].direction, Vector.Zaxis()))
             plane2 = Plane(self.quarter_column_polygon.lines[3].midpoint, Vector.cross(self.quarter_column_polygon.lines[3].direction, Vector.Zaxis()))
+
+            # Tilt each wedge plane by a fixed angle, pivoting about its top edge
+            # (the column-head polygon edge at z=0). The tilt propagates into the
+            # offset planes and the central plane1_offset built from them below.
+            wedge_angle = self.wedge_plane_angle * math.pi / 180
+            plane0.rotate(wedge_angle, self.quarter_column_polygon.lines[1].direction, self.quarter_column_polygon.lines[1].midpoint)
+            plane1.rotate(wedge_angle, self.quarter_column_polygon.lines[2].direction, self.quarter_column_polygon.lines[2].midpoint)
+            plane2.rotate(wedge_angle, self.quarter_column_polygon.lines[3].direction, self.quarter_column_polygon.lines[3].midpoint)
 
             line0 = Line(p0, self.quarter_column_polygon[2])
             line1 = Line(p1, self.quarter_column_polygon[3])

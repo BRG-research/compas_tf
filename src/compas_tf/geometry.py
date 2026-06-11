@@ -554,6 +554,26 @@ class BezierCurve:
         return Polyline(points)
 
 
+def _triangulate_cap(points):
+    """Triangulate a cap polygon, falling back to a fan when earclip fails.
+
+    ``earclip_polygon`` returns ``None`` for caps it cannot triangulate (e.g.
+    slightly non-planar quads produced by tilted cut planes). For the convex
+    quad/strip caps used here a simple fan triangulation is a safe fallback and
+    keeps the lofted mesh closed.
+    """
+    n = len(points)
+    if n < 3:
+        return []
+    try:
+        triangles = earclip_polygon(Polygon(points))
+    except Exception:
+        triangles = None
+    if not triangles:
+        triangles = [[0, i, i + 1] for i in range(1, n - 1)]
+    return triangles
+
+
 class PolylineLoft:
     """Lofting polylines into meshes."""
 
@@ -593,10 +613,10 @@ class PolylineLoft:
             faces.append([i, next_i, next_i + n0, i + n0])
 
         if cap:
-            bottom_triangles = earclip_polygon(Polygon(list(reversed(pts0))))
+            bottom_triangles = _triangulate_cap(list(reversed(pts0)))
             for tri in bottom_triangles:
                 faces.append([n0 - 1 - tri[0], n0 - 1 - tri[1], n0 - 1 - tri[2]])
-            top_triangles = earclip_polygon(Polygon(pts1))
+            top_triangles = _triangulate_cap(pts1)
             for tri in top_triangles:
                 faces.append([tri[0] + n0, tri[1] + n0, tri[2] + n0])
 
@@ -648,14 +668,14 @@ class PolylineLoft:
         if cap:
             first_polyline = cleaned_polylines[0]
             cap_pts0 = first_polyline.points
-            bottom_triangles = earclip_polygon(Polygon(cap_pts0))
+            bottom_triangles = _triangulate_cap(cap_pts0)
             for tri in bottom_triangles:
                 faces.append([tri[2], tri[1], tri[0]])
 
             last_polyline = cleaned_polylines[-1]
             last_offset = offsets[-1]
             cap_pts1 = last_polyline.points
-            top_triangles = earclip_polygon(Polygon(cap_pts1))
+            top_triangles = _triangulate_cap(cap_pts1)
             for tri in top_triangles:
                 faces.append([tri[0] + last_offset, tri[1] + last_offset, tri[2] + last_offset])
 
