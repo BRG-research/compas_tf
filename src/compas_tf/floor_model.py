@@ -301,7 +301,7 @@ class FloorModel(Model):
     #  columns
     # ------------------------------------------------------------------ #
 
-    def add_column(self, column_size=200):
+    def add_column(self, column_size=200, capitel_width = 120, capitel_height = 750):
         """Add 4 column elements rotated 90° around centre.
 
         Parameters
@@ -317,7 +317,7 @@ class FloorModel(Model):
         columns_group = self.add_group("columns")
         for i in range(4):
             rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
-            column = ColumnElement(column_size, column_size, column_height, rot * Transformation.from_frame(base_frame), name=f"column_{i}")
+            column = ColumnElement(column_size, column_size, column_height, rot * Transformation.from_frame(base_frame), name=f"column_{i}", capitel_width=capitel_width, capitel_height=capitel_height)
             self.add_element(column, parent=columns_group)
 
     # ------------------------------------------------------------------ #
