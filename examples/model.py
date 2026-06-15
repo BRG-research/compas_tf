@@ -6,7 +6,7 @@ from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Transformation
 from compas.geometry import Translation
-from compas_model.elements.column import ColumnElement
+from compas_tf.column import ColumnElement
 from compas_model.elements.group import Group
 from compas_model.models import Model
 from compas_viewer.config import Config

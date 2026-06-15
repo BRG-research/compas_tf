@@ -5,7 +5,7 @@ from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
-from compas_model.elements import ColumnElement
+from compas_tf.column import ColumnElement
 from compas_model.elements.group import Group
 from compas_model.models import Model
 from compas_model.models.elementtree import ElementNode

@@ -12,6 +12,7 @@ from compas_tf.geometry import (
 )
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.floor_model import FloorModel
+from compas_tf.column import ColumnElement, ColumnFeature
 from compas_tf.column_head import ColumnHeadElement, ColumnHeadFeature
 from compas_tf.quarter_floor import QuarterFloorElement, QuarterFloorFeature, QuarterResult
 from compas_tf.oculus import OculusElement, OculusFeature
@@ -36,6 +37,8 @@ __all__ = [
     "PlaneIntersect",
     "FloorBuilder",
     "FloorModel",
+    "ColumnElement",
+    "ColumnFeature",
     "ColumnHeadElement",
     "ColumnHeadFeature",
     "QuarterFloorElement",
