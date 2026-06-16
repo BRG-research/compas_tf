@@ -124,7 +124,6 @@ class ColumnElement(Element):
         super().__init__(transformation=transformation, features=features, name=name)
         self.capitel_width = capitel_width
         self.capitel_height = capitel_height
-        print(self.capitel_height)
         self._box = Box.from_width_height_depth(width, height, depth)
         self._box.frame = Frame(point=[0, 0, self._box.zsize / 2], xaxis=[1, 0, 0], yaxis=[0, 1, 0])
 
