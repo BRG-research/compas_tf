@@ -13,7 +13,6 @@ from compas_model.models.interactiongraph import InteractionGraph
 
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.joint_dowel import DowelElement
-from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.plate import PlateElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 from compas_tf.support import SupportElement
@@ -71,6 +70,54 @@ def merge_collinear_points(points, angle_tol=1e-3, closed=True):
         if not dropped:
             return kept
         pts = kept
+
+
+def union_cutter_meshes(meshes):
+    """Robustly union cutter meshes into one closed solid via pairwise union
+    with a vertex weld between steps.
+
+    The column-head cutter quads all share the wedge-fan construction planes, so
+    differencing them against the column one-by-one (or in a single CGAL
+    boolean_chain) makes corefinement land repeatedly on exactly-coplanar faces
+    and hang. Unioning the quads first collapses those shared planes into one
+    clean solid, so the column can then be carved by a SINGLE difference.
+
+    Parameters
+    ----------
+    meshes : sequence of :class:`compas.datastructures.Mesh`
+        Cutter quad meshes in a common frame.
+
+    Returns
+    -------
+    :class:`compas.datastructures.Mesh` or None
+        The unioned solid, or ``None`` if no usable meshes were given.
+    """
+    from compas.datastructures import Mesh
+    from compas_cgal.booleans import boolean_union_mesh_mesh
+
+    def _weld(mesh):
+        m = mesh.copy()
+        try:
+            m.remove_duplicate_vertices(precision=6)
+        except TypeError:
+            m.remove_duplicate_vertices()
+        m.remove_unused_vertices()
+        return m
+
+    meshes = [m for m in meshes if isinstance(m, Mesh)]
+    if not meshes:
+        return None
+
+    union = meshes[0]
+    for nxt in meshes[1:]:
+        a = _weld(union).to_vertices_and_faces(triangulated=True)
+        b = nxt.to_vertices_and_faces(triangulated=True)
+        V, F = boolean_union_mesh_mesh(a, b)
+        if not (V.size and F.size):
+            # Skip a quad that fails to union rather than aborting the whole set.
+            continue
+        union = _weld(Mesh.from_vertices_and_faces(V.tolist(), F.tolist()))
+    return union
 
 
 class FloorModel(Model):
@@ -146,15 +193,15 @@ class FloorModel(Model):
         self.debug = []  # debug geometry pushed by internal steps; iterate from caller (e.g. viewer)
 
     # ------------------------------------------------------------------ #
-    #  floor guide (plates + sherpas)
+    #  floor guide (plates)
     # ------------------------------------------------------------------ #
 
-    def add_floor_guide(self, guide, column_index=0, transformation=None, include_oculus=True):
-        """Add all FloorGuide plate elements and sherpas to the model.
+    def add_floor_guide(self, guide, column_index=0, transformation=None, include_oculus=True, cut_column=True):
+        """Add all FloorGuide plate elements to the model.
 
         Follows the element sequence of example_2_floorguide.py: beds,
         tsections, outer_ribs, inner_ribs, wedge_block, wedges_column,
-        inner_beams, and sherpas.
+        inner_beams, and the column-head cutter.
 
         FloorGuide geometry is authored at z=0 (floor top surface). Pass
         ``transformation`` to place the guide at the correct elevation in the
@@ -170,21 +217,26 @@ class FloorModel(Model):
                 transformation=Translation.from_vector(Vector(0, 0, floor_model.story_height)),
             )
 
-        SherpaXL120Element and PlateElement objects in the sherpas list are
-        all registered as SolidDifferenceModifier cutters against the column
-        at ``column_index``.
+        The column-head cutter quads are unioned into a single solid and
+        registered as one SolidDifferenceModifier against the column at
+        ``column_index``.
 
         Parameters
         ----------
         guide : :class:`compas_tf.floor_guide.FloorGuide`
             Quarter floor guide that owns the plate geometry.
         column_index : int
-            Which column (by name suffix) the sherpa cutting blocks target.
+            Which column (by name suffix) the column-head cutter targets.
             Default is 0 (the bottom-left corner column).
         transformation : :class:`compas.geometry.Transformation`, optional
-            Transformation applied to every plate and sherpa element so the
+            Transformation applied to every plate element so the
             guide sits at the correct height in the model.  When *None* the
             geometry remains at the z=0 origin of the FloorGuide.
+        cut_column : bool
+            If True (default), the column-head cutter plates are registered as
+            ``SolidDifferenceModifier`` sources against the target column. If
+            False, those plates are added as plain visible elements only (no
+            boolean) so they can be inspected in the viewer.
 
         Returns
         -------
@@ -219,24 +271,39 @@ class FloorModel(Model):
                         plate.transformation = transformation
                 self.add_element(plate, parent=sub)
 
-        # Sherpas: SherpaXL120Element → joint elements,
-        #          PlateElement → column cutter (SolidDifferenceModifier)
-        sherpas_group = Group(name="sherpas")
-        self.add_element(sherpas_group, parent=guide_group)
-
         columns = self.find_all_elements_of_type(ColumnElement)
         columns_by_index = {int(c.name.split("_")[-1]): c for c in columns}
         target_column = columns_by_index.get(column_index)
 
-        for i, sherpa in enumerate(guide.sherpas):
-            if not getattr(sherpa, "name", None):
-                sherpa.name = f"sherpa_{i}"
-            if transformation is not None:
-                sherpa.transformation = transformation
-            sherpa.skip_contacts = True
-            self.add_element(sherpa, parent=sherpas_group)
-            if isinstance(sherpa, (PlateElement, SherpaXL120Element)) and target_column is not None:
-                self.add_modifier(sherpa, target_column, SolidDifferenceModifier())
+        # Column-head cutters: PlateElements built from the wedge/side planes,
+        # registered as SolidDifferenceModifier cutters against the column so
+        # the column head is carved to follow the floor geometry.
+        cutters_group = Group(name="column_cutters")
+        self.add_element(cutters_group, parent=guide_group)
+        cutter_plates = guide.column_cutters
+        if cut_column and target_column is not None:
+            # Union the quad cutters into ONE solid and carve the column with a
+            # single difference. The quads share the wedge-fan planes, so cutting
+            # the column with them separately makes CGAL corefinement hang on the
+            # repeated coplanar faces; one unioned cutter avoids that entirely.
+            union_mesh = union_cutter_meshes([c.compute_elementgeometry() for c in cutter_plates])
+            if union_mesh is not None:
+                cutter = PlateElement(mesh=union_mesh)
+                cutter.name = f"column_cutter_{column_index}"
+                cutter.skip_contacts = True
+                if transformation is not None:
+                    cutter.transformation = transformation
+                self.add_element(cutter, parent=cutters_group)
+                self.add_modifier(cutter, target_column, SolidDifferenceModifier())
+        else:
+            # Inspection mode: keep the individual quad plates as plain visible
+            # elements (no boolean) so they can be examined in the viewer.
+            for i, cutter in enumerate(cutter_plates):
+                cutter.name = f"column_cutter_{column_index}_{i}"
+                cutter.skip_contacts = True
+                if transformation is not None:
+                    cutter.transformation = transformation
+                self.add_element(cutter, parent=cutters_group)
 
         return guide_group
 

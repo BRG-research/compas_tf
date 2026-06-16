@@ -13,6 +13,7 @@ from compas.geometry import Vector
 from compas.geometry import intersection_line_plane
 from compas.geometry import intersection_plane_plane
 from compas.geometry import intersection_plane_plane_plane
+from shapely.lib import points
 
 from compas_tf.geometry import BezierCurve
 from compas_tf.geometry import PolylineCut
@@ -69,6 +70,7 @@ class FloorGuide(Data):
         self.height = height
         self.rise = rise
         self.static_h = height - rise
+        self.column_head_lowest_height = -730
 
         # caches (invalidated lazily)
         self._oculus_pts = None
@@ -244,7 +246,6 @@ class FloorGuide(Data):
             line2 = Line(line2.start, line2.end+line2.direction*1000)
             plane0 = Plane(plane0.point, Vector.cross(line0.direction, self.quarter_column_polygon.lines[1].direction))
             plane2 = Plane(plane2.point, Vector.cross(line2.direction, self.quarter_column_polygon.lines[3].direction))
-            # plane2.rotate(wedge_angle, self.quarter_column_polygon.lines[3].direction, self.quarter_column_polygon.lines[3].midpoint)
 
             line0 = Line(p0, self.quarter_column_polygon[2])
             line1 = Line(p1, self.quarter_column_polygon[3])
@@ -285,7 +286,134 @@ class FloorGuide(Data):
             ]
 
             self._construction_planes = construction_planes
+
         return self._construction_planes
+
+    @property
+    def column_cutters(self):
+        """PlateElements that carve the column head as boolean-difference cutters.
+
+        Built from the three wedge construction planes plus the two side planes
+        of the quarter column polygon. The plane fan is intersected with three
+        horizontal levels (top at z=0, and two lower levels) to produce six
+        cutter quads, each lofted into a closed ``PlateElement`` so it can be
+        registered as a ``SolidDifferenceModifier`` source against the column.
+
+        The cutters are authored in the guide's local frame (column head near
+        z=0); ``FloorModel.add_floor_guide`` applies the guide transformation so
+        they line up with the column at the correct elevation.
+
+        Returns
+        -------
+        list[:class:`compas_tf.plate.PlateElement`]
+        """
+        # Rebuilt fresh on each access (no caching) so the same guide can be
+        # reused across quarters — each add_floor_guide call gets new elements,
+        # mirroring `sherpas` / `beds`.
+        cp = self.construction_planes
+
+        plane_xy0 = Plane.worldXY()
+        print(-self.height - self.size_tsections * 1.65)
+        plane_xy1 = Plane(Point(0, 0, -self.height - self.size_tsections * 1.65), Vector.Zaxis())
+        plane_xy2 = Plane(Point(0, 0, self.column_head_lowest_height), Vector.Zaxis())
+        side_plane0 = Plane(self.quarter_column_polygon.lines[0].midpoint, Vector.cross(self.quarter_column_polygon.lines[0].direction, -Vector.Zaxis()))
+        side_plane1 = Plane(self.quarter_column_polygon.lines[-1].midpoint, Vector.cross(self.quarter_column_polygon.lines[-1].direction, -Vector.Zaxis()))
+
+        wedge_planes_top = [
+            side_plane0,
+            cp["wedges"][0][0],
+            cp["wedges"][1][0],
+            cp["wedges"][2][0],
+            side_plane1,
+        ]
+        wedge_planes_bottom = [
+            side_plane0,
+            Plane(self.quarter_column_polygon.lines[1].midpoint, Vector.cross(self.quarter_column_polygon.lines[1].direction, -Vector.Zaxis())),
+            Plane(self.quarter_column_polygon.lines[3].midpoint, Vector.cross(self.quarter_column_polygon.lines[3].direction, -Vector.Zaxis())),
+            side_plane1,
+        ]
+
+        points0 = []
+        points1 = []
+        points2 = []
+        for i in range(len(wedge_planes_top) - 1):
+            plane0 = wedge_planes_top[i]
+            plane1 = wedge_planes_top[i + 1]
+            points0.append(Point(*intersection_plane_plane_plane(plane_xy0, plane0, plane1)))
+            points1.append(Point(*intersection_plane_plane_plane(plane_xy1, plane0, plane1)))
+
+        for i in range(len(wedge_planes_bottom) - 1):
+            plane0 = wedge_planes_bottom[i]
+            plane1 = wedge_planes_bottom[i + 1]
+            points2.append(Point(*intersection_plane_plane_plane(plane_xy2, plane0, plane1)))
+
+        # Six cutter quads spanning the plane fan across the three levels.
+        polylines = [
+            Polygon([points0[0], points0[1], points1[1], points1[0]]),
+            Polygon([points0[1], points0[2], points1[2], points1[1]]),
+            Polygon([points0[2], points0[3], points1[3], points1[2]]),
+
+            Polygon([points1[0], points1[1], points2[1], points2[0]]),
+            Polygon([points1[1], points1[2], points2[1] + (points2[2] - points2[0]) * 0.25, points2[1] - (points2[2] - points2[0]) * 0.25]),
+            Polygon([points1[2], points1[3], points2[2], points2[1]]),
+        ]
+
+        # Extend each quad in-plane and offset along its normal to give the
+        # cutter plate a finite thickness (closed solid for the boolean).
+        polylines_offset = []
+        for idx, polyline in enumerate(polylines):
+
+
+
+            dir0 = polylines[idx].points[1] - polylines[idx].points[0]
+            dir1 = polylines[idx].points[3] - polylines[idx].points[2]
+            dir0.unitize()
+            dir1.unitize()
+            dir0 *= 100
+            dir1 *= 100
+
+            polylines[idx][0] = polylines[idx][0] - dir0
+            polylines[idx][1] = polylines[idx][1] + dir0
+            polylines[idx][2] = polylines[idx][2] - dir1
+            polylines[idx][3] = polylines[idx][3] + dir1
+            dir2 = polylines[idx].points[2] - polylines[idx].points[1]
+            dir3 = polylines[idx].points[0] - polylines[idx].points[3]
+
+            # if idx in (0, 3):  # for the top and bottom quads, extend the other two edges instead of these ones, to avoid self-intersection
+            if idx in (0, 1, 2):
+                print(f"Processing quad {idx}")
+                dir2.unitize()
+                dir3.unitize()
+                dir2 *= 100
+                dir3 *= 100
+                polylines[idx][0] = polylines[idx][0] - dir2
+                polylines[idx][1] = polylines[idx][1] - dir2
+                polylines[idx][2] = polylines[idx][2] - dir3
+                polylines[idx][3] = polylines[idx][3] - dir3
+            else:
+                dir2.unitize()
+                dir3.unitize()
+                # polylines[idx][2] = polylines[idx][2] - dir3
+                # polylines[idx][3] = polylines[idx][3] - dir3 
+                
+                dir2 *= 100
+                dir3 *= 100
+                polylines[idx][0] = polylines[idx][0] - dir2
+                polylines[idx][1] = polylines[idx][1] - dir2
+
+
+            z_axis = Vector.cross(polylines[idx].lines[1].direction, polylines[idx].lines[0].direction)
+            z_axis.unitize()
+            polylines_offset.append(polyline.translated(z_axis * 100))
+
+        plates = []
+        for i in range(len(polylines)):
+
+            top = Polyline(list(polylines[i].points) + [polylines[i].points[0]])
+            bottom = Polyline(list(polylines_offset[i].points) + [polylines_offset[i].points[0]])
+            plates.append(PlateElement(top_polyline=top, bottom_polyline=bottom))
+
+        return plates
 
     @property
     def quad_planes(self):
@@ -1029,67 +1157,6 @@ class FloorGuide(Data):
             )
 
         return wedges
-
-    @property
-    def sherpas(self):
-        """Sherpa connections to inner beams at 0 and 2 wedge 0 planes."""
-        from compas_tf.joint_sherpaxl120 import SherpaXL120Element
-
-        # Sherpa height based on foces = 370 mm
-        height = 370
-
-        # Frame origina
-        base_plane = Plane((0, 0, -height * 0.5), Vector(0, 0, 1))
-
-        # Sherpas are positioned/oriented from the UN-tilted (vertical) wedge
-        # planes, so the wedge_plane_angle rib-cut tilt does not rotate them.
-        edge0 = self.quarter_column_polygon.lines[1]
-        edge2 = self.quarter_column_polygon.lines[3]
-        flat0 = Plane(edge0.midpoint, Vector.cross(edge0.direction, Vector.Zaxis()))
-        flat2 = Plane(edge2.midpoint, Vector.cross(edge2.direction, Vector.Zaxis()))
-
-        p0 = Point(
-            *intersection_plane_plane_plane(base_plane, self.construction_planes["outer_ribs"][0][0].offset(self.size_outer_ribs * 0.5), flat0)
-        )
-
-        p2 = Point(
-            *intersection_plane_plane_plane(base_plane, self.construction_planes["outer_ribs"][1][0].offset(self.size_outer_ribs * 0.5), flat2)
-        )
-
-        frame0 = Frame.from_plane(flat0)
-        frame2 = Frame.from_plane(flat2)
-        frame0 = Frame(p0, frame0.xaxis, frame0.yaxis)
-        frame2 = Frame(p2, frame2.xaxis, frame2.yaxis)
-
-        # Boolean Cuts — cut the column from above (+extension) down to the
-        # lowest point of the outer ribs.
-        extension = 100
-        bottom_z = self.outer_ribs_bottom
-        plates = []
-        for i in range(3):
-            dir = self.quarter_column_polygon[1 + i] - self.quarter_column_polygon[2 + i]
-            dir = dir.unitized()
-            dir *= extension
-            top = Polyline(
-                [
-                    self.quarter_column_polygon[1 + i] - Vector(0, 0, -extension) + dir,
-                    self.quarter_column_polygon[2 + i] - Vector(0, 0, -extension) - dir,
-                    self.quarter_column_polygon[2 + i] + Vector(0, 0, bottom_z) - dir,
-                    self.quarter_column_polygon[1 + i] + Vector(0, 0, bottom_z) + dir,
-                    self.quarter_column_polygon[1 + i] - Vector(0, 0, -extension) + dir,
-                ]
-            )
-
-            bottom = top.translated(self.construction_planes["wedges"][i][0].normal * extension)
-            plate = PlateElement(top=top, bottom=bottom)
-            plates.append(plate)
-
-        return [
-            SherpaXL120Element(depth=80, height=height, frame=frame0, name="sherpa_0"),
-            # SherpaXL120Element(depth=80, height=height, frame=frame1, name="sherpa_1"),
-            SherpaXL120Element(depth=80, height=height, frame=frame2, name="sherpa_2"),
-            *plates,
-        ]
 
     @property
     def inner_beams(self):

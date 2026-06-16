@@ -190,7 +190,12 @@ def get_difference_source_elements(model):
         for modifier in modifiers:
             if isinstance(modifier, SolidDifferenceModifier):
                 u, _v = edge
-                sources.add(model.graph.node_element(u))
+                el = model.graph.node_element(u)
+                # Keep the column-head cutter plates visible for inspection,
+                # even though they are difference sources.
+                if (getattr(el, "name", "") or "").startswith("column_cutter"):
+                    continue
+                sources.add(el)
     return sources
 
 

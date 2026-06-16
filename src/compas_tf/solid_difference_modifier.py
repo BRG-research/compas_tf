@@ -140,6 +140,49 @@ class SolidDifferenceModifier(Modifier):
         return cls(operation=data.get("operation", "difference"))
 
     @staticmethod
+    def largest_piece(mesh: Mesh) -> Mesh:
+        """Return the largest connected component of a (possibly disjoint) mesh.
+
+        A boolean difference can split the target into several disconnected
+        solids (e.g. a cut that lops a chunk off the column head); we keep only
+        the main body. "Largest" is measured by absolute volume, falling back to
+        face count for any component whose volume cannot be evaluated.
+
+        Parameters
+        ----------
+        mesh : :class:`compas.datastructures.Mesh`
+
+        Returns
+        -------
+        :class:`compas.datastructures.Mesh`
+            The largest component, or ``mesh`` unchanged if it is already a
+            single connected piece.
+        """
+        if not isinstance(mesh, Mesh):
+            return mesh
+        try:
+            if mesh.is_connected():
+                return mesh
+        except Exception:
+            pass
+        parts = mesh.exploded()
+        if len(parts) <= 1:
+            return mesh
+
+        def _score(part):
+            try:
+                vol = abs(part.volume())
+                if vol > 0:
+                    return vol
+            except Exception:
+                pass
+            return part.number_of_faces()
+
+        largest = max(parts, key=_score)
+        print(f"[largest-piece] {len(parts)} disjoint pieces -> kept V/F={largest.number_of_vertices()}/{largest.number_of_faces()}")
+        return largest
+
+    @staticmethod
     def apply_batch(sources: list, targetgeometry: Mesh, operations: list = None) -> Mesh:
         """Apply a sequence of boolean operations in a single CGAL call.
 
@@ -164,6 +207,14 @@ class SolidDifferenceModifier(Modifier):
 
         has_xor = any(op == "xor" for op in operations)
 
+        # A pure-difference result may be split into disjoint solids; keep only
+        # the largest piece. Skipped when a union/intersection is in the mix,
+        # where multiple disconnected pieces can be intentional.
+        only_difference = all(op == "difference" for op in operations)
+
+        def _finish(mesh):
+            return SolidDifferenceModifier.largest_piece(mesh) if only_difference else mesh
+
         op_summary = "+".join(sorted(set(operations)))
         print(f"[batch-bool] boolean_chain ({op_summary}): target + {len(sources)} mesh(es)")
 
@@ -184,7 +235,7 @@ class SolidDifferenceModifier(Modifier):
                 print("[batch-bool] empty result, keeping original")
                 return targetgeometry
             print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
-            return Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
+            return _finish(Mesh.from_vertices_and_faces(V.tolist(), F.tolist()))
 
         from compas_cgal.booleans import boolean_chain_with_face_source
 
@@ -204,7 +255,7 @@ class SolidDifferenceModifier(Modifier):
 
         if V is not None:
             print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
-            return Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
+            return _finish(Mesh.from_vertices_and_faces(V.tolist(), F.tolist()))
 
         from compas_cgal.booleans import boolean_difference_mesh_mesh
 
@@ -223,7 +274,7 @@ class SolidDifferenceModifier(Modifier):
                 return targetgeometry
             result_mesh = Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
         print(f"[batch-bool] sequential OK -> V/F={result_mesh.number_of_vertices()}/{result_mesh.number_of_faces()}")
-        return result_mesh
+        return _finish(result_mesh)
 
     """Modifier for boolean difference between two geometries.
 
@@ -305,4 +356,5 @@ class SolidDifferenceModifier(Modifier):
         shape = Polyhedron(vertices, faces)
         shape = shape.to_mesh()
         print(f"[diff] '{source_name}' OK  -> result V/F={len(vertices)}/{len(faces)}")
-        return shape
+        # A difference can split the target into disjoint solids; keep the main body.
+        return SolidDifferenceModifier.largest_piece(shape)
