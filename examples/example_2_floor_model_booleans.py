@@ -116,8 +116,7 @@ guide = FloorGuide(
 floor_model = FloorModel(builder=builder)
 
 floor_model.add_support(column_size=column_size)
-floor_model.add_column(column_size=column_size, capitel_width = 120, capitel_height = abs(guide.column_head_lowest_height)) #  
-print("here", guide.column_head_lowest_height)
+floor_model.add_column(column_size=column_size, capitel_width=120, capitel_height=abs(guide.column_head_lowest_height))
 
 floor_level = Translation.from_vector(Vector(0, 0, floor_model.story_height))
 floor_model.add_floor_guide(guide, column_index=0, transformation=floor_level, include_oculus=True)

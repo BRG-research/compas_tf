@@ -313,7 +313,6 @@ class FloorGuide(Data):
         cp = self.construction_planes
 
         plane_xy0 = Plane.worldXY()
-        print(-self.height - self.size_tsections * 1.65)
         plane_xy1 = Plane(Point(0, 0, -self.height - self.size_tsections * 1.65), Vector.Zaxis())
         plane_xy2 = Plane(Point(0, 0, self.column_head_lowest_height), Vector.Zaxis())
         side_plane0 = Plane(self.quarter_column_polygon.lines[0].midpoint, Vector.cross(self.quarter_column_polygon.lines[0].direction, -Vector.Zaxis()))
@@ -381,7 +380,6 @@ class FloorGuide(Data):
 
             # if idx in (0, 3):  # for the top and bottom quads, extend the other two edges instead of these ones, to avoid self-intersection
             if idx in (0, 1, 2):
-                print(f"Processing quad {idx}")
                 dir2.unitize()
                 dir3.unitize()
                 dir2 *= 100
