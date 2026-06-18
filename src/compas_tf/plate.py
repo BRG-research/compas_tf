@@ -599,9 +599,9 @@ class PlateElement(Element):
         contacts = []
         for a_points, a_normal, _ in a_faces:
             for b_points, b_normal, _ in b_faces:
-                result = polygon_polygon_overlap(a_points, a_normal, b_points, b_normal, tolerance, minimum_area)
+                result = polygon_polygon_overlap(a_points, b_points, a_normal, tolerance, minimum_area)
                 if result:
-                    points, frame, area = result
+                    points, frame, area, _, _ = result
                     contacts.append(contacttype(points=points, frame=frame, size=area))
         return contacts
 
