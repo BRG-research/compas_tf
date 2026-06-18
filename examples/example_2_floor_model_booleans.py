@@ -64,6 +64,7 @@ from compas_viewer.viewer import Viewer
 
 import compas_tf  # noqa: F401
 from compas_tf.floor_builder import FloorBuilder
+from compas_tf.floor_column_connection import FloorColumnConnectionElement
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.floor_model import FloorModel
 
@@ -123,6 +124,19 @@ floor_model.add_floor_guide(guide, column_index=0, transformation=floor_level, i
 for i in range(1, 4):
     rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
     floor_model.add_floor_guide(guide, column_index=i, transformation=floor_level * rot, include_oculus=False)
+
+# ------------------------------------------------------------------ #
+#  Custom FloorColumnConnection meshes on each column
+# ------------------------------------------------------------------ #
+# The OBJ is modelled in world coordinates aligned to column_0 (bottom-left
+# corner). Each column is positioned by a Rotation(i * 90deg) about the global
+# Z-axis, so the same rotation places a copy of the connection on each column.
+
+connections_group = floor_model.add_group("column_connections")
+for i in range(4):
+    rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
+    connection = FloorColumnConnectionElement(transformation=rot, name=f"floor_column_connection_{i}")
+    floor_model.add_element(connection, parent=connections_group)
 
 # ------------------------------------------------------------------ #
 #  Batch boolean cuts

@@ -29,6 +29,7 @@ from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.joint_hilti import HiltiElement
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.tower_element import TowerElement, TowerElementFeature
+from compas_tf.floor_column_connection import FloorColumnConnectionElement, FloorColumnConnectionFeature
 
 __all__ = [
     "PolylineOffset",
@@ -58,4 +59,6 @@ __all__ = [
     "SchoringElement",
     "TowerElement",
     "TowerElementFeature",
+    "FloorColumnConnectionElement",
+    "FloorColumnConnectionFeature",
 ]
