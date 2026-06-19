@@ -381,6 +381,7 @@ class FloorModel(Model):
         story_height : float
             Story height in mm.
         """
+        capitel_height = abs(capitel_height)
         column_plan = self.builder.corner_point_column(column_size)
         column_height = self.story_height - SupportElement.HEIGHT
         base_frame = Frame([column_plan.x, column_plan.y, SupportElement.HEIGHT], [1, 0, 0], [0, 1, 0])
@@ -803,3 +804,81 @@ class FloorModel(Model):
 
             # Inject into cache so compute_modelgeometry() is never called for this element
             element._modelgeometry = geometry
+
+    # ------------------------------------------------------------------ #
+    #  export
+    # ------------------------------------------------------------------ #
+
+    def union_source_elements(self):
+        """Elements whose geometry is absorbed into another via SolidUnionModifier.
+
+        These are merged into their target and should not be drawn or exported
+        separately.
+        """
+        from compas_tf.solid_union_modifier import SolidUnionModifier
+
+        sources = set()
+        for edge in self.graph.edges():
+            modifiers = self.graph.edge_attribute(edge, name="modifiers")
+            for modifier in modifiers or []:
+                if isinstance(modifier, SolidUnionModifier):
+                    sources.add(self.graph.node_element(edge[0]))
+        return sources
+
+    def difference_source_elements(self):
+        """Elements acting as cutters via SolidDifferenceModifier.
+
+        Cutters carve other elements but are not meant to be drawn themselves.
+        """
+        sources = set()
+        for edge in self.graph.edges():
+            modifiers = self.graph.edge_attribute(edge, name="modifiers")
+            for modifier in modifiers or []:
+                if isinstance(modifier, SolidDifferenceModifier):
+                    sources.add(self.graph.node_element(edge[0]))
+        return sources
+
+    def export_obj(self, path, author="compas_tf"):
+        """Export each visible element's model geometry as a named OBJ object.
+
+        Union sources (absorbed into their target) and difference cutters are
+        omitted, except the inspectable cutter types (dowels, wedges, column
+        connections) which are kept visible.
+
+        Parameters
+        ----------
+        path : str | os.PathLike
+            Destination ``.obj`` path.
+        author : str, optional
+            Author tag written into the OBJ header.
+
+        Returns
+        -------
+        list[:class:`compas.datastructures.Mesh`]
+            The meshes that were written, one per exported element.
+        """
+        from compas.datastructures import Mesh
+        from compas.files import OBJWriter
+
+        from compas_tf.floor_column_connection import FloorColumnConnectionElement
+        from compas_tf.wedge import WedgeElement
+
+        visible_cutter_types = (DowelElement, WedgeElement, FloorColumnConnectionElement)
+        hidden = self.union_source_elements() | self.difference_source_elements()
+
+        meshes = []
+        for element in self.elements():
+            if element in hidden and not isinstance(element, visible_cutter_types):
+                continue
+            try:
+                geometry = element.modelgeometry
+            except NotImplementedError:
+                continue
+            if not isinstance(geometry, Mesh):
+                continue
+            geometry = geometry.copy()
+            geometry.name = element.name or type(element).__name__
+            meshes.append(geometry)
+
+        OBJWriter(str(path), meshes, author=author).write()
+        return meshes

@@ -56,8 +56,6 @@ import sys
 
 import compas
 from compas.colors import Color
-from compas.datastructures import Mesh
-from compas.files import OBJWriter
 from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Translation
@@ -75,10 +73,7 @@ from compas_tf.plate import PlateElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from model import VISIBLE_CUTTER_TYPES  # noqa: E402
 from model import add_model_to_viewer  # noqa: E402
-from model import get_difference_source_elements  # noqa: E402
-from model import get_union_source_elements  # noqa: E402
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -126,13 +121,26 @@ guide = FloorGuide(
 floor_model = FloorModel(builder=builder)
 
 floor_model.add_support(column_size=column_size)
-floor_model.add_column(column_size=column_size, capitel_width=120, capitel_height=abs(guide.column_head_lowest_height))
+floor_model.add_column(
+    column_size=column_size, 
+    capitel_width=120, 
+    capitel_height=guide.column_head_lowest_height)
 
 floor_level = Translation.from_vector(Vector(0, 0, floor_model.story_height))
-floor_model.add_floor_guide(guide, column_index=0, transformation=floor_level, include_oculus=True)
+
+floor_model.add_floor_guide(
+    guide, 
+    column_index=0, 
+    transformation=floor_level, 
+    include_oculus=True)
+
 for i in range(1, 4):
     rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
-    floor_model.add_floor_guide(guide, column_index=i, transformation=floor_level * rot, include_oculus=False)
+    floor_model.add_floor_guide(
+        guide, 
+        column_index=i, 
+        transformation=floor_level * rot, 
+        include_oculus=False)
 
 # ------------------------------------------------------------------ #
 #  Custom FloorColumnConnection meshes on each column
@@ -167,12 +175,6 @@ for i in range(4):
         floor_model.add_modifier(connection, rib, SolidDifferenceModifier())
 
 # ------------------------------------------------------------------ #
-#  Batch boolean cuts
-# ------------------------------------------------------------------ #
-
-# floor_model.precompute_boolean_modifiers()
-
-# ------------------------------------------------------------------ #
 #  Contact detection (inner_beams plates only — fast, filtered)
 # ------------------------------------------------------------------ #
 
@@ -189,26 +191,8 @@ compas.json_dump(builder, data_dir / "floorbuilder.json")
 #  Export whole model to OBJ (one named object per element)
 # ------------------------------------------------------------------ #
 
-# Hide the same elements the viewer hides: union sources are absorbed into their
-# target, and difference cutters are not part of the final solid (except the
-# inspectable cutter types we keep visible).
-_hidden = get_union_source_elements(floor_model) | get_difference_source_elements(floor_model)
-_export_meshes = []
-for element in floor_model.elements():
-    if element in _hidden and not isinstance(element, VISIBLE_CUTTER_TYPES):
-        continue
-    try:
-        geometry = element.modelgeometry
-    except NotImplementedError:
-        continue
-    if not isinstance(geometry, Mesh):
-        continue
-    geometry = geometry.copy()
-    geometry.name = element.name or type(element).__name__
-    _export_meshes.append(geometry)
-
 obj_path = data_dir / f"floor_model_{datetime.date.today().isoformat()}.obj"
-OBJWriter(str(obj_path), _export_meshes, author="compas_tf").write()
+_export_meshes = floor_model.export_obj(obj_path)
 print(f"[export] wrote {len(_export_meshes)} element(s) -> {obj_path}")
 
 # ------------------------------------------------------------------ #
