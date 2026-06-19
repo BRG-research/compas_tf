@@ -1,7 +1,6 @@
 import math
 
 from compas.data import Data
-from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Plane
 from compas.geometry import Point
@@ -13,7 +12,6 @@ from compas.geometry import Vector
 from compas.geometry import intersection_line_plane
 from compas.geometry import intersection_plane_plane
 from compas.geometry import intersection_plane_plane_plane
-from shapely.lib import points
 
 from compas_tf.geometry import BezierCurve
 from compas_tf.geometry import PolylineCut

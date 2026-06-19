@@ -28,6 +28,7 @@ Reference: https://github.com/petrasvestartas/compas_nest
 import pathlib
 
 import compas
+import compas_nest
 from compas.colors import Color
 from compas.geometry import Frame
 from compas.geometry import Polyline
@@ -40,7 +41,6 @@ from compas_model.elements.group import Group
 from compas_viewer.config import Config
 from compas_viewer.viewer import Viewer
 
-import compas_nest
 from compas_tf.plate import PlateElement
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"

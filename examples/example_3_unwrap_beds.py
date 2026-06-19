@@ -17,6 +17,7 @@ import os
 import pathlib
 
 import compas
+import compas_nest
 from compas.geometry import Frame
 from compas.geometry import Rotation
 from compas.geometry import Transformation
@@ -25,7 +26,6 @@ from compas.geometry import Vector
 from compas.geometry import angle_vectors_signed
 from compas_model.elements.group import Group
 
-import compas_nest
 from compas_tf.plate import PlateElement
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"

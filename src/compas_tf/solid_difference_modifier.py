@@ -5,6 +5,78 @@ from compas.datastructures import Mesh
 from compas.geometry import Brep
 from compas_model.modifiers import Modifier
 
+_DIFFERENCE_BACKEND = None
+
+
+def _difference_backend():
+    """Resolve the pairwise boolean-difference backend (cached after first call).
+
+    Prefers ``compas_manifold`` — its ``boolean_difference_mesh_mesh`` always
+    returns watertight, oriented 2-manifold output and does not hang on the
+    near-degenerate / self-intersecting cutters that make compas_cgal's
+    corefinement stall. Falls back to ``compas_cgal`` when ``compas_manifold``
+    is not installed (e.g. an environment where only compas_cgal is available).
+
+    Both backends share the same signature::
+
+        boolean_difference_mesh_mesh(target_vf, cutter_vf) -> (V, F)
+
+    where the inputs are ``(vertices, faces)`` tuples and the result is a pair
+    of numpy arrays (triangulated faces).
+
+    Returns
+    -------
+    tuple[callable, str]
+        The ``boolean_difference_mesh_mesh`` function and the backend name
+        (``"manifold"`` or ``"cgal"``).
+    """
+    global _DIFFERENCE_BACKEND
+    if _DIFFERENCE_BACKEND is None:
+        try:
+            from compas_manifold.booleans import boolean_difference_mesh_mesh
+
+            _DIFFERENCE_BACKEND = (boolean_difference_mesh_mesh, "manifold")
+        except ImportError:
+            from compas_cgal.booleans import boolean_difference_mesh_mesh
+
+            _DIFFERENCE_BACKEND = (boolean_difference_mesh_mesh, "cgal")
+    return _DIFFERENCE_BACKEND
+
+
+_CHAIN_BACKEND = None
+
+
+def _chain_backend():
+    """Resolve the batched boolean-chain backend (cached after first call).
+
+    Prefers ``compas_manifold`` over ``compas_cgal`` for the same robustness
+    reason as :func:`_difference_backend`. Both expose matching signatures::
+
+        boolean_chain(meshes, operations) -> (V, F)
+        boolean_chain_with_face_source(meshes, operations) -> (V, F, S)
+
+    where ``meshes`` is an iterable of ``(vertices, faces)`` tuples and ``S`` is
+    an ``[N, 2]`` array of ``[mesh_id, face_id]`` tags.
+
+    Returns
+    -------
+    tuple[callable, callable, str]
+        ``(boolean_chain, boolean_chain_with_face_source, backend_name)``.
+    """
+    global _CHAIN_BACKEND
+    if _CHAIN_BACKEND is None:
+        try:
+            from compas_manifold.booleans import boolean_chain
+            from compas_manifold.booleans import boolean_chain_with_face_source
+
+            _CHAIN_BACKEND = (boolean_chain, boolean_chain_with_face_source, "manifold")
+        except ImportError:
+            from compas_cgal.booleans import boolean_chain
+            from compas_cgal.booleans import boolean_chain_with_face_source
+
+            _CHAIN_BACKEND = (boolean_chain, boolean_chain_with_face_source, "cgal")
+    return _CHAIN_BACKEND
+
 
 def _triangulate_mesh(mesh, precision=12):
     """Fan-triangulate a compas Mesh, returning (vertices, triangles, tri_to_orig).
@@ -215,12 +287,12 @@ class SolidDifferenceModifier(Modifier):
         def _finish(mesh):
             return SolidDifferenceModifier.largest_piece(mesh) if only_difference else mesh
 
+        boolean_chain, boolean_chain_with_face_source, backend = _chain_backend()
+
         op_summary = "+".join(sorted(set(operations)))
-        print(f"[batch-bool] boolean_chain ({op_summary}): target + {len(sources)} mesh(es)")
+        print(f"[batch-bool] {backend} boolean_chain ({op_summary}): target + {len(sources)} mesh(es)")
 
         if has_xor:
-            from compas_cgal.booleans import boolean_chain
-
             all_vf = []
             for mesh in [targetgeometry] + list(sources):
                 verts, tris, _ = _triangulate_mesh(mesh)
@@ -236,8 +308,6 @@ class SolidDifferenceModifier(Modifier):
                 return targetgeometry
             print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
             return _finish(Mesh.from_vertices_and_faces(V.tolist(), F.tolist()))
-
-        from compas_cgal.booleans import boolean_chain_with_face_source
 
         all_vf = []
         for mesh in [targetgeometry] + list(sources):
@@ -257,7 +327,7 @@ class SolidDifferenceModifier(Modifier):
             print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
             return _finish(Mesh.from_vertices_and_faces(V.tolist(), F.tolist()))
 
-        from compas_cgal.booleans import boolean_difference_mesh_mesh
+        boolean_difference_mesh_mesh, _ = _difference_backend()
 
         print("[batch-bool] chain returned empty, falling back to sequential")
         result_mesh = targetgeometry
@@ -308,7 +378,8 @@ class SolidDifferenceModifier(Modifier):
 
         """
         from compas.geometry import Polyhedron
-        from compas_cgal.booleans import boolean_difference_mesh_mesh
+
+        boolean_difference_mesh_mesh, backend = _difference_backend()
 
         # Get source geometry
         source_geom = source.modelgeometry
@@ -343,7 +414,7 @@ class SolidDifferenceModifier(Modifier):
         try:
             V, F = boolean_difference_mesh_mesh(TARGET, SOURCE)
         except Exception as exc:
-            print(f"[diff] CGAL raised for '{source_name}': {exc}")
+            print(f"[diff] {backend} raised for '{source_name}': {exc}")
             return targetgeometry
 
         vertices = V.tolist()

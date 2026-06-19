@@ -5,12 +5,12 @@ from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Transformation
 from compas.geometry import Vector
-from compas_tf.column import ColumnElement
 from compas_model.elements.group import Group
 from compas_model.models import Model
 from compas_model.models.elementtree import ElementNode
 from compas_model.models.interactiongraph import InteractionGraph
 
+from compas_tf.column import ColumnElement
 from compas_tf.floor_builder import FloorBuilder
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.plate import PlateElement
@@ -264,6 +264,9 @@ class FloorModel(Model):
             for i, plate in enumerate(plates):
                 plate.name = f"{group_name}_{i}"
                 plate.contact_group = group_name
+                # Tag the quarter this plate belongs to so callers can match a
+                # plate back to its column (e.g. the column connection cutters).
+                plate.column_index = column_index
                 if transformation is not None:
                     if plate.transformation is not None:
                         plate.transformation = transformation * plate.transformation
@@ -384,7 +387,15 @@ class FloorModel(Model):
         columns_group = self.add_group("columns")
         for i in range(4):
             rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
-            column = ColumnElement(column_size, column_size, column_height, rot * Transformation.from_frame(base_frame), name=f"column_{i}", capitel_width=capitel_width, capitel_height=capitel_height)
+            column = ColumnElement(
+                column_size,
+                column_size,
+                column_height,
+                rot * Transformation.from_frame(base_frame),
+                name=f"column_{i}",
+                capitel_width=capitel_width,
+                capitel_height=capitel_height,
+            )
             self.add_element(column, parent=columns_group)
 
     # ------------------------------------------------------------------ #

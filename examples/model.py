@@ -6,14 +6,15 @@ from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Transformation
 from compas.geometry import Translation
-from compas_tf.column import ColumnElement
 from compas_model.elements.group import Group
 from compas_model.models import Model
 from compas_viewer.config import Config
 from compas_viewer.viewer import Viewer
 
+from compas_tf.column import ColumnElement
 from compas_tf.column_head import ColumnHeadElement
 from compas_tf.floor_builder import FloorBuilder
+from compas_tf.floor_column_connection import FloorColumnConnectionElement
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.joint_hilti import HiltiElement
 from compas_tf.joint_screw import ScrewElement
@@ -36,6 +37,7 @@ CONNECTOR_COLOR = (0.8, 0.0, 0.2)
 SUPPORT_COLOR = (0.9, 0.9, 0.9)
 COLUMN_COLOR = (0.9, 0.9, 0.9)
 COLUMN_HEAD_COLOR = (0.4, 0.4, 0.4)
+CONNECTION_COLOR = (0.95, 0.5, 0.0)  # corner column-connection cutter (kept visible)
 
 # Color map by group name
 COLOR_MAP = {
@@ -43,7 +45,12 @@ COLOR_MAP = {
     "columns": COLUMN_COLOR,
     "column_heads": COLUMN_HEAD_COLOR,
     "connectors": CONNECTOR_COLOR,
+    "column_connections": CONNECTION_COLOR,
 }
+
+# Cutter (SolidDifferenceModifier source) types that should still be drawn in
+# the viewer instead of hidden, so the cutting geometry can be inspected.
+VISIBLE_CUTTER_TYPES = (DowelElement, WedgeElement, FloorColumnConnectionElement)
 
 
 def get_base_frame_from_obb(element) -> Frame:
@@ -217,8 +224,8 @@ def add_model_to_viewer(model, viewer):
                 traverse_element(child, child_group)
             else:
                 # Skip elements absorbed by boolean union or used as difference cutters
-                # but keep DowelElements visible even though they are cutter sources
-                if child in hidden_sources and not isinstance(child, (DowelElement, WedgeElement)):
+                # but keep the inspectable cutter types visible even though they cut.
+                if child in hidden_sources and not isinstance(child, VISIBLE_CUTTER_TYPES):
                     continue
                 # Add element geometry and get its viewer group
                 color = get_color_for_element(child)
@@ -242,7 +249,7 @@ def add_model_to_viewer(model, viewer):
                         if isinstance(grandchild, Group):
                             traverse_element(grandchild, child_viewer_group)
                         else:
-                            if grandchild in hidden_sources and not isinstance(grandchild, DowelElement):
+                            if grandchild in hidden_sources and not isinstance(grandchild, VISIBLE_CUTTER_TYPES):
                                 continue
                             gc_color = (0.2, 0.5, 1.0) if isinstance(grandchild, DowelElement) else get_color_for_element(grandchild)
                             add_element_to_viewer(viewer, child_viewer_group, grandchild, gc_color)
@@ -255,7 +262,7 @@ def add_model_to_viewer(model, viewer):
             group = viewer.scene.add_group(element.name or "group")
             traverse_element(element, group)
         else:
-            if element in hidden_sources and not isinstance(element, (DowelElement, WedgeElement)):
+            if element in hidden_sources and not isinstance(element, VISIBLE_CUTTER_TYPES):
                 continue
             color = get_color_for_element(element)
             elem_group = add_element_to_viewer(viewer, None, element, color)

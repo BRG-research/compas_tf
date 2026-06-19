@@ -7,4 +7,3 @@ ruff
 sphinx_compas2_theme
 twine
 wheel
-compas_cgal>=0.9.4

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=66.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 # ============================================================================
@@ -13,7 +13,8 @@ keywords = []
 authors = [
     { name = "Petras Vestartas", email = "petrasvestartas@gmail.com" },
 ]
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.9"
 dynamic = ['dependencies', 'optional-dependencies', 'version']

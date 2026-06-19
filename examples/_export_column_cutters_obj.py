@@ -9,7 +9,10 @@ import math
 import pathlib
 
 from compas.datastructures import Mesh
-from compas.geometry import Point, Rotation, Translation, Vector
+from compas.geometry import Point
+from compas.geometry import Rotation
+from compas.geometry import Translation
+from compas.geometry import Vector
 
 from compas_tf.column import ColumnElement
 from compas_tf.floor_builder import FloorBuilder

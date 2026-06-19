@@ -576,11 +576,22 @@ class PlateElement(Element):
             non-PlateElement (Mesh source), all its mesh faces are tagged
             ``"side"`` for filtering purposes.
         """
+        import inspect
+
         from compas_model.algorithms.contacts import polygon_polygon_overlap
         from compas_model.interactions import Contact
 
         if contacttype is None:
             contacttype = Contact
+
+        # compas_model changed the polygon_polygon_overlap signature across
+        # versions. The original (targeted here) takes per-polygon normals,
+        # ``(a_pts, a_normal, b_pts, b_normal, tol, min_area)``, and returns
+        # ``(points, frame, area)``. Newer releases take a single shared normal,
+        # ``(a_pts, b_pts, normal, tol, min_area)``, and return
+        # ``(points, frame, area, T_a, T_b)``. Detect which is installed so the
+        # plate works against both; the first three return values match either way.
+        _legacy_ppo = len(inspect.signature(polygon_polygon_overlap).parameters) >= 6
 
         a_faces = self._polygon_faces(self.modeltransformation)
 
@@ -599,9 +610,12 @@ class PlateElement(Element):
         contacts = []
         for a_points, a_normal, _ in a_faces:
             for b_points, b_normal, _ in b_faces:
-                result = polygon_polygon_overlap(a_points, a_normal, b_points, b_normal, tolerance, minimum_area)
+                if _legacy_ppo:
+                    result = polygon_polygon_overlap(a_points, a_normal, b_points, b_normal, tolerance, minimum_area)
+                else:
+                    result = polygon_polygon_overlap(a_points, b_points, a_normal, tolerance, minimum_area)
                 if result:
-                    points, frame, area = result
+                    points, frame, area = result[0], result[1], result[2]
                     contacts.append(contacttype(points=points, frame=frame, size=area))
         return contacts
 

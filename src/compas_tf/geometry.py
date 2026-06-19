@@ -574,6 +574,37 @@ def _triangulate_cap(points):
     return triangles
 
 
+def _orient_closed(mesh):
+    """Repair a capped loft into a consistently-oriented closed solid.
+
+    The side walls and the two earclip caps can be emitted with inconsistent
+    winding (the top cap may wind the same way as the side walls instead of
+    opposite), which leaves the mesh manifold but not watertight by half-edge
+    accounting — every edge of one cap ring ends up "naked". When that happens,
+    unify the face cycles and flip them if needed so the normals point outward
+    (positive signed volume), which the boolean backends (CGAL / Manifold)
+    require. Already-closed lofts are returned untouched, so well-formed plates
+    (e.g. the ribs) are never disturbed.
+
+    Parameters
+    ----------
+    mesh : :class:`compas.datastructures.Mesh`
+
+    Returns
+    -------
+    :class:`compas.datastructures.Mesh`
+    """
+    if mesh.is_closed():
+        return mesh
+    try:
+        mesh.unify_cycles()
+    except Exception:
+        return mesh
+    if mesh.is_closed() and mesh.volume() < 0:
+        mesh.flip_cycles()
+    return mesh
+
+
 class PolylineLoft:
     """Lofting polylines into meshes."""
 
@@ -620,7 +651,10 @@ class PolylineLoft:
             for tri in top_triangles:
                 faces.append([tri[0] + n0, tri[1] + n0, tri[2] + n0])
 
-        return Mesh.from_vertices_and_faces(vertices, faces)
+        mesh = Mesh.from_vertices_and_faces(vertices, faces)
+        if cap:
+            mesh = _orient_closed(mesh)
+        return mesh
 
     @staticmethod
     def multiple_to_mesh(polylines, cap=True, close=True):
@@ -679,7 +713,10 @@ class PolylineLoft:
             for tri in top_triangles:
                 faces.append([tri[0] + last_offset, tri[1] + last_offset, tri[2] + last_offset])
 
-        return Mesh.from_vertices_and_faces(vertices, faces)
+        mesh = Mesh.from_vertices_and_faces(vertices, faces)
+        if cap:
+            mesh = _orient_closed(mesh)
+        return mesh
 
     @staticmethod
     def to_lines(polyline0, polyline1):
