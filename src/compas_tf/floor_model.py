@@ -400,6 +400,57 @@ class FloorModel(Model):
             self.add_element(column, parent=columns_group)
 
     # ------------------------------------------------------------------ #
+    #  column connections (corner connectors)
+    # ------------------------------------------------------------------ #
+
+    def add_column_connections(self):
+        """Place a FloorColumnConnection on each column and carve its pocket.
+
+        One :class:`FloorColumnConnectionElement` is added per column. The
+        connection mesh is modelled in world coordinates aligned to ``column_0``
+        (the bottom-left corner), so a ``Rotation(i * 90deg)`` about the global
+        Z-axis places a copy on each of the four columns — the same rotation
+        used by :meth:`add_column`.
+
+        Each connection bridges its column and the two outer ribs of the same
+        quarter, so it is registered as a :class:`SolidDifferenceModifier`
+        cutter against the column and those outer ribs. The connector pocket is
+        carved out of each as a boolean difference when
+        :meth:`precompute_boolean_modifiers` runs.
+
+        Call this after :meth:`add_column` and :meth:`add_floor_guide`: the
+        outer ribs are matched to their column through the ``column_index`` that
+        ``add_floor_guide`` tags onto every plate, and columns are matched by
+        their ``column_<i>`` name.
+
+        Returns
+        -------
+        :class:`compas_model.elements.group.Group`
+            The ``column_connections`` group holding the connection elements.
+        """
+        from compas_tf.floor_column_connection import FloorColumnConnectionElement
+
+        # Match every column and outer-rib plate to its quarter index.
+        columns_by_index = {int(c.name.rsplit("_", 1)[-1]): c for c in self.find_all_elements_of_type(ColumnElement)}
+        outer_ribs_by_index = {}
+        for element in self.elements():
+            if isinstance(element, PlateElement) and getattr(element, "contact_group", None) == "outer_ribs":
+                outer_ribs_by_index.setdefault(getattr(element, "column_index", None), []).append(element)
+
+        connections_group = self.add_group("column_connections")
+        for i in range(4):
+            rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
+            connection = FloorColumnConnectionElement(transformation=rot, name=f"floor_column_connection_{i}")
+            self.add_element(connection, parent=connections_group)
+
+            # Carve the connector out of its column and the quarter's outer ribs.
+            self.add_modifier(connection, columns_by_index[i], SolidDifferenceModifier())
+            for rib in outer_ribs_by_index.get(i, []):
+                self.add_modifier(connection, rib, SolidDifferenceModifier())
+
+        return connections_group
+
+    # ------------------------------------------------------------------ #
     #  BVH / contact detection (skip Group elements — they have no geometry)
     # ------------------------------------------------------------------ #
 

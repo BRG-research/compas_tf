@@ -64,13 +64,9 @@ from compas_viewer.config import Config
 from compas_viewer.viewer import Viewer
 
 import compas_tf  # noqa: F401
-from compas_tf.column import ColumnElement
 from compas_tf.floor_builder import FloorBuilder
-from compas_tf.floor_column_connection import FloorColumnConnectionElement
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.floor_model import FloorModel
-from compas_tf.plate import PlateElement
-from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from model import add_model_to_viewer  # noqa: E402
@@ -145,34 +141,9 @@ for i in range(1, 4):
 # ------------------------------------------------------------------ #
 #  Custom FloorColumnConnection meshes on each column
 # ------------------------------------------------------------------ #
-# The OBJ is modelled in world coordinates aligned to column_0 (bottom-left
-# corner). Each column is positioned by a Rotation(i * 90deg) about the global
-# Z-axis, so the same rotation places a copy of the connection on each column.
-#
-# Each connection bridges its column and the two outer ribs of the same
-# quarter. It is registered as a SolidDifferenceModifier cutter against both
-# the column and those outer ribs, so the connector pocket is carved out of
-# each as a boolean difference by precompute_boolean_modifiers() below.
-
-# Match every column and outer-rib plate to its quarter index (column_index is
-# tagged on the plates by add_floor_guide; columns are named "column_<i>").
-columns_by_index = {int(c.name.rsplit("_", 1)[-1]): c for c in floor_model.find_all_elements_of_type(ColumnElement)}
-outer_ribs_by_index = {}
-for element in floor_model.elements():
-    if isinstance(element, PlateElement) and getattr(element, "contact_group", None) == "outer_ribs":
-        outer_ribs_by_index.setdefault(getattr(element, "column_index", None), []).append(element)
-
-connections_group = floor_model.add_group("column_connections")
-for i in range(4):
-    rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
-    connection = FloorColumnConnectionElement(transformation=rot, name=f"floor_column_connection_{i}")
-    floor_model.add_element(connection, parent=connections_group)
-
-    # Connectivity 1: difference the connector out of its column.
-    floor_model.add_modifier(connection, columns_by_index[i], SolidDifferenceModifier())
-    # Connectivity 2: difference the connector out of the quarter's outer ribs.
-    for rib in outer_ribs_by_index.get(i, []):
-        floor_model.add_modifier(connection, rib, SolidDifferenceModifier())
+# Places a connection on every column and carves the connector pocket out of
+# the column and its quarter's two outer ribs as a boolean difference.
+floor_model.add_column_connections()
 
 # ------------------------------------------------------------------ #
 #  Contact detection (inner_beams plates only — fast, filtered)
@@ -180,8 +151,6 @@ for i in range(4):
 
 floor_model.compute_contacts_inner_beams(tolerance=1.0, minimum_area=1.0)
 contacts = list(floor_model.contacts())
-print(f"[contact] {len(contacts)} contact(s) found")
-
 floor_model.precompute_boolean_modifiers()
 
 compas.json_dump(floor_model, data_dir / "floor_model_booleans.json")
@@ -193,7 +162,6 @@ compas.json_dump(builder, data_dir / "floorbuilder.json")
 
 obj_path = data_dir / f"floor_model_{datetime.date.today().isoformat()}.obj"
 _export_meshes = floor_model.export_obj(obj_path)
-print(f"[export] wrote {len(_export_meshes)} element(s) -> {obj_path}")
 
 # ------------------------------------------------------------------ #
 #  Viewer
@@ -206,21 +174,12 @@ viewer.renderer.rendermode = "lighted"
 
 add_model_to_viewer(floor_model, viewer)
 
-# screw_heads = Mesh.from_obj(str(data_dir / "CustomElements" / "ScrewHeads.obj"))
-# viewer.scene.add(screw_heads, facecolor=(0.6, 0.6, 0.6), show_lines=False)
 
 debug_group = viewer.scene.add_group("debug")
 for item in guide.debug:
     viewer.scene.add(item, parent=debug_group, linecolor=(1.0, 0.0, 0.0), linewidth=2)
 for item in floor_model.debug:
     viewer.scene.add(item, parent=debug_group, linecolor=(0.0, 0.8, 0.2), linewidth=3)
-
-# dowels_group = viewer.scene.add_group("dowels")
-# for dowel in guide.make_dowels():
-#     mesh = dowel.compute_mesh()
-#     if dowel.transformation:
-#         mesh = mesh.transformed(dowel.transformation)
-#     viewer.scene.add(mesh, parent=dowels_group, facecolor=(0.2, 0.6, 1.0))
 
 g_contacts = viewer.scene.add_group("contacts")
 for contact in contacts:
