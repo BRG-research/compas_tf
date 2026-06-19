@@ -37,7 +37,7 @@ CONNECTOR_COLOR = (0.8, 0.0, 0.2)
 SUPPORT_COLOR = (0.9, 0.9, 0.9)
 COLUMN_COLOR = (0.9, 0.9, 0.9)
 COLUMN_HEAD_COLOR = (0.4, 0.4, 0.4)
-CONNECTION_COLOR = (0.95, 0.5, 0.0)  # corner column-connection cutter (kept visible)
+CONNECTION_COLOR = (1.0, 1.0, 0.0)  # corner column-connection cutter (kept visible)
 
 # Color map by group name
 COLOR_MAP = {

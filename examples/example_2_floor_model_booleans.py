@@ -49,12 +49,15 @@ sc.doc.Views.Redraw()
 "C:/Users/petrasv/.rhinocode/py39-rh8/python.exe" -m pip install --no-build-isolation -e C:/brg/code_python/compas_tf
 """
 
+import datetime
 import math
 import pathlib
 import sys
 
 import compas
 from compas.colors import Color
+from compas.datastructures import Mesh
+from compas.files import OBJWriter
 from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Translation
@@ -72,7 +75,10 @@ from compas_tf.plate import PlateElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from model import VISIBLE_CUTTER_TYPES  # noqa: E402
 from model import add_model_to_viewer  # noqa: E402
+from model import get_difference_source_elements  # noqa: E402
+from model import get_union_source_elements  # noqa: E402
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -178,6 +184,32 @@ floor_model.precompute_boolean_modifiers()
 
 compas.json_dump(floor_model, data_dir / "floor_model_booleans.json")
 compas.json_dump(builder, data_dir / "floorbuilder.json")
+
+# ------------------------------------------------------------------ #
+#  Export whole model to OBJ (one named object per element)
+# ------------------------------------------------------------------ #
+
+# Hide the same elements the viewer hides: union sources are absorbed into their
+# target, and difference cutters are not part of the final solid (except the
+# inspectable cutter types we keep visible).
+_hidden = get_union_source_elements(floor_model) | get_difference_source_elements(floor_model)
+_export_meshes = []
+for element in floor_model.elements():
+    if element in _hidden and not isinstance(element, VISIBLE_CUTTER_TYPES):
+        continue
+    try:
+        geometry = element.modelgeometry
+    except NotImplementedError:
+        continue
+    if not isinstance(geometry, Mesh):
+        continue
+    geometry = geometry.copy()
+    geometry.name = element.name or type(element).__name__
+    _export_meshes.append(geometry)
+
+obj_path = data_dir / f"floor_model_{datetime.date.today().isoformat()}.obj"
+OBJWriter(str(obj_path), _export_meshes, author="compas_tf").write()
+print(f"[export] wrote {len(_export_meshes)} element(s) -> {obj_path}")
 
 # ------------------------------------------------------------------ #
 #  Viewer

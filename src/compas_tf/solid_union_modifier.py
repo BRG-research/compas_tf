@@ -4,6 +4,64 @@ from compas.datastructures import Mesh
 from compas.geometry import Brep
 from compas_model.modifiers import Modifier
 
+_UNION_BACKEND = None
+_CHAIN_BACKEND = None
+
+
+def _union_backend():
+    """Resolve the pairwise boolean-union backend (cached after first call).
+
+    Prefers ``compas_manifold`` over ``compas_cgal`` for the same robustness and
+    speed reasons as the difference modifier (manifold is ~2-14x faster on the
+    cutter-sized meshes used here and does not stall on near-degenerate input).
+    Falls back to ``compas_cgal`` when ``compas_manifold`` is not installed.
+
+    Both backends share the same signature::
+
+        boolean_union_mesh_mesh(target_vf, source_vf) -> (V, F)
+
+    Returns
+    -------
+    tuple[callable, str]
+        The ``boolean_union_mesh_mesh`` function and the backend name.
+    """
+    global _UNION_BACKEND
+    if _UNION_BACKEND is None:
+        try:
+            from compas_manifold.booleans import boolean_union_mesh_mesh
+
+            _UNION_BACKEND = (boolean_union_mesh_mesh, "manifold")
+        except ImportError:
+            from compas_cgal.booleans import boolean_union_mesh_mesh
+
+            _UNION_BACKEND = (boolean_union_mesh_mesh, "cgal")
+    return _UNION_BACKEND
+
+
+def _chain_backend():
+    """Resolve the batched boolean-chain backend (cached after first call).
+
+    Prefers ``compas_manifold`` over ``compas_cgal``. Both expose::
+
+        boolean_chain(meshes, operations) -> (V, F)
+
+    Returns
+    -------
+    tuple[callable, str]
+        The ``boolean_chain`` function and the backend name.
+    """
+    global _CHAIN_BACKEND
+    if _CHAIN_BACKEND is None:
+        try:
+            from compas_manifold.booleans import boolean_chain
+
+            _CHAIN_BACKEND = (boolean_chain, "manifold")
+        except ImportError:
+            from compas_cgal.booleans import boolean_chain
+
+            _CHAIN_BACKEND = (boolean_chain, "cgal")
+    return _CHAIN_BACKEND
+
 
 class SolidUnionModifier(Modifier):
     @staticmethod
@@ -24,13 +82,14 @@ class SolidUnionModifier(Modifier):
 
         """
         from compas.geometry import Polyhedron
-        from compas_cgal.booleans import boolean_chain
+
+        boolean_chain, backend = _chain_backend()
 
         meshes = [targetgeometry.to_vertices_and_faces(triangulated=True)]
         for src in sources:
             meshes.append(src.to_vertices_and_faces(triangulated=True))
         operations = ["union"] * len(sources)
-        print(f"[batch-union] boolean_chain: target + {len(sources)} source(s)")
+        print(f"[batch-union] boolean_chain ({backend}): target + {len(sources)} source(s)")
         try:
             V, F = boolean_chain(meshes, operations)
         except Exception as exc:
@@ -78,7 +137,8 @@ class SolidUnionModifier(Modifier):
 
         """
         from compas.geometry import Polyhedron
-        from compas_cgal.booleans import boolean_union_mesh_mesh
+
+        boolean_union_mesh_mesh, _ = _union_backend()
 
         # Get source geometry
         source_geom = source.modelgeometry
