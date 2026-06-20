@@ -1,6 +1,6 @@
-"""
+r"""
 #! python3
-# r: compas, compas_cgal
+# r: compas, compas_manifold
 import pathlib
 import sys
 # sys.path.insert(0, r"C:\brg\compas_tf\src")

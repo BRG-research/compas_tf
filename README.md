@@ -20,8 +20,8 @@ uv pip install -e .
 > Use `uv pip`, not plain `pip` — a `uv venv` has no pip of its own, so a bare
 > `pip install` lands in the wrong environment.
 
-Boolean backends install automatically: **`compas_manifold`** (differences) and
-**`compas_cgal`** (unions + fallback).
+All mesh booleans (difference, union, chain) use **`compas_manifold`**, which
+installs automatically with the requirements.
 
 ## Run
 

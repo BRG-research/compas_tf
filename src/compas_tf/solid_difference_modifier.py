@@ -5,19 +5,13 @@ from compas.datastructures import Mesh
 from compas.geometry import Brep
 from compas_model.modifiers import Modifier
 
-_DIFFERENCE_BACKEND = None
-
 
 def _difference_backend():
-    """Resolve the pairwise boolean-difference backend (cached after first call).
+    """Return the pairwise boolean-difference backend (compas_manifold).
 
-    Prefers ``compas_manifold`` — its ``boolean_difference_mesh_mesh`` always
-    returns watertight, oriented 2-manifold output and does not hang on the
-    near-degenerate / self-intersecting cutters that make compas_cgal's
-    corefinement stall. Falls back to ``compas_cgal`` when ``compas_manifold``
-    is not installed (e.g. an environment where only compas_cgal is available).
-
-    Both backends share the same signature::
+    Manifold's ``boolean_difference_mesh_mesh`` always returns watertight,
+    oriented 2-manifold output and does not hang on the near-degenerate /
+    self-intersecting cutters that make other corefinement kernels stall::
 
         boolean_difference_mesh_mesh(target_vf, cutter_vf) -> (V, F)
 
@@ -27,30 +21,17 @@ def _difference_backend():
     Returns
     -------
     tuple[callable, str]
-        The ``boolean_difference_mesh_mesh`` function and the backend name
-        (``"manifold"`` or ``"cgal"``).
+        The ``boolean_difference_mesh_mesh`` function and the backend name.
     """
-    global _DIFFERENCE_BACKEND
-    if _DIFFERENCE_BACKEND is None:
-        try:
-            from compas_manifold.booleans import boolean_difference_mesh_mesh
+    from compas_manifold.booleans import boolean_difference_mesh_mesh
 
-            _DIFFERENCE_BACKEND = (boolean_difference_mesh_mesh, "manifold")
-        except ImportError:
-            from compas_cgal.booleans import boolean_difference_mesh_mesh
-
-            _DIFFERENCE_BACKEND = (boolean_difference_mesh_mesh, "cgal")
-    return _DIFFERENCE_BACKEND
-
-
-_CHAIN_BACKEND = None
+    return (boolean_difference_mesh_mesh, "manifold")
 
 
 def _chain_backend():
-    """Resolve the batched boolean-chain backend (cached after first call).
+    """Return the batched boolean-chain backend (compas_manifold).
 
-    Prefers ``compas_manifold`` over ``compas_cgal`` for the same robustness
-    reason as :func:`_difference_backend`. Both expose matching signatures::
+    ::
 
         boolean_chain(meshes, operations) -> (V, F)
         boolean_chain_with_face_source(meshes, operations) -> (V, F, S)
@@ -63,19 +44,10 @@ def _chain_backend():
     tuple[callable, callable, str]
         ``(boolean_chain, boolean_chain_with_face_source, backend_name)``.
     """
-    global _CHAIN_BACKEND
-    if _CHAIN_BACKEND is None:
-        try:
-            from compas_manifold.booleans import boolean_chain
-            from compas_manifold.booleans import boolean_chain_with_face_source
+    from compas_manifold.booleans import boolean_chain
+    from compas_manifold.booleans import boolean_chain_with_face_source
 
-            _CHAIN_BACKEND = (boolean_chain, boolean_chain_with_face_source, "manifold")
-        except ImportError:
-            from compas_cgal.booleans import boolean_chain
-            from compas_cgal.booleans import boolean_chain_with_face_source
-
-            _CHAIN_BACKEND = (boolean_chain, boolean_chain_with_face_source, "cgal")
-    return _CHAIN_BACKEND
+    return (boolean_chain, boolean_chain_with_face_source, "manifold")
 
 
 def _triangulate_mesh(mesh, precision=12):

@@ -2,5 +2,4 @@ compas >= 2
 compas_model
 compas_viewer
 shapely
-compas_cgal >= 0.9.4
 compas_manifold >= 0.1.0

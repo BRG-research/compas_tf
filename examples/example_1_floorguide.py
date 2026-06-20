@@ -16,7 +16,6 @@ from compas_viewer.config import Config
 from compas_viewer.viewer import Viewer
 
 from compas_tf.floor_guide import FloorGuide
-from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.plate import PlateElement
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
@@ -68,15 +67,8 @@ add_plates(viewer, "tsections", guide.tsections, Color.orange())
 add_plates(viewer, "outer_ribs", guide.outer_ribs, Color.yellow())
 add_plates(viewer, "inner_ribs", guide.inner_ribs, Color.yellow())
 add_plates(viewer, "wedge_block", guide.wedge_block, Color.yellow())
-add_plates(viewer, "wedges_column", guide.wedges_column, Color.cyan())
+add_plates(viewer, "wedges_inner_beams", guide.wedges_inner_beams, Color.cyan())
 add_plates(viewer, "inner_beams", guide.inner_beams, Color.yellow())
-
-g = viewer.scene.add_group("sherpas")
-for i, sherpa in enumerate(guide.sherpas):
-    if isinstance(sherpa, SherpaXL120Element):
-        viewer.scene.add(sherpa.elementgeometry, facecolor=Color.red(), show_lines=False, parent=g)
-    elif isinstance(sherpa, PlateElement):
-        viewer.scene.add(sherpa.elementgeometry, facecolor=Color(0.8, 0.2, 0.8), show_lines=False, parent=g)
 
 g = viewer.scene.add_group("debug")
 for o in guide.debug:

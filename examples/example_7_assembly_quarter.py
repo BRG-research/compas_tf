@@ -23,7 +23,6 @@ from compas_viewer.viewer import Viewer
 
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.joint_dowel import DowelElement
-from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.plate import PlateElement
 
 ASSEMBLY_OFFSET = 400  # mm vertical between each layer (> plate height 650)
@@ -73,33 +72,13 @@ sections = [
     ("tsections", guide.tsections, Color.orange()),
     ("outer_ribs", guide.outer_ribs, Color.yellow()),
     ("inner_ribs", guide.inner_ribs, Color.yellow()),
-    ("wedges_column", guide.wedges_column, Color.cyan()),
+    ("wedges_inner_beams", guide.wedges_inner_beams, Color.cyan()),
     ("inner_beams", guide.inner_beams, Color.yellow()),
     ("beds", guide.beds, Color.lime()),
 ]
 
 for step, (name, plates, color) in enumerate(sections):
     add_plates_offset(name, plates, color, step)
-
-# Sherpas
-sherpas_step = len(sections)
-extra_sherpas = Translation.from_vector(Vector(0, 0, sherpas_step * ASSEMBLY_OFFSET))
-g = viewer.scene.add_group("sherpas")
-for i, sherpa in enumerate(guide.sherpas):
-    if isinstance(sherpa, SherpaXL120Element):
-        viewer.scene.add(
-            sherpa.elementgeometry.transformed(extra_sherpas),
-            facecolor=Color.red(),
-            show_lines=False,
-            parent=g,
-        )
-    elif isinstance(sherpa, PlateElement):
-        viewer.scene.add(
-            sherpa.elementgeometry.transformed(extra_sherpas),
-            facecolor=Color(0.8, 0.2, 0.8),
-            show_lines=False,
-            parent=g,
-        )
 
 # Oculus — last / highest
 add_plates_offset("oculus", guide.oculus, Color.blue(), len(sections) + 1)

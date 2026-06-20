@@ -4,19 +4,9 @@ from compas.datastructures import Mesh
 from compas.geometry import Brep
 from compas_model.modifiers import Modifier
 
-_UNION_BACKEND = None
-_CHAIN_BACKEND = None
-
 
 def _union_backend():
-    """Resolve the pairwise boolean-union backend (cached after first call).
-
-    Prefers ``compas_manifold`` over ``compas_cgal`` for the same robustness and
-    speed reasons as the difference modifier (manifold is ~2-14x faster on the
-    cutter-sized meshes used here and does not stall on near-degenerate input).
-    Falls back to ``compas_cgal`` when ``compas_manifold`` is not installed.
-
-    Both backends share the same signature::
+    """Return the pairwise boolean-union backend (compas_manifold)::
 
         boolean_union_mesh_mesh(target_vf, source_vf) -> (V, F)
 
@@ -25,23 +15,13 @@ def _union_backend():
     tuple[callable, str]
         The ``boolean_union_mesh_mesh`` function and the backend name.
     """
-    global _UNION_BACKEND
-    if _UNION_BACKEND is None:
-        try:
-            from compas_manifold.booleans import boolean_union_mesh_mesh
+    from compas_manifold.booleans import boolean_union_mesh_mesh
 
-            _UNION_BACKEND = (boolean_union_mesh_mesh, "manifold")
-        except ImportError:
-            from compas_cgal.booleans import boolean_union_mesh_mesh
-
-            _UNION_BACKEND = (boolean_union_mesh_mesh, "cgal")
-    return _UNION_BACKEND
+    return (boolean_union_mesh_mesh, "manifold")
 
 
 def _chain_backend():
-    """Resolve the batched boolean-chain backend (cached after first call).
-
-    Prefers ``compas_manifold`` over ``compas_cgal``. Both expose::
+    """Return the batched boolean-chain backend (compas_manifold)::
 
         boolean_chain(meshes, operations) -> (V, F)
 
@@ -50,17 +30,9 @@ def _chain_backend():
     tuple[callable, str]
         The ``boolean_chain`` function and the backend name.
     """
-    global _CHAIN_BACKEND
-    if _CHAIN_BACKEND is None:
-        try:
-            from compas_manifold.booleans import boolean_chain
+    from compas_manifold.booleans import boolean_chain
 
-            _CHAIN_BACKEND = (boolean_chain, "manifold")
-        except ImportError:
-            from compas_cgal.booleans import boolean_chain
-
-            _CHAIN_BACKEND = (boolean_chain, "cgal")
-    return _CHAIN_BACKEND
+    return (boolean_chain, "manifold")
 
 
 class SolidUnionModifier(Modifier):

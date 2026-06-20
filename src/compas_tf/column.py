@@ -47,7 +47,7 @@ class ColumnFeature(Feature):
         if not self.boxes:
             return shape
 
-        from compas_cgal.booleans import boolean_chain
+        from compas_manifold.booleans import boolean_chain
 
         meshes = [shape.to_vertices_and_faces(True)]
         for box in self.boxes:

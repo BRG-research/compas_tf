@@ -123,6 +123,9 @@ generated/
 # Per-element OBJ debug exports
 examples/obj_export/
 
+# Dated whole-model OBJ exports (regenerated each run)
+data/floor_model_*.obj
+
 libs/**
 !libs/PLACEHOLDER
 

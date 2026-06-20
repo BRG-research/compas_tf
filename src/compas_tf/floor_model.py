@@ -93,7 +93,7 @@ def union_cutter_meshes(meshes):
         The unioned solid, or ``None`` if no usable meshes were given.
     """
     from compas.datastructures import Mesh
-    from compas_cgal.booleans import boolean_union_mesh_mesh
+    from compas_manifold.booleans import boolean_union_mesh_mesh
 
     def _weld(mesh):
         m = mesh.copy()
@@ -599,7 +599,6 @@ class FloorModel(Model):
 
             wedge_idx += 1
 
-        self.precompute_boolean_modifiers()
         return wedges_group
 
     def _add_wedges_along_contacts(self, wedge_spacing=700):
@@ -683,7 +682,6 @@ class FloorModel(Model):
 
                 wedge_idx += 1
 
-        self.precompute_boolean_modifiers()
         return wedges_group
 
     def compute_contacts(self, tolerance=1e-6, minimum_area=1e-2, contacttype=None, where=None, face_kinds=None):
