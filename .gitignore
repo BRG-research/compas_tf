@@ -116,6 +116,13 @@ generated/
 *.3dmbak
 *.rhl
 
+# Rhino / Illustrator backup files
+*.objbak
+*.aibak
+
+# Per-element OBJ debug exports
+examples/obj_export/
+
 libs/**
 !libs/PLACEHOLDER
 

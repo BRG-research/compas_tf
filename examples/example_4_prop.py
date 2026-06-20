@@ -3,7 +3,7 @@
 Build and visualize 4-fold rotational schoring (prop/shoring) models
 around the floor column positions, plus a central tower element.
 
-Reads floorbuilder.json written by example_2_floor_model_booleans.py so that
+Reads floorguide.json written by example_2_floor_model_booleans.py so that
 the prop positions are driven by the same parametric geometry.
 """
 
@@ -32,14 +32,14 @@ SchoringElement.clear_cache()
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 # ------------------------------------------------------------------ #
-#  Prop positions from FloorBuilder
+#  Prop positions from FloorGuide
 # ------------------------------------------------------------------ #
 
 column_size = 220
 prop_height = 2500
 story_height = 3200
-builder = compas.json_load(data_dir / "floorbuilder.json")
-column_plan = builder.corner_point_column(column_size)
+guide = compas.json_load(data_dir / "floorguide.json")
+column_plan = guide.corner_point_column(column_size)
 
 # ------------------------------------------------------------------ #
 #  Schoring models (4-fold rotational symmetry)

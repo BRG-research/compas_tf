@@ -20,7 +20,6 @@ from compas_viewer.viewer import Viewer
 
 import compas_tf  # noqa: F401
 from compas_tf.column import ColumnElement
-from compas_tf.floor_builder import FloorBuilder
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.floor_model import FloorModel
 
@@ -32,13 +31,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 column_size = 220
 
-builder = FloorBuilder(
-    size=3000, height=650, rise=453, oculus=1000, beam_w=40,
-    column_head_offset=50, inner_thick=60, outer_thick=100,
-    column_head_scale=250, column_head_inclination=0,
-    head_h=500, head_b=100, head_o=141,
-)
-
 guide = FloorGuide(
     size_grid_x=3000, size_grid_y=3000, size_column_head=220,
     size_column_head_chamfer=120, size_outer_ribs=100, size_inner_ribs=60,
@@ -49,7 +41,7 @@ guide = FloorGuide(
 #  Build only the columns (no floor plates, no boolean)
 # ------------------------------------------------------------------ #
 
-floor_model = FloorModel(builder=builder)
+floor_model = FloorModel(guide=guide)
 floor_model.add_column(column_size=column_size)
 floor_level = Translation.from_vector(Vector(0, 0, floor_model.story_height))
 

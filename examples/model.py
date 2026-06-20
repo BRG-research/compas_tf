@@ -1,35 +1,19 @@
-import os
 
-from compas import json_dumps
-from compas.geometry import Box
 from compas.geometry import Frame
 from compas.geometry import Line
-from compas.geometry import Transformation
-from compas.geometry import Translation
 from compas_model.elements.group import Group
-from compas_model.models import Model
-from compas_viewer.config import Config
-from compas_viewer.viewer import Viewer
 
 from compas_tf.column import ColumnElement
-from compas_tf.column_head import ColumnHeadElement
-from compas_tf.floor_builder import FloorBuilder
 from compas_tf.floor_column_connection import FloorColumnConnectionElement
 from compas_tf.joint_dowel import DowelElement
-from compas_tf.joint_hilti import HiltiElement
-from compas_tf.joint_screw import ScrewElement
 from compas_tf.joint_sherpaxl120 import SherpaXL120Element
-from compas_tf.joint_strip import AlignmentStripElement
-from compas_tf.oculus import OculusElement
 from compas_tf.plate import PlateElement
-from compas_tf.quarter_floor import QuarterFloorElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
 from compas_tf.solid_union_modifier import SolidUnionModifier
-from compas_tf.support import SupportElement
 from compas_tf.wedge import WedgeElement
 
 # Connector types for identification
-CONNECTOR_TYPES = (ScrewElement, DowelElement, AlignmentStripElement, SherpaXL120Element, HiltiElement)
+CONNECTOR_TYPES = (DowelElement, SherpaXL120Element)
 
 # Colors
 ELEMENT_COLOR = (0.6, 0.6, 0.6)
@@ -237,8 +221,8 @@ def add_model_to_viewer(model, viewer):
                     if child in element_connectors:
                         connectors_group = viewer.scene.add_group("connectors", parent=child_viewer_group)
                         for connector in element_connectors[child]:
-                            # Skip modifier-only connectors (e.g., hilti/dowel cutters)
-                            if isinstance(connector, (HiltiElement, DowelElement)):
+                            # Skip modifier-only connectors (e.g., dowel cutters)
+                            if isinstance(connector, DowelElement):
                                 continue
                             conn_color = get_color_for_element(connector)
                             add_element_to_viewer(viewer, connectors_group, connector, conn_color)
@@ -271,231 +255,3 @@ def add_model_to_viewer(model, viewer):
                 for connector in element_connectors[element]:
                     conn_color = get_color_for_element(connector)
                     add_element_to_viewer(viewer, connectors_group, connector, conn_color)
-
-
-def build_model():
-    """Build the complete structural model and return it."""
-
-    # Create a box representing one grid frame unit
-    # TODO column_head, edge_beam and quarter:_floor uses same:
-    # end_planes = builder.compute_cut_planes(scale=150, inclination=0)[3:6]
-    # We need to unify to be usable from one location e.g. model.py  FloorBuilder must set the scale 150 only once for all elements
-    # TODO Connecting triangle elements
-    # TODO Conectors: diagonal screw, concrete screw, sherpa, slab to slab connector etc.
-    column_size = 200.0
-    grid_size = 6000.0
-    height = 3000.0
-    floor_thickness = 650.0
-    thick = 40.0
-    corner_block_height0 = 500  # Extra height below column head
-    corner_block_height1 = 100  # Extra height below column head
-    corner_block_offset = 141  # 141
-    builder = FloorBuilder(
-        size=3000,
-        height=650,
-        rise=453,
-        oculus=1000,
-        thick=thick,
-        beam_w=thick,
-        column_head_scale=250,
-        column_head_inclination=0,
-        head_h=corner_block_height0,
-        head_b=corner_block_height1,
-        head_o=corner_block_offset,
-    )
-    box = Box(grid_size - (column_size * 0.5 - thick) * 2, grid_size - (column_size * 0.5 - thick) * 2, height + floor_thickness, Frame([0, 0, -(height + floor_thickness) * 0.5]))
-
-    # Model with hierarchical groups
-    model = Model(name="Example Model")
-
-    # Create top-level groups (add_group adds to root)
-    supports_group = model.add_group("supports")
-    columns_group = model.add_group("columns")
-    column_heads_group = model.add_group("column_heads")
-    quarters_group = model.add_group("quarters")
-    oculus_group = model.add_group("oculus")
-
-    # 1. Supports
-    for i, corner_id in enumerate(box.bottom):
-        corner = box.corner(corner_id)
-        frame = Frame(corner, [1, 0, 0], [0, 1, 0])
-        xform = Transformation.from_frame(frame)
-        support = SupportElement(xform)
-        support.name = f"support_{i}"
-        model.add_element(support, parent=supports_group)
-
-    # 2. Columns
-    columns = []
-    for i, corner_id in enumerate(box.bottom):
-        corner = box.corner(corner_id)
-        frame = Frame(corner, [1, 0, 0], [0, 1, 0])
-        xform = Transformation.from_frame(frame) * Translation.from_vector([0, 0, SupportElement.HEIGHT])
-        column = ColumnElement(column_size, column_size, height - builder.head_b, xform)
-        column.name = f"column_{i}"
-        model.add_element(column, parent=columns_group)
-        columns.append(column)
-
-    # 3. Create builder for floor elements
-    pts, pts_offset = builder.column_head_points
-
-    # 4. Build column head elements with nested groups
-    offset = builder.size + builder.beam_w * 0.5
-    xforms_columnhead = [
-        Transformation.from_frame(Frame([-offset, -offset, 0], [1, 0, 0], [0, 1, 0])),
-        Transformation.from_frame(Frame([-offset, offset, 0], [0, -1, 0], [1, 0, 0])),
-        Transformation.from_frame(Frame([offset, offset, 0], [-1, 0, 0], [0, -1, 0])),
-        Transformation.from_frame(Frame([offset, -offset, 0], [0, 1, 0], [-1, 0, 0])),
-    ]
-
-    for i, xform in enumerate(xforms_columnhead):
-        column = columns[i]
-
-        # Create corner group (use Group directly for nested groups)
-        corner_group = Group(name=f"corner_{i}")
-        model.add_element(corner_group, parent=column_heads_group)
-
-        # Build column head components
-        head_element, top_element, connections, interactions, modifiers = ColumnHeadElement.build(builder, column_element=column)
-        head_element.transformation = xform
-        top_element.transformation = xform
-        head_element.name = "head"
-        top_element.name = "top"
-
-        model.add_element(head_element, parent=corner_group)
-        model.add_element(top_element, parent=corner_group)
-
-        # Create connectors group and add connectors
-        connectors_group = Group(name="connectors")
-        model.add_element(connectors_group, parent=corner_group)
-
-        for j, connector in enumerate(connections):
-            connector.transformation = xform * connector.transformation
-            connector.name = f"connector_{j}"
-            model.add_element(connector, parent=connectors_group)
-
-        # Add interactions (connector-element relationships)
-        for connector, element in interactions:
-            model.add_interaction(connector, element)
-
-        # Add modifiers (boolean union: source geometry merged into target)
-        for source, target in modifiers:
-            model.add_modifier(source, target, SolidUnionModifier())
-
-    # 5. Build quarter floor elements
-    for q_idx in range(4):
-        quarter_result = QuarterFloorElement.build(builder, q_idx * 90)
-
-        # Create quarter group (use Group directly for nested groups)
-        quarter_group = Group(name=f"quarter_{q_idx}")
-        model.add_element(quarter_group, parent=quarters_group)
-
-        # Axis elements group
-        axis_group = Group(name="axis_elements")
-        model.add_element(axis_group, parent=quarter_group)
-        for axis_idx, element in quarter_result.axis_elements.items():
-            element.name = f"axis_{axis_idx}"
-            model.add_element(element, parent=axis_group)
-
-        # T-sections group
-        tsections_group = Group(name="tsections")
-        model.add_element(tsections_group, parent=quarter_group)
-        for i, element in enumerate(quarter_result.tsection_elements):
-            element.name = f"tsection_{i}"
-            model.add_element(element, parent=tsections_group)
-
-        # Surface elements group
-        surfaces_group = Group(name="surfaces")
-        model.add_element(surfaces_group, parent=quarter_group)
-        for i, element in enumerate(quarter_result.surface_elements):
-            element.name = f"surface_{i}"
-            model.add_element(element, parent=surfaces_group)
-
-        # Corner block elements group
-        corner_blocks_group = Group(name="corner_blocks")
-        model.add_element(corner_blocks_group, parent=quarter_group)
-        for i, element in enumerate(quarter_result.corner_block_elements):
-            element.name = f"corner_block_{i}"
-            model.add_element(element, parent=corner_blocks_group)
-
-        # Build element -> connectors mapping from interactions
-        # A connector may interact with multiple elements, so pick the first as parent
-        connector_parent = {}  # connector -> first element it interacts with
-        for connector, element in quarter_result.interactions:
-            if connector not in connector_parent:
-                connector_parent[connector] = element
-
-        # Add connectors as children of their first interacting element
-        connector_idx = 0
-        for connector, parent_element in connector_parent.items():
-            connector.name = f"connector_{connector_idx}"
-            model.add_element(connector, parent=parent_element)
-            connector_idx += 1
-
-        # Add interactions
-        for connector, element in quarter_result.interactions:
-            model.add_interaction(connector, element)
-
-        # Add modifiers (boolean difference: hilti cuts into rib/boundary elements)
-        for source, target, modifier in quarter_result.modifiers:
-            model.add_modifier(source, target, modifier)
-
-    # 7. Build oculus element
-    oculus_result = OculusElement.build(builder)
-
-    # Elements group for oculus (use Group directly for nested groups)
-    elements_group = Group(name="elements")
-    model.add_element(elements_group, parent=oculus_group)
-    for i, element in enumerate(oculus_result.oculus_elements):
-        element.name = f"oculus_{i}"
-        model.add_element(element, parent=elements_group)
-
-    # Build element -> connectors mapping from interactions
-    # A connector may interact with multiple elements, so pick the first as parent
-    connector_parent = {}
-    for connector, element in oculus_result.interactions:
-        if connector not in connector_parent:
-            connector_parent[connector] = element
-
-    # Add connectors as children of their first interacting element
-    connector_idx = 0
-    for connector, parent_element in connector_parent.items():
-        connector.name = f"connector_{connector_idx}"
-        model.add_element(connector, parent=parent_element)
-        connector_idx += 1
-
-    # Add interactions
-    for connector, element in oculus_result.interactions:
-        model.add_interaction(connector, element)
-
-    return model
-
-
-if __name__ == "__main__":
-    model = build_model()
-
-    # View model
-    config = Config()
-    config.unit = "mm"
-    viewer = Viewer(config)
-    viewer.renderer.rendermode = "lighted"
-
-    # Add model to viewer using hierarchy traversal
-    # add_model_to_viewer(model, viewer)
-
-    # Export the compas_model Model (preserves full hierarchy)
-    model_filepath = os.path.join(os.path.dirname(__file__), "model.json")
-    with open(model_filepath, "w") as f:
-        f.write(json_dumps(model, pretty=True))
-    print(f"Exported Model to {model_filepath}")
-
-# Visualize cut planes from builder
-# from compas.geometry import Plane
-# from compas_tf.geometry import PlaneIntersect
-# plane0 = Plane(builder.end_planes[0].point, Vector.Zaxis().cross(builder.end_planes[0].normal)).offset(builder.thick*1.5)
-# plane1 = Plane(builder.end_planes[3].point, -Vector.Zaxis().cross(builder.end_planes[3].normal)).offset(builder.thick*-1.5)
-# for plane in builder.compute_cut_planes(scale=100, inclination=0)[3:6] + [plane0, plane1]:
-#     polygon, normal_line = PlaneIntersect.plane_rectangle(plane, scale=100)
-#     viewer.scene.add(polygon, name="cut_plane", color=(0.9, 0.6, 0.0))
-#     viewer.scene.add(normal_line, name="cut_plane_normal", color=(1.0, 0.0, 0.0))
-
-# viewer.show()

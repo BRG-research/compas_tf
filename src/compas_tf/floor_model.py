@@ -11,7 +11,7 @@ from compas_model.models.elementtree import ElementNode
 from compas_model.models.interactiongraph import InteractionGraph
 
 from compas_tf.column import ColumnElement
-from compas_tf.floor_builder import FloorBuilder
+from compas_tf.floor_guide import FloorGuide
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.plate import PlateElement
 from compas_tf.solid_difference_modifier import SolidDifferenceModifier
@@ -121,15 +121,16 @@ def union_cutter_meshes(meshes):
 
 
 class FloorModel(Model):
-    """A timber floor model combining a Model tree with a FloorBuilder.
+    """A timber floor model combining a Model tree with a FloorGuide.
 
     Uses composition: holds a ``Model`` for the element tree
-    and a ``FloorBuilder`` for the parametric geometry.
+    and a ``FloorGuide`` for the parametric floor geometry.
 
     Parameters
     ----------
-    builder : :class:`FloorBuilder`
-        Parametric floor geometry.
+    guide : :class:`FloorGuide`
+        Parametric floor geometry. Required to place supports/columns and to
+        add floor plates; may be ``None`` only when reconstructing from data.
     name : str
         Name passed to the inner ``Model``.
     """
@@ -142,14 +143,16 @@ class FloorModel(Model):
             "materials": self._materials,
             "tree": self._tree.__data__,
             "graph": self._graph.__data__,
-            "builder": self.builder.__data__,
+            "guide": self.guide.__data__ if self.guide is not None else None,
             "story_height": self.story_height,
         }
         return data
 
     @classmethod
     def __from_data__(cls, data: dict) -> "Model":
-        model = cls(FloorBuilder.__from_data__(data["builder"]), story_height=data["story_height"])
+        guide_data = data.get("guide")
+        guide = FloorGuide.__from_data__(guide_data) if guide_data else None
+        model = cls(guide, story_height=data["story_height"])
 
         model._transformation = data["transformation"]
         model._elements = data["elements"]
@@ -186,9 +189,9 @@ class FloorModel(Model):
         add(nodedata, node)
         return model
 
-    def __init__(self, builder, name="session", story_height=3500):
+    def __init__(self, guide=None, name="session", story_height=3500):
         super(FloorModel, self).__init__(name=name)
-        self.builder = builder
+        self.guide = guide
         self.story_height = story_height
         self.debug = []  # debug geometry pushed by internal steps; iterate from caller (e.g. viewer)
 
@@ -311,40 +314,6 @@ class FloorModel(Model):
         return guide_group
 
     # ------------------------------------------------------------------ #
-    #  oculus
-    # ------------------------------------------------------------------ #
-
-    def add_oculus(self):
-        """Add oculus beam elements using OculusElement.build().
-
-        Returns
-        -------
-        list
-            The oculus elements.
-        """
-        from compas_tf.oculus import OculusElement
-
-        result = OculusElement.build(self.builder)
-
-        oculus_group = self.add_group("oculus")
-        for element in result.oculus_elements:
-            self.add_element(element, parent=oculus_group)
-
-        connectors_group = Group(name="oculus_connectors")
-        self.add_element(connectors_group, parent=oculus_group)
-        for screw in result.screws:
-            self.add_element(screw, parent=connectors_group)
-        for dowel in result.dowels:
-            self.add_element(dowel, parent=connectors_group)
-        for strip in result.strips:
-            self.add_element(strip, parent=connectors_group)
-
-        for connector, element in result.interactions:
-            self.add_interaction(connector, element)
-
-        return result.oculus_elements
-
-    # ------------------------------------------------------------------ #
     #  supports
     # ------------------------------------------------------------------ #
 
@@ -358,7 +327,7 @@ class FloorModel(Model):
         story_height : float
             Story height in mm.
         """
-        column_plan = self.builder.corner_point_column(column_size)
+        column_plan = self.guide.corner_point_column(column_size)
         base_frame = Frame([column_plan.x, column_plan.y, 0], [1, 0, 0], [0, 1, 0])
         supports_group = self.add_group("supports")
         for i in range(4):
@@ -382,7 +351,7 @@ class FloorModel(Model):
             Story height in mm.
         """
         capitel_height = abs(capitel_height)
-        column_plan = self.builder.corner_point_column(column_size)
+        column_plan = self.guide.corner_point_column(column_size)
         column_height = self.story_height - SupportElement.HEIGHT
         base_frame = Frame([column_plan.x, column_plan.y, SupportElement.HEIGHT], [1, 0, 0], [0, 1, 0])
         columns_group = self.add_group("columns")

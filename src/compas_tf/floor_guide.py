@@ -110,6 +110,31 @@ class FloorGuide(Data):
         return cls(**data)
 
     # ------------------------------------------------------------------ #
+    #  Column grid
+    # ------------------------------------------------------------------ #
+
+    def corner_point_column(self, column_size=200):
+        """Column base center in plan for one quarter (the grid corner).
+
+        Mirrors the position the columns and supports are placed at: the
+        bottom-left corner of the quarter grid, inset by half the column size.
+
+        Parameters
+        ----------
+        column_size : float
+            Column cross-section side length in mm.
+
+        Returns
+        -------
+        :class:`compas.geometry.Point`
+        """
+        return Point(
+            -(self.size_grid_x - column_size * 0.5),
+            -(self.size_grid_y - column_size * 0.5),
+            0,
+        )
+
+    # ------------------------------------------------------------------ #
     #  Floor plan geometry (2D)
     # ------------------------------------------------------------------ #
 
