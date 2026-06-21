@@ -1,4 +1,9 @@
 
+import os
+import pathlib
+import time
+
+import compas
 from compas.geometry import Frame
 from compas.geometry import Line
 from compas_model.elements.group import Group
@@ -35,6 +40,199 @@ COLOR_MAP = {
 # Cutter (SolidDifferenceModifier source) types that should still be drawn in
 # the viewer instead of hidden, so the cutting geometry can be inspected.
 VISIBLE_CUTTER_TYPES = (DowelElement, WedgeElement, FloorColumnConnectionElement)
+
+# ------------------------------------------------------------------ #
+#  watch_viewer.py handoff: write-only mode + scene recorder
+# ------------------------------------------------------------------ #
+# When watch_viewer.py is running it drops a lock file and watches SCENE_FILE.
+# In that case make_viewer() returns a SceneRecorder stand-in so an example's
+# existing ``viewer.scene.add(...)`` calls are captured instead of drawn, and
+# show_or_dump() writes them to SCENE_FILE for the persistent viewer to reload.
+
+LOCK_FILE = ".watch_viewer.lock"
+SCENE_FILE = "_viewer_scene.json"
+
+# A watcher is considered live only if its lock file was touched within this
+# many seconds (the watcher heartbeats it every tick). This way a crashed
+# watcher's stale lock is ignored and examples open their own viewer again.
+LOCK_FRESH_SECONDS = 5.0
+
+# Style kwargs preserved through the record -> JSON -> redraw round-trip.
+_STYLE_KEYS = (
+    "color",
+    "facecolor",
+    "linecolor",
+    "pointcolor",
+    "linewidth",
+    "pointsize",
+    "opacity",
+    "show_lines",
+    "show_points",
+    "hide_coplanaredges",
+)
+
+
+def _coerce_color(value):
+    """Convert a Color/tuple to a plain ``[r, g, b]`` list for JSON; else None."""
+    if value is None:
+        return None
+    try:
+        return [float(value[0]), float(value[1]), float(value[2])]
+    except (TypeError, IndexError, KeyError):
+        return None
+
+
+class _RecorderNode:
+    """A group handle returned by the recorder. Supports ``add``/``add_group``
+    so geometry and nested groups are recorded under the right parent, keeping
+    the scene-tree hierarchy intact through the JSON round-trip.
+    """
+
+    def __init__(self, recorder, node_id):
+        self._rec = recorder
+        self._id = node_id
+
+    def add(self, item, parent=None, **style):
+        return self._rec._record(item, self._id, style)
+
+    def add_group(self, name=None, parent=None, **kwargs):
+        return self._rec._record_group(name, self._id)
+
+
+class SceneRecorder:
+    """Quacks like ``viewer.scene`` (and a scene group): ``add``/``add_group``
+    record drawable geometry and group structure to a flat node list (each node
+    carries its parent id) instead of drawing. The watcher rebuilds the same
+    group hierarchy from these nodes so the sidebar scene-tree is preserved.
+    """
+
+    def __init__(self):
+        self.nodes = []
+        self._next_id = 0
+
+    def _new_id(self):
+        node_id = self._next_id
+        self._next_id += 1
+        return node_id
+
+    @staticmethod
+    def _parent_id(parent):
+        return parent._id if isinstance(parent, _RecorderNode) else None
+
+    def add_group(self, name=None, parent=None, **kwargs):
+        return self._record_group(name, self._parent_id(parent))
+
+    def _record_group(self, name, parent_id):
+        node_id = self._new_id()
+        self.nodes.append({"id": node_id, "parent": parent_id, "kind": "group", "name": name or "group"})
+        return _RecorderNode(self, node_id)
+
+    def add(self, item, parent=None, **style):
+        return self._record(item, self._parent_id(parent), style)
+
+    def _record(self, item, parent_id, style):
+        from compas.data import Data
+
+        if isinstance(item, Data):
+            record = {"id": self._new_id(), "parent": parent_id, "kind": "geometry", "geometry": item}
+            if style.get("name"):
+                record["name"] = style["name"]
+            for key in _STYLE_KEYS:
+                if style.get(key) is None:
+                    continue
+                record[key] = _coerce_color(style[key]) if key.endswith("color") else style[key]
+            self.nodes.append(record)
+        # Geometry adds are never used as a parent, but return a node anyway so
+        # any chained .add()/.add_group() still works.
+        return _RecorderNode(self, None)
+
+
+class _Stub:
+    """Absorbs any attribute access/call (e.g. ``viewer.renderer.x = ...``)."""
+
+    def __getattr__(self, name):
+        return _Stub()
+
+    def __setattr__(self, name, value):
+        pass
+
+    def __call__(self, *args, **kwargs):
+        return _Stub()
+
+
+class _RecorderViewer:
+    """Drop-in for ``Viewer`` whose ``.scene`` records instead of drawing."""
+
+    def __init__(self):
+        self.scene = SceneRecorder()
+        self.renderer = _Stub()
+
+
+def watcher_running(data_dir) -> bool:
+    """True if watch_viewer.py is live, i.e. its lock file exists and was
+    heartbeated within ``LOCK_FRESH_SECONDS``. A stale lock from a crashed
+    watcher is ignored (and cleaned up) so examples open their own viewer.
+    """
+    import time
+
+    lock = pathlib.Path(data_dir) / LOCK_FILE
+    try:
+        age = time.time() - lock.stat().st_mtime
+    except FileNotFoundError:
+        return False
+    if age <= LOCK_FRESH_SECONDS:
+        return True
+    # Stale lock -> remove it so we don't keep going write-only forever.
+    try:
+        lock.unlink()
+    except OSError:
+        pass
+    return False
+
+
+def make_viewer(data_dir):
+    """Return a live ``Viewer`` (lighted, mm units), or a recording stand-in
+    when watch_viewer.py is running, so the example becomes write-only.
+    """
+    if watcher_running(data_dir):
+        return _RecorderViewer()
+    from compas_viewer.config import Config
+    from compas_viewer.viewer import Viewer
+
+    config = Config()
+    config.unit = "mm"
+    viewer = Viewer(config)
+    viewer.renderer.rendermode = "lighted"
+    return viewer
+
+
+def show_or_dump(viewer, data_dir):
+    """Show the live viewer, or - when recording - dump the captured scene to
+    SCENE_FILE for watch_viewer.py to reload.
+    """
+    if isinstance(viewer, _RecorderViewer):
+        path = pathlib.Path(data_dir) / SCENE_FILE
+        # Atomic write: dump to a temp file then os.replace() onto the final
+        # name. The watcher polls this file, so a plain in-place write lets it
+        # read a half-written (invalid) JSON; os.replace swaps it atomically so
+        # the watcher only ever sees a complete file.
+        tmp = path.with_name(path.name + ".tmp")
+        compas.json_dump({"nodes": viewer.scene.nodes}, tmp)
+        # On Windows os.replace raises PermissionError if the watcher has the
+        # destination open for reading at that instant; its read is brief, so
+        # retry a few times to ride it out.
+        for _ in range(40):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                time.sleep(0.05)
+        else:
+            os.replace(tmp, path)  # final attempt; let it raise if truly stuck
+        n_geo = sum(1 for node in viewer.scene.nodes if node.get("kind") == "geometry")
+        print(f"[viewer] watch_viewer running -> wrote {path.name} ({n_geo} objects), skipping local viewer.")
+        return
+    viewer.show()
 
 
 def get_base_frame_from_obb(element) -> Frame:

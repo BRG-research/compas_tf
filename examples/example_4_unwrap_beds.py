@@ -27,6 +27,8 @@ from compas.geometry import angle_vectors_signed
 from compas_model.elements.group import Group
 
 from compas_tf.plate import PlateElement
+from compas_tf.viewer import make_viewer
+from compas_tf.viewer import show_or_dump
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -262,13 +264,7 @@ if os.environ.get("HEADLESS"):
     print("[viewer] skipped (HEADLESS set)")
     raise SystemExit
 
-from compas_viewer.config import Config  # noqa: E402
-from compas_viewer.viewer import Viewer  # noqa: E402
-
-config = Config()
-config.unit = "mm"
-viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"
+viewer = make_viewer(data_dir)
 
 for pc in pieces:
     plate = pc["plate"]
@@ -280,4 +276,4 @@ for pc in pieces:
     viewer.scene.add(plate.face_polylines["bottom"].transformed(T), parent=group)
     viewer.scene.add(plate.face_polylines["top"].transformed(T), parent=group)
 
-viewer.show()
+show_or_dump(viewer, data_dir)

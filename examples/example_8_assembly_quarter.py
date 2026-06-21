@@ -15,15 +15,19 @@ Assembly order:
   oculus        → +2400  (highest / last)
 """
 
+import pathlib
+
 from compas.colors import Color
 from compas.geometry import Translation
 from compas.geometry import Vector
-from compas_viewer.config import Config
-from compas_viewer.viewer import Viewer
 
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.plate import PlateElement
+from compas_tf.viewer import make_viewer
+from compas_tf.viewer import show_or_dump
+
+data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 ASSEMBLY_OFFSET = 400  # mm vertical between each layer (> plate height 650)
 
@@ -44,10 +48,7 @@ guide = FloorGuide(
 #  Viewer
 # ------------------------------------------------------------------ #
 
-config = Config()
-config.unit = "mm"
-viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"
+viewer = make_viewer(data_dir)
 
 
 def add_plates_offset(group_name, plates, facecolor, step):
@@ -83,4 +84,4 @@ for step, (name, plates, color) in enumerate(sections):
 # Oculus — last / highest
 add_plates_offset("oculus", guide.oculus, Color.blue(), len(sections) + 1)
 
-viewer.show()
+show_or_dump(viewer, data_dir)

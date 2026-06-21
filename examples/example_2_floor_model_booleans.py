@@ -52,7 +52,6 @@ sc.doc.Views.Redraw()
 import datetime
 import math
 import pathlib
-import sys
 
 import compas
 from compas.colors import Color
@@ -60,15 +59,13 @@ from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Translation
 from compas.geometry import Vector
-from compas_viewer.config import Config
-from compas_viewer.viewer import Viewer
 
 import compas_tf  # noqa: F401
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.floor_model import FloorModel
-
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from model import add_model_to_viewer  # noqa: E402
+from compas_tf.viewer import add_model_to_viewer
+from compas_tf.viewer import make_viewer
+from compas_tf.viewer import show_or_dump
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -149,14 +146,13 @@ _export_meshes = floor_model.export_obj(obj_path)
 # ------------------------------------------------------------------ #
 #  Viewer
 # ------------------------------------------------------------------ #
+# make_viewer returns a live viewer, or a recorder when watch_viewer.py is
+# running (then show_or_dump writes data/_viewer_scene.json instead of opening
+# a window, and the persistent viewer reloads it).
 
-config = Config()
-config.unit = "mm"
-viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"
+viewer = make_viewer(data_dir)
 
 add_model_to_viewer(floor_model, viewer)
-
 
 debug_group = viewer.scene.add_group("debug")
 for item in guide.debug:
@@ -168,4 +164,4 @@ g_contacts = viewer.scene.add_group("contacts")
 for contact in contacts:
     viewer.scene.add(contact.polygon, facecolor=Color.red(), linecolor=Color.red(), parent=g_contacts)
 
-viewer.show()
+show_or_dump(viewer, data_dir)

@@ -9,7 +9,6 @@ the prop positions are driven by the same parametric geometry.
 
 import math
 import pathlib
-import sys
 
 import compas
 from compas.geometry import Point
@@ -17,15 +16,13 @@ from compas.geometry import Rotation
 from compas.geometry import Translation
 from compas.geometry import Vector
 from compas_model.models import Model
-from compas_viewer.config import Config
-from compas_viewer.viewer import Viewer
 
 from compas_tf.schoring_element import Dataset
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.tower_element import TowerElement
-
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from model import add_model_to_viewer  # noqa: E402
+from compas_tf.viewer import add_model_to_viewer
+from compas_tf.viewer import make_viewer
+from compas_tf.viewer import show_or_dump
 
 SchoringElement.clear_cache()
 
@@ -99,12 +96,9 @@ compas.json_dump(schoring_models, data_dir / "schoring_models.json")
 #  Viewer
 # ------------------------------------------------------------------ #
 
-config = Config()
-config.unit = "mm"
-viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"
+viewer = make_viewer(data_dir)
 
 for model in schoring_models:
     add_model_to_viewer(model, viewer)
 
-viewer.show()
+show_or_dump(viewer, data_dir)

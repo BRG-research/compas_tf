@@ -12,11 +12,11 @@ import pathlib
 
 import compas
 from compas.colors import Color
-from compas_viewer.config import Config
-from compas_viewer.viewer import Viewer
 
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.plate import PlateElement
+from compas_tf.viewer import make_viewer
+from compas_tf.viewer import show_or_dump
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -43,10 +43,7 @@ compas.json_dump(guide, data_dir / "floorguide.json")
 #  Viewer
 # ------------------------------------------------------------------ #
 
-config = Config()
-config.unit = "mm"
-viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"
+viewer = make_viewer(data_dir)
 
 
 def add_plates(viewer, group_name, plates, facecolor):
@@ -74,4 +71,4 @@ g = viewer.scene.add_group("debug")
 for o in guide.debug:
     viewer.scene.add(o, parent=g)
 
-viewer.show()
+show_or_dump(viewer, data_dir)

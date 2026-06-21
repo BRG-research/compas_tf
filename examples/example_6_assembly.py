@@ -14,27 +14,26 @@ Build order:
 
 import math
 import pathlib
-import sys
 
 from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Translation
 from compas.geometry import Vector
 from compas_model.elements.group import Group
-from compas_viewer.config import Config
-from compas_viewer.viewer import Viewer
 
 import compas_tf  # noqa: F401
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.floor_model import FloorModel
 from compas_tf.joint_dowel import DowelElement
+from compas_tf.viewer import add_element_to_viewer
+from compas_tf.viewer import get_color_for_element
+from compas_tf.viewer import get_difference_source_elements
+from compas_tf.viewer import get_union_source_elements
+from compas_tf.viewer import make_viewer
+from compas_tf.viewer import show_or_dump
 from compas_tf.wedge import WedgeElement
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from model import add_element_to_viewer  # noqa: E402
-from model import get_color_for_element  # noqa: E402
-from model import get_difference_source_elements  # noqa: E402
-from model import get_union_source_elements  # noqa: E402
+data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 ASSEMBLY_OFFSET = 300  # mm between each quarter
 
@@ -78,10 +77,7 @@ floor_model.precompute_boolean_modifiers()
 #  Viewer
 # ------------------------------------------------------------------ #
 
-config = Config()
-config.unit = "mm"
-viewer = Viewer(config)
-viewer.renderer.rendermode = "lighted"
+viewer = make_viewer(data_dir)
 
 hidden_sources = get_union_source_elements(floor_model) | get_difference_source_elements(floor_model)
 
@@ -140,4 +136,4 @@ for child in fg0.children:
         add_group_offset(child, oculus_vg, len(floor_guide_groups) * ASSEMBLY_OFFSET)
         break
 
-viewer.show()
+show_or_dump(viewer, data_dir)
