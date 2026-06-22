@@ -199,65 +199,6 @@ def _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh):
     return Mesh.from_vertices_and_faces(vertices, new_faces)
 
 
-def _triangulate_region_with_holes(work, loops):
-    """Triangulate a planar region bounded by an outer loop plus hole loops.
-
-    ``loops`` are vertex-key cycles traced from a coplanar face group (the
-    largest-area loop is the outer boundary, the rest are holes). Uses
-    compas_cgal's constrained Delaunay triangulation so the holes are preserved
-    and the result stays watertight. Returns a list of triangular faces as
-    vertex-key triples (referencing the existing mesh vertices), or ``None`` if
-    CGAL is unavailable or the result introduced unexpected points.
-    """
-    from compas.geometry import Point
-    from compas.geometry import area_polygon
-
-    def coords(loop):
-        return [work.vertex_coordinates(vk) for vk in loop]
-
-    areas = [abs(area_polygon(coords(loop))) for loop in loops]
-    outer_i = areas.index(max(areas))
-    outer = loops[outer_i]
-    holes = [loops[i] for i in range(len(loops)) if i != outer_i]
-
-    try:
-        from compas_cgal.triangulation import constrained_delaunay_triangulation
-    except Exception:
-        return None
-
-    boundary_pts = [Point(*work.vertex_coordinates(vk)) for vk in outer]
-    hole_pts = [[Point(*work.vertex_coordinates(vk)) for vk in h] for h in holes]
-    try:
-        vertices, faces = constrained_delaunay_triangulation(boundary_pts, holes=hole_pts)
-    except Exception:
-        return None
-
-    # Map the triangulation vertices back to the existing mesh vertex keys by
-    # coordinate (constrained Delaunay over a simple polygon-with-holes adds no
-    # Steiner points, so every returned vertex matches an input vertex).
-    region_keys = list(dict.fromkeys(list(outer) + [vk for h in holes for vk in h]))
-    key_coords = [(vk, work.vertex_coordinates(vk)) for vk in region_keys]
-
-    def nearest_key(xyz):
-        best, best_d = None, 1e-9
-        for vk, c in key_coords:
-            d = (c[0] - xyz[0]) ** 2 + (c[1] - xyz[1]) ** 2 + (c[2] - xyz[2]) ** 2
-            if d <= best_d:
-                best, best_d = vk, d
-        return best
-
-    vmap = [nearest_key(xyz) for xyz in vertices.tolist()]
-    if any(vk is None for vk in vmap):
-        return None  # a Steiner point appeared -> bail to the closed triangle fallback
-
-    tris = []
-    for a, b, c in faces.tolist():
-        ka, kb, kc = vmap[a], vmap[b], vmap[c]
-        if len({ka, kb, kc}) == 3:
-            tris.append([ka, kb, kc])
-    return tris or None
-
-
 def merge_coplanar_faces(mesh: Mesh, normal_tol: float = 1e-3, offset_tol: float = 1e-3) -> Mesh:
     """Merge groups of adjacent coplanar faces into single polygon faces.
 

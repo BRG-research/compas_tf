@@ -4,7 +4,6 @@ import pathlib
 import compas
 from compas.geometry import Point
 from compas.geometry import Rotation
-from compas.geometry import Translation
 from compas.geometry import Vector
 from compas_model.models import Model
 

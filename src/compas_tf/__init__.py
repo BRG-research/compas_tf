@@ -10,18 +10,13 @@ from compas_tf.geometry import (
     PolylineLoft,
 )
 from compas_tf.floor_guide import FloorGuide
-from compas_tf.floor_model import FloorModel
 from compas_tf.column import ColumnElement, ColumnFeature
 
 # Additional element types for JSON serialization
 from compas_tf.plate import PlateElement
 from compas_tf.support import SupportElement
-from compas_tf.joint_dowel import DowelElement
-from compas_tf.wedge import WedgeElement
-from compas_tf.joint_sherpaxl120 import SherpaXL120Element
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.tower_element import TowerElement, TowerElementFeature
-from compas_tf.floor_column_connection import FloorColumnConnectionElement, FloorColumnConnectionFeature
 from compas_tf.connectors import (
     ConnectorBoxElement,
     ConnectorBoxFeature,
@@ -29,6 +24,9 @@ from compas_tf.connectors import (
     ConnectorCylinderFeature,
     ConnectorWedgeElement,
     ConnectorWedgeFeature,
+    ConnectorElement,
+    ConnectorFeature,
+    DowelCylinderElement,
 )
 
 __all__ = [
@@ -36,23 +34,20 @@ __all__ = [
     "PolylineCut",
     "PolylineLoft",
     "FloorGuide",
-    "FloorModel",
     "ColumnElement",
     "ColumnFeature",
     "PlateElement",
     "SupportElement",
-    "DowelElement",
-    "WedgeElement",
-    "SherpaXL120Element",
     "SchoringElement",
     "TowerElement",
     "TowerElementFeature",
-    "FloorColumnConnectionElement",
-    "FloorColumnConnectionFeature",
     "ConnectorBoxElement",
     "ConnectorBoxFeature",
     "ConnectorCylinderElement",
     "ConnectorCylinderFeature",
     "ConnectorWedgeElement",
     "ConnectorWedgeFeature",
+    "ConnectorElement",
+    "ConnectorFeature",
+    "DowelCylinderElement",
 ]

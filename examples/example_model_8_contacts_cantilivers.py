@@ -5,7 +5,7 @@ from compas.geometry import Point
 from compas_model.elements import Group
 from compas_model.models import Model
 
-from compas_tf.connector import ConnectorElement
+from compas_tf.connectors import ConnectorElement
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated

@@ -1,9 +1,9 @@
 import pathlib
 
 import compas
+from compas.geometry import Frame  # noqa: F401
+from compas.geometry import Transformation  # noqa: F401
 from compas.geometry import Translation
-from compas.geometry import Transformation # noqa: F401
-from compas.geometry import Frame # noqa: F401
 from compas_model.models import Model
 
 from compas_tf.column import ColumnElement

@@ -282,7 +282,7 @@ class FloorGuide(Data):
             line1 = Line(p1, self.quarter_column_polygon[3])
             plane_p0 = Point(*intersection_line_plane(line0, plane0.offset(self.size_wedge)))
             plane_p1 = Point(*intersection_line_plane(line1, plane2.offset(self.size_wedge)))
-            plane1_offset = Plane(plane_p0, Vector.cross(plane_p1 - plane_p0, Vector.Zaxis()))
+            plane1_offset = Plane(plane_p0, Vector.cross(plane_p1 - plane_p0, Vector.Zaxis()))  # noqa: F841  (reference offset for the plane1 wedge, see below)
 
             plane4 = construction_planes["inner_beams"][0][1]
             plane5 = construction_planes["inner_beams"][1][1]
