@@ -25,7 +25,6 @@ from compas_tf.floor_guide import FloorGuide
 from compas_tf.joint_dowel import DowelElement
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import make_viewer
-from compas_tf.viewer import show_or_dump
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -84,4 +83,4 @@ for step, (name, plates, color) in enumerate(sections):
 # Oculus — last / highest
 add_plates_offset("oculus", guide.oculus, Color.blue(), len(sections) + 1)
 
-show_or_dump(viewer, data_dir)
+viewer.show()

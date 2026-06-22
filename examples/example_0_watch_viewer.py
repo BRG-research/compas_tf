@@ -10,7 +10,7 @@ Workflow
 
 2. Run any ``example_*.py`` (the IDE "play" button). While this watcher is
    running, each example only records its display geometry to
-   ``data/_viewer_scene.json`` (via compas_tf.viewer.make_viewer / show_or_dump)
+   ``data/_viewer_scene.json`` (via compas_tf.viewer.make_viewer / viewer.show)
    instead of opening its own window.
 
 3. This viewer notices the scene file changed and redraws it in place, keeping

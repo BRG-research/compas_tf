@@ -66,11 +66,10 @@ print("Done.")
 import pathlib
 
 import compas
+from compas_model.elements import Group
 
 import compas_tf  # noqa: F401 — required for deserialization of TF types
-from compas_tf.viewer import add_model_to_viewer
 from compas_tf.viewer import make_viewer
-from compas_tf.viewer import show_or_dump
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -86,9 +85,19 @@ schoring_models = compas.json_load(data_dir / "schoring_models.json")
 # ------------------------------------------------------------------ #
 
 viewer = make_viewer(data_dir)
-
-add_model_to_viewer(floor_model, viewer)
+g_floor = viewer.scene.add_group("floor_model")
+for element in floor_model.elements():
+    if isinstance(element, Group):
+        continue
+    mesh = element.modelgeometry
+    if mesh is not None:
+        g_floor.add(mesh, name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
 for model in schoring_models:
-    add_model_to_viewer(model, viewer)
-
-show_or_dump(viewer, data_dir)
+    g = viewer.scene.add_group(model.name or "model")
+    for element in model.elements():
+        if isinstance(element, Group):
+            continue
+        mesh = element.modelgeometry
+        if mesh is not None:
+            g.add(mesh, name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
+viewer.show()

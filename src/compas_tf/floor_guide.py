@@ -8,6 +8,7 @@ from compas.geometry import Polygon
 from compas.geometry import Polyline
 from compas.geometry import Projection
 from compas.geometry import Rotation
+from compas.geometry import Translation
 from compas.geometry import Vector
 from compas.geometry import intersection_line_plane
 from compas.geometry import intersection_plane_plane
@@ -40,6 +41,7 @@ class FloorGuide(Data):
         rise=453,
         size_oculus=1000,
         wedge_plane_angle=-10,
+        bay_height=3500,
     ):
         super().__init__()
 
@@ -63,6 +65,11 @@ class FloorGuide(Data):
         # beds / t-sections. The plane pivots about its top edge (at z=0), so
         # the cut leans away from vertical going downward.
         self.wedge_plane_angle = wedge_plane_angle
+
+        # Vertical distance between stacked floors (column + support height).
+        # Used to lift the floor plates to the top of the columns; consumed by
+        # FloorModel.story_height and by the examples that stack quarters.
+        self.bay_height = bay_height
 
         # parabolas parameters
         self.height = height
@@ -103,6 +110,7 @@ class FloorGuide(Data):
             "rise": self.rise,
             "size_oculus": self.size_oculus,
             "wedge_plane_angle": self.wedge_plane_angle,
+            "bay_height": self.bay_height,
         }
 
     @classmethod
@@ -281,16 +289,10 @@ class FloorGuide(Data):
             plane6 = construction_planes["inner_beams"][2][1]
 
             construction_planes["wedges"] = [
-                [
-                    plane0.copy(),
-                    plane0.offset(self.size_wedge),
-                ],
-                [plane1.copy(), plane1_offset],
+                [plane0.copy(), plane0.offset(self.size_wedge)],
+                [plane1.copy(), plane1.copy().offset(self.size_wedge*1.25)], # plane1_offset
                 [plane2.copy(), plane2.offset(self.size_wedge)],
-                [
-                    plane4.copy(),
-                    plane4.offset(self.size_inner_beams),
-                ],
+                [plane4.copy(), plane4.offset(self.size_inner_beams)],
                 [plane5.copy(), plane5.offset(self.size_inner_beams)],
                 [plane6.copy(), plane6.offset(self.size_inner_beams)],
             ]
@@ -311,6 +313,30 @@ class FloorGuide(Data):
             self._construction_planes = construction_planes
 
         return self._construction_planes
+
+    def column_cutters_for(self, column_height):
+        """Column-head cutter solids in a column's LOCAL frame.
+
+        :attr:`column_cutters` are authored in the guide's world frame - at the
+        bay corner, with the head top near z=0. This recentres them on the
+        column axis (xy -> 0) and lifts the head top to the column top
+        (z = ``column_height``), which is the frame a column feature is applied
+        in. Pass the result straight to
+        :meth:`compas_tf.column.ColumnElement.add_cutters`.
+
+        Parameters
+        ----------
+        column_height : float
+            Local height of the target column; its head top sits at this z.
+
+        Returns
+        -------
+        list[:class:`compas.datastructures.Mesh`]
+            Closed cutter solids in the column's local frame.
+        """
+        corner = self.corner_point_column(self.size_column_head)
+        to_local = Translation.from_vector([-corner[0], -corner[1], column_height])
+        return [cutter.compute_elementgeometry().transformed(to_local) for cutter in self.column_cutters]
 
     @property
     def column_cutters(self):
@@ -716,7 +742,12 @@ class FloorGuide(Data):
 
     @property
     def beds(self):
-        """Create the bed geometry"""
+        """Bed plates as a flat list, three panels (rows) deep.
+
+        Each plate is tagged with ``plate.bed_row`` (0, 1 or 2) so a consumer
+        can split the beds into their three rows without having to know the
+        panel boundaries.
+        """
 
         # 1. Project polylines to planes
         # 2. Cut the projected polylines by side planes
@@ -763,6 +794,14 @@ class FloorGuide(Data):
 
         plates = []
 
+        # The beds are built as three panels (rows). Tag each plate with its
+        # row index so consumers can group the three bed rows separately, while
+        # ``beds`` itself stays a flat list (like the other plate properties).
+        def _add_row(row_plates, row_index):
+            for plate in row_plates:
+                plate.bed_row = row_index
+            plates.extend(row_plates)
+
         # Panel 1
         parabola0 = self.boundary_parabolas[0][1]
         parabola1 = self.boundary_parabolas[0][2]
@@ -776,7 +815,7 @@ class FloorGuide(Data):
         )
         cut_plane0 = self.construction_planes["inner_beams"][0][1]
         cut_plane1 = self.construction_planes["wedges"][0][0]
-        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
+        _add_row(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1), 0)
 
         # Panel 2
         parabola0 = self.boundary_parabolas[2][1]
@@ -791,7 +830,7 @@ class FloorGuide(Data):
         )
         cut_plane0 = self.construction_planes["inner_beams"][1][1]
         cut_plane1 = self.construction_planes["wedges"][1][0]
-        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
+        _add_row(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1), 1)
 
         # Panel 3
         parabola0 = self.boundary_parabolas[1][1]
@@ -806,7 +845,7 @@ class FloorGuide(Data):
         )
         cut_plane0 = self.construction_planes["inner_beams"][2][1]
         cut_plane1 = self.construction_planes["wedges"][2][0]
-        plates.extend(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1))
+        _add_row(panel_quads(parabola0, parabola1, cut_plane0, cut_plane1, projection0, projection1), 2)
 
         return plates
 

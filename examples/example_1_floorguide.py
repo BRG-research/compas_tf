@@ -16,7 +16,6 @@ from compas.colors import Color
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import make_viewer
-from compas_tf.viewer import show_or_dump
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -36,6 +35,10 @@ guide = FloorGuide(
     rise=453,
     size_oculus=1000,
 )
+
+# ------------------------------------------------------------------ #
+#  Write
+# ------------------------------------------------------------------ #
 
 compas.json_dump(guide, data_dir / "floorguide.json")
 
@@ -71,4 +74,4 @@ g = viewer.scene.add_group("debug")
 for o in guide.debug:
     viewer.scene.add(o, parent=g)
 
-show_or_dump(viewer, data_dir)
+viewer.show()

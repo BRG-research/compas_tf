@@ -189,9 +189,13 @@ class FloorModel(Model):
         add(nodedata, node)
         return model
 
-    def __init__(self, guide=None, name="session", story_height=3500):
+    def __init__(self, guide=None, name="session", story_height=None):
         super(FloorModel, self).__init__(name=name)
         self.guide = guide
+        # Default the story height to the guide's bay_height so the value lives
+        # in one place (the guide); fall back to 3500 when no guide is given.
+        if story_height is None:
+            story_height = guide.bay_height if guide is not None else 3500
         self.story_height = story_height
         self.debug = []  # debug geometry pushed by internal steps; iterate from caller (e.g. viewer)
 

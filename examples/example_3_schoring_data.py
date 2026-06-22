@@ -20,6 +20,10 @@ mesh = Mesh.from_obj(str(obj_path))
 frame = Frame.worldXY()
 extension_length = mesh.aabb().zsize
 
+# ------------------------------------------------------------------ #
+#  Write
+# ------------------------------------------------------------------ #
+
 compas.json_dump(
     {
         "meshes": [mesh],

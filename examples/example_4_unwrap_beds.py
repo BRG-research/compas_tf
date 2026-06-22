@@ -28,7 +28,6 @@ from compas_model.elements.group import Group
 
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import make_viewer
-from compas_tf.viewer import show_or_dump
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -247,6 +246,10 @@ sheet_w = max(p.x for p in allpts) - min(p.x for p in allpts)
 sheet_h = max(p.y for p in allpts) - min(p.y for p in allpts)
 print(f"[layout] sheet {sheet_w:.0f} x {sheet_h:.0f} mm")
 
+# ------------------------------------------------------------------ #
+#  Write
+# ------------------------------------------------------------------ #
+
 compas.json_dump({"placements": {pc["plate"].name: pc["T"] for pc in pieces},
                   "outlines": {pc["plate"].name: [[round(q.x, 2), round(q.y, 2)]
                                for q in pc["plate"].face_polylines["bottom"].transformed(pc["T"]).points[:-1]]
@@ -276,4 +279,4 @@ for pc in pieces:
     viewer.scene.add(plate.face_polylines["bottom"].transformed(T), parent=group)
     viewer.scene.add(plate.face_polylines["top"].transformed(T), parent=group)
 
-show_or_dump(viewer, data_dir)
+viewer.show()

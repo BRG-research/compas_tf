@@ -1,9 +1,50 @@
 from collections import defaultdict
+from typing import Optional
 from typing import Union
 
 from compas.datastructures import Mesh
 from compas.geometry import Brep
+from compas_model.elements.element import Feature
 from compas_model.modifiers import Modifier
+
+
+class MeshCutFeature(Feature):
+    """Feature that boolean-differences cutter solids out of a host element.
+
+    Stored on the host element (in its local frame), so the cut travels with
+    copy/serialization and the cutter solids stay available for fabrication. The
+    cutters are unioned into a single solid first (so shared/coplanar faces are
+    not re-processed) and the largest connected piece of the result is kept.
+
+    Parameters
+    ----------
+    meshes : list[:class:`compas.datastructures.Mesh`]
+        Closed cutter solids to subtract, in the host element's local frame.
+    name : str, optional
+    """
+
+    @property
+    def __data__(self) -> dict:
+        return {"meshes": self.meshes, "name": self.name}
+
+    def __init__(self, meshes: list = None, name: Optional[str] = None):
+        super().__init__(name=name)
+        self.meshes = [mesh.copy() for mesh in (meshes or [])]
+
+    def apply(self, shape: Mesh) -> Mesh:
+        if not self.meshes:
+            return shape
+
+        from compas_manifold.booleans import boolean_chain
+
+        cutters = [mesh.to_vertices_and_faces(True) for mesh in self.meshes]
+        if len(cutters) > 1:
+            unioned = boolean_chain(cutters, ["union"] * (len(cutters) - 1))
+            cutters = [unioned]
+
+        result = boolean_chain([shape.to_vertices_and_faces(True), cutters[0]], ["difference"])
+        carved = Mesh.from_vertices_and_faces(result[0], result[1])
+        return SolidDifferenceModifier.largest_piece(carved)
 
 
 def _difference_backend():
@@ -156,6 +197,196 @@ def _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh):
                 new_faces.append(loop)
 
     return Mesh.from_vertices_and_faces(vertices, new_faces)
+
+
+def _triangulate_region_with_holes(work, loops):
+    """Triangulate a planar region bounded by an outer loop plus hole loops.
+
+    ``loops`` are vertex-key cycles traced from a coplanar face group (the
+    largest-area loop is the outer boundary, the rest are holes). Uses
+    compas_cgal's constrained Delaunay triangulation so the holes are preserved
+    and the result stays watertight. Returns a list of triangular faces as
+    vertex-key triples (referencing the existing mesh vertices), or ``None`` if
+    CGAL is unavailable or the result introduced unexpected points.
+    """
+    from compas.geometry import Point
+    from compas.geometry import area_polygon
+
+    def coords(loop):
+        return [work.vertex_coordinates(vk) for vk in loop]
+
+    areas = [abs(area_polygon(coords(loop))) for loop in loops]
+    outer_i = areas.index(max(areas))
+    outer = loops[outer_i]
+    holes = [loops[i] for i in range(len(loops)) if i != outer_i]
+
+    try:
+        from compas_cgal.triangulation import constrained_delaunay_triangulation
+    except Exception:
+        return None
+
+    boundary_pts = [Point(*work.vertex_coordinates(vk)) for vk in outer]
+    hole_pts = [[Point(*work.vertex_coordinates(vk)) for vk in h] for h in holes]
+    try:
+        vertices, faces = constrained_delaunay_triangulation(boundary_pts, holes=hole_pts)
+    except Exception:
+        return None
+
+    # Map the triangulation vertices back to the existing mesh vertex keys by
+    # coordinate (constrained Delaunay over a simple polygon-with-holes adds no
+    # Steiner points, so every returned vertex matches an input vertex).
+    region_keys = list(dict.fromkeys(list(outer) + [vk for h in holes for vk in h]))
+    key_coords = [(vk, work.vertex_coordinates(vk)) for vk in region_keys]
+
+    def nearest_key(xyz):
+        best, best_d = None, 1e-9
+        for vk, c in key_coords:
+            d = (c[0] - xyz[0]) ** 2 + (c[1] - xyz[1]) ** 2 + (c[2] - xyz[2]) ** 2
+            if d <= best_d:
+                best, best_d = vk, d
+        return best
+
+    vmap = [nearest_key(xyz) for xyz in vertices.tolist()]
+    if any(vk is None for vk in vmap):
+        return None  # a Steiner point appeared -> bail to the closed triangle fallback
+
+    tris = []
+    for a, b, c in faces.tolist():
+        ka, kb, kc = vmap[a], vmap[b], vmap[c]
+        if len({ka, kb, kc}) == 3:
+            tris.append([ka, kb, kc])
+    return tris or None
+
+
+def merge_coplanar_faces(mesh: Mesh, normal_tol: float = 1e-3, offset_tol: float = 1e-3) -> Mesh:
+    """Merge groups of adjacent coplanar faces into single polygon faces.
+
+    Boolean kernels (and the capitel union) emit triangle soup; face-face
+    contact detection needs one polygon per flat region or it fragments/misses
+    contacts. This welds the mesh, groups adjacent faces that share a common
+    plane (matching unit normal and plane offset within tolerance), and re-traces
+    each group's outer boundary into a single polygon face.
+
+    Parameters
+    ----------
+    mesh : :class:`compas.datastructures.Mesh`
+        The mesh to clean (typically a triangulated boolean result).
+    normal_tol : float
+        Max ``|n_a x n_b|`` (sine of the angle) for two normals to count as parallel.
+    offset_tol : float
+        Max difference in plane offset (distance along the normal) for two faces
+        to count as co-planar.
+
+    Returns
+    -------
+    :class:`compas.datastructures.Mesh`
+        A mesh with maximal planar polygon faces. Returns a copy unchanged if it
+        has a single face.
+    """
+    from compas.geometry import cross_vectors
+    from compas.geometry import dot_vectors
+    from compas.geometry import length_vector
+
+    work = mesh.copy()
+    try:
+        work.weld()  # boolean output has coincident-but-distinct vertices at seams
+    except Exception:
+        pass
+
+    faces = list(work.faces())
+    if len(faces) <= 1:
+        return work
+
+    planes = {}
+    for face in faces:
+        normal = work.face_normal(face)
+        if length_vector(normal) == 0:
+            planes[face] = None
+        else:
+            planes[face] = (normal, dot_vectors(normal, work.face_centroid(face)))
+
+    # Union-find: union adjacent faces that lie on the same plane.
+    parent = {face: face for face in faces}
+
+    def find(x):
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:
+            parent[x], x = root, parent[x]
+        return root
+
+    for face in faces:
+        plane = planes[face]
+        if plane is None:
+            continue
+        normal, offset = plane
+        for nbr in work.face_neighbors(face):
+            other = planes.get(nbr)
+            if other is None:
+                continue
+            n2, d2 = other
+            if dot_vectors(normal, n2) > 0 and length_vector(cross_vectors(normal, n2)) < normal_tol and abs(offset - d2) < offset_tol:
+                parent[find(face)] = find(nbr)
+
+    groups = defaultdict(list)
+    for face in faces:
+        groups[find(face)].append(face)
+
+    new_faces = []
+    for grp in groups.values():
+        if len(grp) == 1:
+            new_faces.append(work.face_vertices(grp[0]))
+            continue
+
+        # Boundary half-edges of the merged region are those with no reverse twin.
+        half_edges = set()
+        for face in grp:
+            verts = work.face_vertices(face)
+            for i in range(len(verts)):
+                half_edges.add((verts[i], verts[(i + 1) % len(verts)]))
+        nxt = {a: b for (a, b) in half_edges if (b, a) not in half_edges}
+
+        loops = []
+        visited = set()
+        for start in list(nxt):
+            if start in visited:
+                continue
+            loop = [start]
+            visited.add(start)
+            step = nxt.get(start)
+            while step is not None and step != start and step not in visited:
+                loop.append(step)
+                visited.add(step)
+                step = nxt.get(step)
+            if len(loop) >= 3:
+                loops.append(loop)
+
+        if len(loops) == 1:
+            new_faces.append(loops[0])  # single outer boundary -> one polygon face
+        else:
+            # Region with hole(s) (e.g. a dowel hole on a face) or an untraceable
+            # boundary: a single polygon face cannot carry a hole, so keep the
+            # original (already-manifold) boolean faces for this group rather than
+            # merging - merging would orphan the hole and open the mesh.
+            new_faces.extend(work.face_vertices(face) for face in grp)
+
+    vkeys = list(work.vertices())
+    vindex = {vk: i for i, vk in enumerate(vkeys)}
+    vertices = [work.vertex_coordinates(vk) for vk in vkeys]
+    faces_idx = [[vindex[vk] for vk in fverts] for fverts in new_faces]
+    merged = Mesh.from_vertices_and_faces(vertices, faces_idx)
+
+    # Safety net: coplanar merging is a cleanup for contact detection, not a
+    # correctness requirement. On complex cuts it can introduce non-manifold
+    # edges, so never downgrade a manifold input to a non-manifold output -
+    # fall back to the (manifold) welded mesh.
+    try:
+        if not merged.is_manifold():
+            return work
+    except Exception:
+        return work
+    return merged
 
 
 class SolidDifferenceModifier(Modifier):

@@ -25,17 +25,33 @@ import compas_tf  # noqa: F401
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.floor_model import FloorModel
 from compas_tf.joint_dowel import DowelElement
-from compas_tf.viewer import add_element_to_viewer
-from compas_tf.viewer import get_color_for_element
-from compas_tf.viewer import get_difference_source_elements
-from compas_tf.viewer import get_union_source_elements
+from compas_tf.solid_difference_modifier import SolidDifferenceModifier
+from compas_tf.solid_union_modifier import SolidUnionModifier
 from compas_tf.viewer import make_viewer
-from compas_tf.viewer import show_or_dump
 from compas_tf.wedge import WedgeElement
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 ASSEMBLY_OFFSET = 300  # mm between each quarter
+GRAY = (0.6, 0.6, 0.6)
+
+
+def modifier_sources(model, modifier_type):
+    """Elements that are the source of a given modifier type on a graph edge.
+
+    Union sources are absorbed into their target; difference sources are cutters.
+    Either way they should not be drawn separately in the viewer.
+    """
+    sources = set()
+    for edge in model.graph.edges():
+        modifiers = model.graph.edge_attribute(edge, name="modifiers")
+        if not modifiers:
+            continue
+        for modifier in modifiers:
+            if isinstance(modifier, modifier_type):
+                u, _v = edge
+                sources.add(model.graph.node_element(u))
+    return sources
 
 # ------------------------------------------------------------------ #
 #  Parameters (same as example_2)
@@ -79,7 +95,7 @@ floor_model.precompute_boolean_modifiers()
 
 viewer = make_viewer(data_dir)
 
-hidden_sources = get_union_source_elements(floor_model) | get_difference_source_elements(floor_model)
+hidden_sources = modifier_sources(floor_model, SolidUnionModifier) | modifier_sources(floor_model, SolidDifferenceModifier)
 
 
 def add_group_offset(group, viewer_parent, z_offset, skip_subgroup=None):
@@ -103,10 +119,9 @@ def add_group_offset(group, viewer_parent, z_offset, skip_subgroup=None):
             mesh = child.modelgeometry
             if mesh is None:
                 continue
-            color = get_color_for_element(child)
             name = child.name or "element"
             elem_vg = viewer.scene.add_group(name, parent=viewer_parent)
-            elem_vg.add(mesh.transformed(extra), name="mesh", hide_coplanaredges=True, color=color)
+            elem_vg.add(mesh.transformed(extra), name="mesh", hide_coplanaredges=True, color=GRAY)
 
 
 # Supports and columns — no extra offset
@@ -117,7 +132,11 @@ for node in floor_model.tree.root.children:
         for child in element.children:
             if child in hidden_sources:
                 continue
-            add_element_to_viewer(viewer, vg, child, get_color_for_element(child))
+            mesh = child.modelgeometry
+            if mesh is None:
+                continue
+            elem_vg = viewer.scene.add_group(child.name or "element", parent=vg)
+            elem_vg.add(mesh, name="mesh", hide_coplanaredges=True, color=GRAY)
 
 # Floor guide quarters — each quarter lifted by q_idx * ASSEMBLY_OFFSET
 floor_guide_groups = [node.element for node in floor_model.tree.root.children if isinstance(node.element, Group) and node.element.name == "floor_guide"]
@@ -136,4 +155,4 @@ for child in fg0.children:
         add_group_offset(child, oculus_vg, len(floor_guide_groups) * ASSEMBLY_OFFSET)
         break
 
-show_or_dump(viewer, data_dir)
+viewer.show()

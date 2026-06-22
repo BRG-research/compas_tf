@@ -86,6 +86,9 @@ class PlateElement(Element):
         The features of the plate.
     name : str, optional
         The name of the plate.
+    debug : list, optional
+        Construction geometry (in the plate's local frame) for the viewer to
+        draw, transformed to model space. Empty by default.
 
     Attributes
     ----------
@@ -116,6 +119,7 @@ class PlateElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            "debug": self.debug,
             "modelgeometry": self._modelgeometry,
         }
 
@@ -139,11 +143,16 @@ class PlateElement(Element):
         transformation: Optional[Transformation] = None,
         features: Optional[list[PlateFeature]] = None,
         name: Optional[str] = None,
+        debug: Optional[list] = None,
     ):
         super().__init__(transformation=transformation, features=features, name=name)
 
         self._mesh: Optional[Mesh] = mesh
         self.thickness: float = thickness
+        # Optional construction geometry (polylines, parabolas, planes, ...) kept
+        # in the element's local frame. The viewer draws whatever is in here,
+        # transformed to model space - a per-element debug channel.
+        self.debug: list = list(debug) if debug else []
 
         # Handle polyline-based construction
         if top_polyline is not None and bottom_polyline is not None:
@@ -259,6 +268,24 @@ class PlateElement(Element):
         if self.transformation:
             return self._bottom_polyline.transformed(self.transformation)
         return self._bottom_polyline
+
+    def fabrication_polylines(self) -> tuple[Optional[Polyline], Optional[Polyline]]:
+        """Return ``(bottom, top)`` polylines wound the SAME direction.
+
+        For fabrication and lofting the two boundary polylines must be
+        co-oriented - vertex ``i`` of the bottom corresponds to vertex ``i`` of
+        the top - which is how they are stored. This is deliberately different
+        from :meth:`_polygon_faces`, whose face normals point outward (the
+        bottom face normal is flipped) for contact detection. Use this accessor
+        when generating toolpaths or re-lofting; use the face normals for
+        contacts.
+
+        Returns
+        -------
+        tuple[Polyline | None, Polyline | None]
+            The bottom and top polylines in model space, co-wound.
+        """
+        return self.bottom_polyline, self.top_polyline
 
     @property
     def computed_thickness(self) -> float:
@@ -470,46 +497,81 @@ class PlateElement(Element):
 
         return Mesh.from_vertices_and_faces(vertices, faces)
 
-    def compute_elementgeometry(self, include_features=False) -> Mesh:
-        """Compute the shape of the plate from the given polygons or return pre-computed mesh.
+    def compute_elementgeometry(self, include_features=True) -> Mesh:
+        """Compute the shape of the plate from the given polygons or pre-computed mesh.
+
+        Any cut features (see :meth:`add_cutters`) are then applied as boolean
+        differences and their coplanar faces merged, so the plate carries its
+        connector pockets in its geometry.
 
         Returns
         -------
         :class:`compas.datastructures.Mesh`
 
         """
-        # Return pre-computed mesh if available
         if self._mesh is not None:
-            return self._mesh
+            mesh = self._mesh
+        else:
+            bottom_pts = list(self.bottom.points)
+            top_pts = list(self.top.points)
 
-        bottom_pts = list(self.bottom.points)
-        top_pts = list(self.top.points)
+            # Ensure outward-facing winding: the vector from bottom centroid to
+            # top centroid must align with the right-hand-rule normal of the
+            # bottom loop. If it doesn't, reverse both loops in lockstep.
+            b_centroid = Point(*self.bottom.centroid)
+            t_centroid = Point(*self.top.centroid)
+            up_dir = Vector.from_start_end(b_centroid, t_centroid)
+            if up_dir.dot(self.bottom.normal) < 0:
+                bottom_pts = list(reversed(bottom_pts))
+                top_pts = list(reversed(top_pts))
 
-        # Ensure outward-facing winding: the vector from bottom centroid to
-        # top centroid must align with the right-hand-rule normal of the
-        # bottom loop. If it doesn't, reverse both loops in lockstep.
-        b_centroid = Point(*self.bottom.centroid)
-        t_centroid = Point(*self.top.centroid)
-        up_dir = Vector.from_start_end(b_centroid, t_centroid)
-        if up_dir.dot(self.bottom.normal) < 0:
-            bottom_pts = list(reversed(bottom_pts))
-            top_pts = list(reversed(top_pts))
+            offset: int = len(bottom_pts)
+            vertices: list[Point] = bottom_pts + top_pts  # type: ignore
+            bottom: list[int] = list(range(offset))
+            top: list[int] = [i + offset for i in bottom]
+            faces: list[list[int]] = []
+            bottom_poly = Polygon(list(reversed(bottom_pts)))
+            for tri in PlateElement._earclip_polygon(bottom_poly):
+                faces.append([offset - 1 - tri[0], offset - 1 - tri[1], offset - 1 - tri[2]])
+            top_poly = Polygon(top_pts)
+            for tri in PlateElement._earclip_polygon(top_poly):
+                faces.append([tri[0] + offset, tri[1] + offset, tri[2] + offset])
+            for (a, b), (c, d) in zip(pairwise(bottom + bottom[:1]), pairwise(top + top[:1])):
+                faces.append([a, b, d, c])
+            mesh = Mesh.from_vertices_and_faces(vertices, faces)
 
-        offset: int = len(bottom_pts)
-        vertices: list[Point] = bottom_pts + top_pts  # type: ignore
-        bottom: list[int] = list(range(offset))
-        top: list[int] = [i + offset for i in bottom]
-        faces: list[list[int]] = []
-        bottom_poly = Polygon(list(reversed(bottom_pts)))
-        for tri in PlateElement._earclip_polygon(bottom_poly):
-            faces.append([offset - 1 - tri[0], offset - 1 - tri[1], offset - 1 - tri[2]])
-        top_poly = Polygon(top_pts)
-        for tri in PlateElement._earclip_polygon(top_poly):
-            faces.append([tri[0] + offset, tri[1] + offset, tri[2] + offset])
-        for (a, b), (c, d) in zip(pairwise(bottom + bottom[:1]), pairwise(top + top[:1])):
-            faces.append([a, b, d, c])
-        mesh: Mesh = Mesh.from_vertices_and_faces(vertices, faces)
+        if include_features and self._features:
+            from compas_tf.solid_difference_modifier import merge_coplanar_faces
+
+            for feature in self._features:
+                mesh = feature.apply(mesh)
+            mesh = merge_coplanar_faces(mesh)
+
         return mesh
+
+    def add_cutters(self, meshes: list, name: str = "plate_cutters"):
+        """Store cutter solids as a difference feature carved into the plate.
+
+        The cutters must be given in the plate's local frame. They are kept as a
+        :class:`compas_tf.solid_difference_modifier.MeshCutFeature` - serialized
+        in ``__data__`` and copied with the plate - so the pocket stays available
+        for fabrication. Contact detection (:meth:`_polygon_faces`) is unaffected,
+        as it works from the top/bottom polygons, not this mesh.
+
+        Parameters
+        ----------
+        meshes : list[:class:`compas.datastructures.Mesh`]
+            Closed cutter solids in the plate's local frame.
+        name : str, optional
+        """
+        from compas_tf.solid_difference_modifier import MeshCutFeature
+
+        feature = MeshCutFeature(meshes, name=name)
+        self._features.append(feature)
+        # Invalidate cached geometry (both element- and model-space) so the cut recomputes.
+        self._elementgeometry = None
+        self._modelgeometry = None
+        return feature
 
     # ------------------------------------------------------------------ #
     # Implementations of abstract methods
@@ -539,23 +601,45 @@ class PlateElement(Element):
         ``"bottom"`` (face from bottom_polyline), or ``"side"`` (one quad
         per perimeter edge connecting the two polylines).
 
+        Every ``normal`` points **outward** (away from the plate body), like a
+        closed solid: the top and bottom faces therefore point in opposite
+        directions. The stored top/bottom polylines are co-wound (same
+        orientation) for lofting, so the bottom polygon's raw normal points
+        inward - it is flipped here. This outward convention is what contact
+        detection relies on (two touching faces then have opposite normals).
+        For the co-wound polylines needed by fabrication, use
+        :meth:`fabrication_polylines` instead of these face normals.
+
         No triangulation, regardless of how the mesh was constructed.
         """
+        from compas.geometry import centroid_points
+        from compas.geometry import dot_vectors
         from compas.geometry import transform_points
+
+        top_pts = [Point(*p) for p in transform_points([list(p) for p in self.top.points], xform)] if self.top is not None else None
+        bot_pts = [Point(*p) for p in transform_points([list(p) for p in self.bottom.points], xform)] if self.bottom is not None else None
+
+        tc = centroid_points([list(p) for p in top_pts]) if top_pts else None
+        bc = centroid_points([list(p) for p in bot_pts]) if bot_pts else None
+
+        def _away_from(normal, this_c, other_c):
+            # Flip the normal so it points away from the opposite face's centroid.
+            if other_c is None:
+                return normal
+            ref = [this_c[0] - other_c[0], this_c[1] - other_c[1], this_c[2] - other_c[2]]
+            return normal * -1 if dot_vectors(normal, ref) < 0 else normal
 
         faces = []
 
-        if self.top is not None:
-            pts = [Point(*p) for p in transform_points([list(p) for p in self.top.points], xform)]
-            faces.append((pts, Polygon(pts).normal, "top"))
+        if top_pts is not None:
+            faces.append((top_pts, _away_from(Polygon(top_pts).normal, tc, bc), "top"))
 
-        if self.bottom is not None:
-            pts = [Point(*p) for p in transform_points([list(p) for p in self.bottom.points], xform)]
-            faces.append((pts, Polygon(pts).normal, "bottom"))
+        if bot_pts is not None:
+            faces.append((bot_pts, _away_from(Polygon(bot_pts).normal, bc, tc), "bottom"))
 
-        if self.top is not None and self.bottom is not None:
-            top_pts = [Point(*p) for p in transform_points([list(p) for p in self.top.points], xform)]
-            bot_pts = [Point(*p) for p in transform_points([list(p) for p in self.bottom.points], xform)]
+        if top_pts is not None and bot_pts is not None:
+            # Perimeter is enforced CCW at construction, so the quad winding
+            # [bot_i, bot_j, top_j, top_i] already yields outward side normals.
             n = min(len(top_pts), len(bot_pts))
             for i in range(n):
                 j = (i + 1) % n
@@ -578,6 +662,7 @@ class PlateElement(Element):
         """
         import inspect
 
+        from compas_model.algorithms.contacts import is_opposite_normal_normal
         from compas_model.algorithms.contacts import polygon_polygon_overlap
         from compas_model.interactions import Contact
 
@@ -610,6 +695,13 @@ class PlateElement(Element):
         contacts = []
         for a_points, a_normal, _ in a_faces:
             for b_points, b_normal, _ in b_faces:
+                # _polygon_faces emits outward normals (and the project's meshes
+                # are closed solids), so two faces in real contact always have
+                # opposite normals. This cheap dot/cross test skips the expensive
+                # polygon_polygon_overlap (two 4x4 matrix inversions) for the
+                # ~98% of face pairs that cannot touch - same result, far less work.
+                if not is_opposite_normal_normal(a_normal, b_normal):
+                    continue
                 if _legacy_ppo:
                     result = polygon_polygon_overlap(a_points, a_normal, b_points, b_normal, tolerance, minimum_area)
                 else:

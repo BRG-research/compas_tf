@@ -57,6 +57,69 @@ class ColumnFeature(Feature):
         return Mesh.from_vertices_and_faces(result[0], result[1])
 
 
+class ColumnCutFeature(Feature):
+    """Feature that boolean-differences cutter solids out of the column geometry.
+
+    Stored on the column (in its local frame), so the cut travels with the
+    element through copy/serialization and the cutter solids stay available for
+    fabrication. The capitel (a :class:`ColumnFeature`) is applied first, so the
+    cutters carve the already-formed column head.
+
+    Parameters
+    ----------
+    meshes : list[:class:`compas.datastructures.Mesh`]
+        The closed cutter solids to subtract, in the column's local frame.
+    name : str, optional
+        The name of the feature.
+    """
+
+    @property
+    def __data__(self) -> dict:
+        return {
+            "meshes": self.meshes,
+            "name": self.name,
+        }
+
+    def __init__(self, meshes: list = None, name: Optional[str] = None):
+        super().__init__(name=name)
+        self.meshes = [mesh.copy() for mesh in (meshes or [])]
+
+    def apply(self, shape: Mesh) -> Mesh:
+        """Boolean-subtract the cutter solids from the column mesh.
+
+        The cutters share the wedge-fan planes, so they are unioned into a single
+        solid first and then subtracted in one operation - subtracting them one
+        by one makes the kernel re-process the repeated coplanar faces.
+
+        Parameters
+        ----------
+        shape : :class:`compas.datastructures.Mesh`
+            The host geometry (column box + capitel) to carve.
+
+        Returns
+        -------
+        :class:`compas.datastructures.Mesh`
+        """
+        if not self.meshes:
+            return shape
+
+        from compas_manifold.booleans import boolean_chain
+
+        from compas_tf.solid_difference_modifier import SolidDifferenceModifier
+
+        cutters = [mesh.to_vertices_and_faces(True) for mesh in self.meshes]
+        if len(cutters) > 1:
+            unioned = boolean_chain(cutters, ["union"] * (len(cutters) - 1))
+            cutters = [unioned]
+
+        result = boolean_chain([shape.to_vertices_and_faces(True), cutters[0]], ["difference"])
+        carved = Mesh.from_vertices_and_faces(result[0], result[1])
+        # A difference can split the result into disjoint solids (the carved head
+        # plus thin slivers); keep only the main body, using the same rule the
+        # boolean modifiers apply.
+        return SolidDifferenceModifier.largest_piece(carved)
+
+
 class ColumnElement(Element):
     """Class representing a column element with a square section, constructed from the WorldXY Frame.
 
@@ -131,25 +194,56 @@ class ColumnElement(Element):
     # Features
     # =============================================================================
 
-    def compute_features(self) -> list[ColumnFeature]:
-        """Compute the capitel feature of the column.
+    def compute_features(self) -> list[Feature]:
+        """Ensure the capitel feature exists, then return all features in order.
 
-        The feature consists of two boxes forming an L-shaped capitel at the top
-        of the column. The feature is computed once and cached in ``self._features``.
+        The capitel is two boxes forming an L-shaped head at the top of the
+        column, applied as a union (a :class:`ColumnFeature`). It is created once
+        and kept first in the list, so any later features - e.g. a
+        :class:`ColumnCutFeature` carving the head - are applied on top of the
+        formed capitel.
 
         Returns
         -------
-        list[:class:`ColumnFeature`]
+        list[:class:`Feature`]
         """
-        if not self._features:
+        if not any(isinstance(feature, ColumnFeature) for feature in self._features):
             capitel_box0 = Box.from_width_height_depth(self.capitel_width, self.capitel_height, self.depth)
             capitel_box0.translate([self.width * 0.5 + self.capitel_width * 0.5, 0, self.height - self.capitel_height * 0.5])
 
             capitel_box1 = Box.from_width_height_depth(self.depth + self.capitel_width, self.capitel_height, self.capitel_width)
             capitel_box1.translate([self.capitel_width * 0.5, self.width * 0.5 + self.capitel_width * 0.5, self.height - self.capitel_height * 0.5])
 
-            self._features.append(ColumnFeature([capitel_box0, capitel_box1]))
+            self._features.insert(0, ColumnFeature([capitel_box0, capitel_box1]))
         return self._features
+
+    def add_cutters(self, meshes: list, name: str = "column_cutters") -> "ColumnCutFeature":
+        """Store cutter solids as a difference feature carved into the column head.
+
+        The cutters must be given in the column's local frame. The capitel is
+        ensured first (so it is unioned before the cut), then the cutters are
+        stored as a :class:`ColumnCutFeature` - serialized in ``__data__`` and
+        copied with the column, so they remain available for fabrication.
+
+        Parameters
+        ----------
+        meshes : list[:class:`compas.datastructures.Mesh`]
+            Closed cutter solids in the column's local frame.
+        name : str, optional
+            Name for the stored feature.
+
+        Returns
+        -------
+        :class:`ColumnCutFeature`
+            The feature that was appended.
+        """
+        self.compute_features()  # make sure the capitel exists and stays first
+        feature = ColumnCutFeature(meshes, name=name)
+        self._features.append(feature)
+        # Invalidate cached geometry (both element- and model-space) so the cut recomputes.
+        self._elementgeometry = None
+        self._modelgeometry = None
+        return feature
 
     # =============================================================================
     # Geometry
@@ -193,12 +287,17 @@ class ColumnElement(Element):
     # =============================================================================
 
     def compute_elementgeometry(self, include_features: bool = True) -> Mesh:
-        """Compute the mesh shape from the box, optionally unioning the capitel feature.
+        """Compute the mesh shape from the box, applying the column features.
+
+        The capitel union and the cutter difference are boolean ops that emit
+        triangle soup; their coplanar faces are merged back into single polygons
+        so face-face contact detection does not fragment on the triangulation.
 
         Parameters
         ----------
         include_features : bool, optional
-            If True, apply the capitel feature to the base box geometry.
+            If True, apply the column features (capitel union, cutter difference)
+            to the base box geometry.
 
         Returns
         -------
@@ -206,8 +305,11 @@ class ColumnElement(Element):
         """
         mesh = self.box.to_mesh(True)
         if include_features:
+            from compas_tf.solid_difference_modifier import merge_coplanar_faces
+
             for feature in self.compute_features():
                 mesh = feature.apply(mesh)
+            mesh = merge_coplanar_faces(mesh)
         return mesh
 
     def extend(self, distance: float) -> None:

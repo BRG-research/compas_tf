@@ -59,13 +59,12 @@ from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Translation
 from compas.geometry import Vector
+from compas_model.elements import Group
 
 import compas_tf  # noqa: F401
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.floor_model import FloorModel
-from compas_tf.viewer import add_model_to_viewer
 from compas_tf.viewer import make_viewer
-from compas_tf.viewer import show_or_dump
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -133,6 +132,10 @@ floor_model.compute_contacts_inner_beams(tolerance=1.0, minimum_area=1.0)
 contacts = list(floor_model.contacts())
 floor_model.precompute_boolean_modifiers()
 
+# ------------------------------------------------------------------ #
+#  Write
+# ------------------------------------------------------------------ #
+
 compas.json_dump(floor_model, data_dir / "floor_model_booleans.json")
 compas.json_dump(guide, data_dir / "floorguide.json")
 
@@ -147,21 +150,18 @@ _export_meshes = floor_model.export_obj(obj_path)
 #  Viewer
 # ------------------------------------------------------------------ #
 # make_viewer returns a live viewer, or a recorder when watch_viewer.py is
-# running (then show_or_dump writes data/_viewer_scene.json instead of opening
+# running (then viewer.show() writes data/_viewer_scene.json instead of opening
 # a window, and the persistent viewer reloads it).
 
 viewer = make_viewer(data_dir)
-
-add_model_to_viewer(floor_model, viewer)
-
-debug_group = viewer.scene.add_group("debug")
-for item in guide.debug:
-    viewer.scene.add(item, parent=debug_group, linecolor=(1.0, 0.0, 0.0), linewidth=2)
-for item in floor_model.debug:
-    viewer.scene.add(item, parent=debug_group, linecolor=(0.0, 0.8, 0.2), linewidth=3)
-
+g_floor = viewer.scene.add_group("floor_model")
+for element in floor_model.elements():
+    if isinstance(element, Group):
+        continue
+    mesh = element.modelgeometry
+    if mesh is not None:
+        g_floor.add(mesh, name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
 g_contacts = viewer.scene.add_group("contacts")
 for contact in contacts:
     viewer.scene.add(contact.polygon, facecolor=Color.red(), linecolor=Color.red(), parent=g_contacts)
-
-show_or_dump(viewer, data_dir)
+viewer.show()

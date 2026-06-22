@@ -1,10 +1,11 @@
-"""example_4_prop.py
+"""example_model_10_shoring.py
 
-Build and visualize 4-fold rotational schoring (prop/shoring) models
-around the floor column positions, plus a central tower element.
+Build a shoring model: 4-fold rotational schoring (prop) assemblies around the
+floor column positions, four custom vertical props, and a central tower.
 
-Reads floorguide.json written by example_2_floor_model_booleans.py so that
-the prop positions are driven by the same parametric geometry.
+Reads floorguide.json (example_model_1) so the prop positions are driven by the
+same parametric geometry. The individual scaffolding/tower models are merged
+into one ``shoring_model`` (each becomes its own group in the scene tree).
 """
 
 import math
@@ -18,10 +19,12 @@ from compas.geometry import Vector
 from compas_model.elements import Group
 from compas_model.models import Model
 
+from compas_tf.floor_guide import FloorGuide
 from compas_tf.schoring_element import Dataset
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.tower_element import TowerElement
 from compas_tf.viewer import make_viewer
+from compas_tf.viewer import triangulated
 
 SchoringElement.clear_cache()
 
@@ -32,16 +35,16 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 # ------------------------------------------------------------------ #
 
 column_size = 220
-prop_height = 2500
-story_height = 3200
-guide = compas.json_load(data_dir / "floorguide.json")
+prop_height = 2500     # height of the inclined props
+story_height = 3200    # height of the custom vertical props (below the floor)
+guide: FloorGuide = compas.json_load(data_dir / "floorguide.json")
 column_plan = guide.corner_point_column(column_size)
 
 # ------------------------------------------------------------------ #
-#  Schoring models (4-fold rotational symmetry)
+#  Schoring sub-models (4-fold rotational symmetry)
 # ------------------------------------------------------------------ #
 
-schoring_models = []
+submodels = []
 
 model_scaffolding0 = SchoringElement.from_points_and_vectors(
     p0=Point(column_size / 2, 0, prop_height),
@@ -55,17 +58,18 @@ model_scaffolding0 = SchoringElement.from_points_and_vectors(
 )
 model_scaffolding0.transformation *= Translation.from_vector(Vector(column_plan.x, column_plan.y, 0))
 
-model_scaffolding1 = model_scaffolding0.copy()
+model_scaffolding1 = model_scaffolding0.duplicate()
 model_scaffolding1.transformation = Translation.from_vector(Vector(column_plan.x, column_plan.y, 0)) * Rotation.from_axis_and_angle(Vector(0, 0, 1), math.pi / 2, Point(0, 0, 0))
 
+# .duplicate() gives independent copies (new guids) so the sub-models can merge.
 for i in range(4):
     rot = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
-    m0 = model_scaffolding0.copy()
+    m0 = model_scaffolding0.duplicate()
     m0.transformation = rot * m0.transformation
-    schoring_models.append(m0)
-    m1 = model_scaffolding1.copy()
+    submodels.append(m0)
+    m1 = model_scaffolding1.duplicate()
     m1.transformation = rot * m1.transformation
-    schoring_models.append(m1)
+    submodels.append(m1)
 
 # Custom vertical prop (no foot/head) on each side
 model_custom = SchoringElement.from_points_and_vectors_no_foot_no_head(
@@ -78,34 +82,52 @@ model_custom = SchoringElement.from_points_and_vectors_no_foot_no_head(
     dataset_hat=Dataset.schoring_head_custom,
 )
 for i in range(4):
-    m = model_custom.copy()
+    m = model_custom.duplicate()
     m.transformation = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0))
-    schoring_models.append(m)
+    submodels.append(m)
 
 # Tower at origin
 model_tower = Model("tower")
 tower = TowerElement()
 tower.transformation = Rotation.from_axis_and_angle(Vector(0, 0, 1), math.pi / 4, Point(0, 0, 0))
 model_tower.add_element(tower)
-schoring_models.append(model_tower)
+submodels.append(model_tower)
+
+# ------------------------------------------------------------------ #
+#  Merge into one shoring_model (unique group names so the tree is clean)
+# ------------------------------------------------------------------ #
+
+prop_index = 0
+for sm in submodels:
+    if sm.name != "tower":
+        sm.name = f"prop_{prop_index}"
+        prop_index += 1
+
+shoring_model = Model(name="shoring_model").merge(submodels)
 
 # ------------------------------------------------------------------ #
 #  Write
 # ------------------------------------------------------------------ #
 
-compas.json_dump(schoring_models, data_dir / "schoring_models.json")
+compas.json_dump(shoring_model, data_dir / "shoring_model.json")
 
 # ------------------------------------------------------------------ #
-#  Viewer
+#  View
 # ------------------------------------------------------------------ #
+
+
+def add_tree(node, viewer_parent):
+    """Mirror the model tree into the viewer, preserving the group hierarchy."""
+    for child in node.children:
+        element = child.element
+        if isinstance(element, Group):
+            add_tree(child, viewer_parent.add_group(element.name))
+        else:
+            mesh = element.modelgeometry
+            if mesh is not None:
+                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
+
 
 viewer = make_viewer(data_dir)
-for model in schoring_models:
-    g = viewer.scene.add_group(model.name or "model")
-    for element in model.elements():
-        if isinstance(element, Group):
-            continue
-        mesh = element.modelgeometry
-        if mesh is not None:
-            g.add(mesh, name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
+add_tree(shoring_model.tree.root, viewer.scene)
 viewer.show()
