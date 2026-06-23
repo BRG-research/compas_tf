@@ -35,8 +35,8 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 # ------------------------------------------------------------------ #
 
 column_size = 220
-prop_height = 2500     # height of the inclined props
-story_height = 3200    # height of the custom vertical props (below the floor)
+prop_height = 2500  # height of the inclined props
+story_height = 3200  # height of the custom vertical props (below the floor)
 guide: FloorGuide = compas.json_load(data_dir / "floorguide.json")
 column_plan = guide.corner_point_column(column_size)
 
@@ -125,7 +125,7 @@ def add_tree(node, viewer_parent):
         else:
             mesh = element.modelgeometry
             if mesh is not None:
-                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
+                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.85, 0.85, 0.85))
 
 
 viewer = make_viewer(data_dir)

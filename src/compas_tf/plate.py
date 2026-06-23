@@ -252,22 +252,33 @@ class PlateElement(Element):
                 self._mesh = PlateElement.loft(bottom_pl, top_pl, cap=True, close=True)
 
     @property
+    def _placement(self) -> Transformation:
+        """The transform that places the plate's local geometry where it sits.
+
+        When the plate is in a model this is its :attr:`modeltransformation`
+        (own transformation + parent groups + model transformation) - the very
+        transform used to build :attr:`modelgeometry`. Without a model the
+        tree/parents are unavailable, so it falls back to the plate's own
+        transformation. Applying it to the local outlines / base planes keeps
+        them aligned with the plate's mesh wherever it is placed.
+        """
+        if self.model is not None:
+            return self.modeltransformation
+        return self.transformation or Transformation()
+
+    @property
     def top_polyline(self) -> Optional[Polyline]:
-        """Get top polyline with transformation applied."""
+        """Get the top polyline, placed in the plate's model frame."""
         if self._top_polyline is None:
             return None
-        if self.transformation:
-            return self._top_polyline.transformed(self.transformation)
-        return self._top_polyline
+        return self._top_polyline.transformed(self._placement)
 
     @property
     def bottom_polyline(self) -> Optional[Polyline]:
-        """Get bottom polyline with transformation applied."""
+        """Get the bottom polyline, placed in the plate's model frame."""
         if self._bottom_polyline is None:
             return None
-        if self.transformation:
-            return self._bottom_polyline.transformed(self.transformation)
-        return self._bottom_polyline
+        return self._bottom_polyline.transformed(self._placement)
 
     def fabrication_polylines(self) -> tuple[Optional[Polyline], Optional[Polyline]]:
         """Return ``(bottom, top)`` polylines wound the SAME direction.
@@ -339,7 +350,16 @@ class PlateElement(Element):
 
     @staticmethod
     def _longest_edge_direction(points) -> Vector:
-        """Return the unitized direction of the longest edge in a point sequence."""
+        """Return the unitized direction of the longest edge in a point sequence.
+
+        A parallelogram-shaped plate has two equal-length, anti-parallel long
+        edges, so after a rotation their lengths differ only by float noise and a
+        strict ``>`` would pick one or the other at random - flipping the
+        direction 180 deg between otherwise-identical rotational copies (e.g. the
+        4 oculus wedge plates). Keeping the FIRST edge within a relative
+        tolerance of the maximum makes the choice stable across those copies, so
+        their base frames stay consistently oriented.
+        """
         best_len = -1.0
         best_vec = Vector.from_start_end(points[0], points[1])
         n = len(points)
@@ -347,7 +367,7 @@ class PlateElement(Element):
             j = (i + 1) % n
             v = Vector.from_start_end(points[i], points[j])
             length = v.length
-            if length > best_len:
+            if length > best_len * (1.0 + 1e-6):
                 best_len = length
                 best_vec = v
         return best_vec.unitized()
@@ -376,8 +396,7 @@ class PlateElement(Element):
             yaxis = zaxis.cross(xaxis)
             frame = Frame(self.bottom.centroid, xaxis, yaxis)
 
-        if self.transformation:
-            frame.transform(self.transformation)
+        frame.transform(self._placement)
         return frame
 
     @property
@@ -404,8 +423,7 @@ class PlateElement(Element):
             yaxis = zaxis.cross(xaxis)
             frame = Frame(self.top.centroid, xaxis, yaxis)
 
-        if self.transformation:
-            frame.transform(self.transformation)
+        frame.transform(self._placement)
         return frame
 
     @staticmethod
@@ -541,13 +559,106 @@ class PlateElement(Element):
             mesh = Mesh.from_vertices_and_faces(vertices, faces)
 
         if include_features and self._features:
+            from compas_tf.solid_difference_modifier import MeshCutFeature
             from compas_tf.solid_difference_modifier import merge_coplanar_faces
 
+            # Gather every cutter solid (a MeshCutFeature stores its meshes; the
+            # typed Cylinder/Prism cuts derive theirs from their parametric form)
+            # and subtract them in ONE union-then-difference. Applying each
+            # feature separately leaves T-junctions and a non-watertight result;
+            # unioning the cutters first keeps the carved plate closed.
+            cutters = []
             for feature in self._features:
-                mesh = feature.apply(mesh)
+                cutters.extend(getattr(feature, "meshes", None) or [])
+            if cutters:
+                mesh = MeshCutFeature(cutters).apply(mesh)
             mesh = merge_coplanar_faces(mesh)
 
         return mesh
+
+    def get_features(self, types: Optional[list] = None, minimal: bool = False) -> list:
+        """Return the plate's features, placed in the plate's model frame.
+
+        Filter by type to pull out a specific kind of feature for fabrication or
+        inspection, e.g. ``get_features(["MeshCutFeature"])`` to recover just the
+        cutter solids.
+
+        The features are stored in the plate's *local* frame (so they travel
+        with the plate and survive serialization). This returns independent
+        copies whose geometry has been moved into model coordinates by the
+        plate's :attr:`modeltransformation` - the same transform used to build
+        :attr:`modelgeometry` - so the returned cutters line up with the plate
+        wherever it sits, with no transform needed at the call site. The stored
+        features are left untouched.
+
+        Parameters
+        ----------
+        types : list[str | type], optional
+            Feature types to keep, given as class names (e.g.
+            ``"MeshCutFeature"``) or the classes themselves. ``None`` (default)
+            returns every feature, in application order.
+        minimal : bool, optional
+            If False (default), return the placed feature objects (whose
+            ``meshes`` are the boolean cutter solids). If True, return the
+            features' *minimal* parametric geometry instead - the axis ``Line``
+            of every :class:`CylinderCutFeature` and the ``(bottom, top)``
+            polylines of every :class:`PrismCutFeature`, as a flat list. Features
+            with no minimal form (a plain mesh cut) are skipped.
+
+        Returns
+        -------
+        list[:class:`Feature`] or list[:class:`compas.geometry.Geometry`]
+        """
+        features = self._features
+        if types is not None:
+            names = {t if isinstance(t, str) else t.__name__ for t in types}
+            features = [feature for feature in features if type(feature).__name__ in names]
+
+        # Place each feature the same way the outlines and base planes are placed
+        # (see :attr:`_placement`), so they line up with modelgeometry. ``placed``
+        # moves the parametric geometry for typed cuts and the meshes otherwise.
+        transformation = self._placement
+        placed = []
+        for feature in features:
+            if hasattr(feature, "placed"):
+                placed.append(feature.placed(transformation))
+            else:
+                placed.append(feature.copy())
+
+        if not minimal:
+            return placed
+
+        geometries = []
+        for feature in placed:
+            geometry = getattr(feature, "minimal", None)
+            if geometry is None:
+                continue
+            if isinstance(geometry, (tuple, list)):
+                geometries.extend(geometry)
+            else:
+                geometries.append(geometry)
+        return geometries
+
+    def add_feature(self, feature):
+        """Append a feature and invalidate cached geometry so the cut recomputes.
+
+        Mirrors :meth:`add_cutters` (which is sugar for a
+        :class:`MeshCutFeature`), but takes any pre-built feature - e.g. a
+        :class:`CylinderCutFeature` or :class:`PrismCutFeature`.
+
+        Parameters
+        ----------
+        feature : :class:`compas_model.elements.element.Feature`
+
+        Returns
+        -------
+        :class:`compas_model.elements.element.Feature`
+            The feature that was appended.
+        """
+        self._features.append(feature)
+        self._elementgeometry = None
+        self._modelgeometry = None
+        return feature
 
     def add_cutters(self, meshes: list, name: str = "plate_cutters"):
         """Store cutter solids as a difference feature carved into the plate.

@@ -483,6 +483,30 @@ class ConnectorWedgeElement(Element):
             )
         return cylinders
 
+    def end_polylines(self):
+        """The wedge's two triangular end faces as co-wound closed polylines.
+
+        The prism is the PROFILE copied to ``x = -length/2`` (bottom) and
+        ``x = +length/2`` (top); both use the same PROFILE order, so vertex *i*
+        of the bottom matches vertex *i* of the top (same winding), exactly the
+        ``(bottom, top)`` representation a plate uses. Returned in model space
+        (the wedge ``transformation`` applied), to match :attr:`boolean_geometry`.
+
+        Returns
+        -------
+        tuple(:class:`compas.geometry.Polyline`, :class:`compas.geometry.Polyline`)
+            The ``(bottom, top)`` end-face polylines.
+        """
+        hw = 0.5 * self.length
+        neg = [Point(-hw, p.y, p.z) for p in self.PROFILE]
+        pos = [Point(hw, p.y, p.z) for p in self.PROFILE]
+        bottom = Polyline(neg + [neg[0]])
+        top = Polyline(pos + [pos[0]])
+        if self.transformation:
+            bottom = bottom.transformed(self.transformation)
+            top = top.transformed(self.transformation)
+        return bottom, top
+
     def build_mesh(self) -> Mesh:
         """Loft the fixed PROFILE between x = -length/2 and +length/2 (WedgeElement)."""
         hw = 0.5 * self.length
@@ -533,6 +557,81 @@ class ConnectorWedgeElement(Element):
         if self.transformation:
             mesh = mesh.transformed(self.transformation)
         return mesh
+
+    def inclined_face_boxes(self, depth=100.0, margin=0.0):
+        """One oriented box per INCLINED wedge face (the two slants A-B, A-C).
+
+        Each box's large face lies on the incline (box X = wedge length, box Y =
+        the slant edge), and the box extends ``depth`` along that face's OUTWARD
+        normal - into the plate the face meets. Returned in model space (wedge
+        transform applied), so the box follows the inclined face exactly, with no
+        extra transform needed. The two boxes are returned in face order
+        ``[A-B, A-C]`` - one for each neighbour the wedge joins.
+        """
+        A, B, C = (Point(*p) for p in self.PROFILE)  # tip, top-left, top-right
+        centroid = Point((A.x + B.x + C.x) / 3.0, (A.y + B.y + C.y) / 3.0, (A.z + B.z + C.z) / 3.0)
+
+        boxes = []
+        for P0, P1 in [(A, B), (A, C)]:  # the two inclined edges (skip top B-C)
+            slant = Vector.from_start_end(P0, P1)
+            edge_len = slant.length
+            yaxis = slant.unitized()
+            xaxis = Vector(1, 0, 0)  # along the wedge length
+            normal = xaxis.cross(yaxis).unitized()  # box frame z = X x Y
+            face_center = Point(0.0, 0.5 * (P0.y + P1.y), 0.5 * (P0.z + P1.z))
+            # make the normal point AWAY from the wedge interior (out into the plate)
+            if normal.dot(Vector.from_start_end(centroid, face_center)) < 0:
+                normal, yaxis = normal.scaled(-1.0), yaxis.scaled(-1.0)
+            center = face_center + normal * (0.5 * -depth)  # box sits on the plate side of the face
+            frame = Frame(center, xaxis, yaxis)  # z-axis = x cross y = normal
+            box = Box(self.length + 2 * margin, edge_len + 2 * margin, depth, frame=frame).to_mesh()
+            if self.transformation:
+                box = box.transformed(self.transformation)
+            boxes.append(box)
+        return boxes
+
+    def inclined_face_box_outlines(self, depth=100.0, margin=0.0):
+        """The (bottom, top) rectangle outlines of each inclined-face box.
+
+        Same boxes as :meth:`inclined_face_boxes`, but as their two large-face
+        rectangles - ``bottom`` lying ON the incline, ``top`` ``depth`` into the
+        plate - returned co-wound (vertex *i* of ``bottom`` matches vertex *i* of
+        ``top``), in model space. This is the minimal, parametric drilling /
+        fabrication form: feed a pair to a
+        :class:`compas_tf.solid_difference_modifier.PrismCutFeature` to get both
+        the box cutter (the loft) and the outlines (its ``minimal``). One pair
+        per inclined face, in order ``[A-B, A-C]``.
+        """
+        A, B, C = (Point(*p) for p in self.PROFILE)  # tip, top-left, top-right
+        centroid = Point((A.x + B.x + C.x) / 3.0, (A.y + B.y + C.y) / 3.0, (A.z + B.z + C.z) / 3.0)
+
+        pairs = []
+        for P0, P1 in [(A, B), (A, C)]:
+            slant = Vector.from_start_end(P0, P1)
+            yaxis = slant.unitized()
+            xaxis = Vector(1, 0, 0)
+            normal = xaxis.cross(yaxis).unitized()
+            face_center = Point(0.0, 0.5 * (P0.y + P1.y), 0.5 * (P0.z + P1.z))
+            if normal.dot(Vector.from_start_end(centroid, face_center)) < 0:
+                normal, yaxis = normal.scaled(-1.0), yaxis.scaled(-1.0)
+            hx = 0.5 * (self.length + 2 * margin)
+            hy = 0.5 * (slant.length + 2 * margin)
+            # the large face ON the incline (bottom) and the one depth in (top),
+            # corners in the same order -> co-wound.
+            corners = [
+                face_center - xaxis * hx - yaxis * hy,
+                face_center + xaxis * hx - yaxis * hy,
+                face_center + xaxis * hx + yaxis * hy,
+                face_center - xaxis * hx + yaxis * hy,
+            ]
+            bottom = Polyline(corners + [corners[0]])
+            shifted = [c - normal * depth for c in corners]
+            top = Polyline(shifted + [shifted[0]])
+            if self.transformation:
+                bottom = bottom.transformed(self.transformation)
+                top = top.transformed(self.transformation)
+            pairs.append((bottom, top))
+        return pairs
 
     @property
     def boolean_geometry(self) -> Mesh:
@@ -662,11 +761,11 @@ class ConnectorElement(Element):
     name : str, optional
     """
 
-    WIDTH = 21.0      # Y, along the contact face
-    BACK = 140.0      # -X, into the column
-    FRONT = 265.0     # +X, into the rib (longest extent -> toward the rib)
-    HEIGHT = 350.0    # -Z, downward from the top
-    RADIUS = 25.0     # cylinder dowel radius
+    WIDTH = 21.0  # Y, along the contact face
+    BACK = 140.0  # -X, into the column
+    FRONT = 265.0  # +X, into the rib (longest extent -> toward the rib)
+    HEIGHT = 350.0  # -Z, downward from the top
+    RADIUS = 25.0  # cylinder dowel radius
 
     @property
     def __data__(self) -> dict:

@@ -93,11 +93,12 @@ for i, (a, b, contact) in enumerate(edge_contacts):
 #  Write
 # ------------------------------------------------------------------ #
 
-compas.json_dump(cantilever_model, data_dir / "cantilever_model.json")
+compas.json_dump(cantilever_model, data_dir / "cantilevers_model.json")
 
 # ------------------------------------------------------------------ #
 #  View
 # ------------------------------------------------------------------ #
+
 
 def add_tree(node, viewer_parent):
     """Mirror the model tree into the viewer, preserving the group hierarchy so
@@ -110,7 +111,7 @@ def add_tree(node, viewer_parent):
         else:
             mesh = element.modelgeometry
             if mesh is not None:
-                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
+                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.85, 0.85, 0.85))
 
 
 viewer = make_viewer(data_dir)

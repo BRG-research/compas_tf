@@ -124,10 +124,14 @@ def _reload():
             geometry = record.get("geometry")
             if geometry is None:
                 continue
+            # Forward the recorded element name so the sidebar scene-tree labels
+            # each object (e.g. "oculus_0") instead of falling back to the
+            # geometry type ("Mesh"). _style() carries only style keys, not name.
+            name = record.get("name")
             try:
-                obj = viewer.scene.add(geometry, parent=parent, **_style(record))
+                obj = viewer.scene.add(geometry, parent=parent, name=name, **_style(record))
             except Exception:
-                obj = viewer.scene.add(geometry, parent=parent)
+                obj = viewer.scene.add(geometry, parent=parent, name=name)
             objects[record["id"]] = obj
             count += 1
     finally:

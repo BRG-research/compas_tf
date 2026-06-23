@@ -26,9 +26,8 @@ column_model: Model = compas.json_load(data_dir / "column_model.json")
 
 column_models = []
 for i in range(4):
-
     copy = column_model.duplicate()
-    copy.transformation = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0)) * copy.transformation 
+    copy.transformation = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0)) * copy.transformation
 
     # Change names
     copy.name = f"column_model_{i}"

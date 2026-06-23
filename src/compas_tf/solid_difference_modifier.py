@@ -46,6 +46,113 @@ class MeshCutFeature(Feature):
         carved = Mesh.from_vertices_and_faces(result[0], result[1])
         return SolidDifferenceModifier.largest_piece(carved)
 
+    # A generic mesh cut has no parametric ("minimal") form; the typed subclasses
+    # below override this to return their defining line / polylines.
+    minimal = None
+
+    def placed(self, transformation) -> "MeshCutFeature":
+        """Return an independent copy with the cutter geometry moved by ``transformation``.
+
+        Used to bring a stored (local-frame) feature into model space without
+        mutating the original. Subclasses that are parametric override this to
+        move their defining geometry instead of the (derived) meshes.
+        """
+        feature = self.copy()
+        feature.meshes = [mesh.transformed(transformation) for mesh in feature.meshes]
+        return feature
+
+
+class CylinderCutFeature(MeshCutFeature):
+    """A cylindrical cut defined parametrically by an axis ``line`` + ``radius``.
+
+    The ``(line, radius, sides)`` is the source of truth; the closed boolean
+    cutter mesh is derived from it on demand (so it is never serialized). Use
+    :attr:`minimal` (the axis line) for fabrication / inspection, and
+    :attr:`meshes` for the boolean difference.
+
+    Parameters
+    ----------
+    line : :class:`compas.geometry.Line`
+        The cylinder axis, in the host element's local frame.
+    radius : float
+        The cylinder radius.
+    sides : int, optional
+        Polygon resolution of the derived cutter mesh.
+    name : str, optional
+    """
+
+    @property
+    def __data__(self) -> dict:
+        return {"line": self.line, "radius": self.radius, "sides": self.sides, "name": self.name}
+
+    def __init__(self, line=None, radius: float = 10.0, sides: int = 8, name: Optional[str] = None):
+        Feature.__init__(self, name=name)
+        self.line = line
+        self.radius = radius
+        self.sides = sides
+
+    @property
+    def meshes(self) -> list:
+        """The cylinder cutter as a one-item list of closed meshes (for booleans)."""
+        from compas_tf.connectors import ConnectorCylinderElement
+
+        return [ConnectorCylinderElement(line=self.line, radius=self.radius, sides=self.sides).compute_mesh()]
+
+    @property
+    def minimal(self):
+        """The axis line - the minimal representation of a cylinder cut."""
+        return self.line
+
+    def placed(self, transformation) -> "CylinderCutFeature":
+        feature = self.copy()
+        feature.line = self.line.transformed(transformation)
+        return feature
+
+
+class PrismCutFeature(MeshCutFeature):
+    """A prism cut (box, wedge, ... any extrusion) defined by co-wound ``bottom``
+    and ``top`` boundary polylines, lofted exactly like a plate.
+
+    The two polylines are the source of truth; the closed boolean cutter mesh is
+    the loft between them, derived on demand. Use :attr:`minimal`
+    (``(bottom, top)``) for fabrication / inspection - the same top/bottom
+    representation a :class:`compas_tf.plate.PlateElement` uses.
+
+    Parameters
+    ----------
+    bottom, top : :class:`compas.geometry.Polyline`
+        Co-wound boundary polylines (vertex *i* of ``bottom`` matches vertex *i*
+        of ``top``), in the host element's local frame.
+    name : str, optional
+    """
+
+    @property
+    def __data__(self) -> dict:
+        return {"bottom": self.bottom, "top": self.top, "name": self.name}
+
+    def __init__(self, bottom=None, top=None, name: Optional[str] = None):
+        Feature.__init__(self, name=name)
+        self.bottom = bottom
+        self.top = top
+
+    @property
+    def meshes(self) -> list:
+        """The prism cutter as a one-item list of closed meshes (for booleans)."""
+        from compas_tf.plate import PlateElement
+
+        return [PlateElement.loft(self.bottom, self.top, cap=True, close=True)]
+
+    @property
+    def minimal(self):
+        """``(bottom, top)`` polylines - the minimal representation of a prism cut."""
+        return (self.bottom, self.top)
+
+    def placed(self, transformation) -> "PrismCutFeature":
+        feature = self.copy()
+        feature.bottom = self.bottom.transformed(transformation)
+        feature.top = self.top.transformed(transformation)
+        return feature
+
 
 def _difference_backend():
     """Return the pairwise boolean-difference backend (compas_manifold).

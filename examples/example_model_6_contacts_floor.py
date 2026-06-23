@@ -1,12 +1,16 @@
 import pathlib
 
 import compas
+from compas.geometry import Point
+from compas.geometry import Vector
 from compas_model.elements import Group
 from compas_model.models import Model
 
 from compas_tf.connectors import ConnectorWedgeElement
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.plate import PlateElement
+from compas_tf.solid_difference_modifier import CylinderCutFeature
+from compas_tf.solid_difference_modifier import PrismCutFeature
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated
 
@@ -73,8 +77,8 @@ for k, (a, b, contact) in enumerate(contacts):
     thickness = max(a.computed_thickness, b.computed_thickness)
     wedge = ConnectorWedgeElement.from_contact(
         contact,
-        length_margin=1.5 * thickness,   # target_length = edge - 3 * thickness
-        cylinder_radius=10.0,            # dowel Ø 20
+        length_margin=1.5 * thickness,  # target_length = edge - 3 * thickness
+        cylinder_radius=10.0,  # dowel Ø 20
         cylinder_spacing=320.0,
         cylinder_sides=8,
         name=f"connector_wedge_{k}",
@@ -84,14 +88,24 @@ for k, (a, b, contact) in enumerate(contacts):
     for cylinder in cylinders:
         floor_model.add_element(cylinder, parent=connectors_group)
 
-    # Store the cutters as features on BOTH plates of the contact, in each
-    # plate's local frame: the wedge solid + each cylinder (dowel hole). The
-    # plate carves itself in compute_elementgeometry, giving a result identical
-    # to the WedgeElement / DowelElement cut in example_2.
-    cutters_world = [wedge.boolean_geometry] + [cyl.boolean_geometry for cyl in cylinders]
+    # The wedge stays as the VISIBLE connector element above; the BOOLEAN cut is
+    # no longer the wedge shape. Each neighbour plate is cut by the box of the
+    # inclined wedge face that meets it - one box per neighbour - stored as a
+    # PrismCutFeature from the box's co-wound (bottom, top) outlines. That gives
+    # both the box cutter (the loft) and the drilling outlines (its minimal).
+    # inclined_face_box_outlines returns [A-B, A-C] in face order: A-B faces the
+    # -normal side, A-C the +normal side, so match each to the plate on its side.
+    outlines = wedge.inclined_face_box_outlines(depth=2.0 * thickness / 3.0)  # world, [(b,t) A-B, A-C]
+    cnormal = Vector(*contact.polygon.normal)
+    ccenter = Point(*contact.polygon.centroid)
+    dowels = [(cyl.axis, cyl.radius, cyl.sides) for cyl in cylinders]  # world
     for plate in (a, b):
+        side = Vector.from_start_end(ccenter, Point(*plate.modelgeometry.centroid())).dot(cnormal)
+        box_bottom, box_top = outlines[1] if side >= 0 else outlines[0]  # +normal -> A-C, -normal -> A-B
         to_local = plate.modeltransformation.inverted()
-        plate.add_cutters([mesh.transformed(to_local) for mesh in cutters_world], name=f"connector_{k}")
+        plate.add_feature(PrismCutFeature(box_bottom.transformed(to_local), box_top.transformed(to_local), name=f"connector_{k}_box"))
+        for j, (axis, radius, sides) in enumerate(dowels):
+            plate.add_feature(CylinderCutFeature(axis.transformed(to_local), radius, sides=sides, name=f"connector_{k}_dowel_{j}"))
 
 print(f"wedge connectors placed: {len(contacts)}  (cutters stored as plate features)")
 
@@ -123,6 +137,7 @@ print(f"[obj] wrote data/floor_model.obj ({len(_meshes)} objects)")
 #  View
 # ------------------------------------------------------------------ #
 
+
 def add_tree(node, viewer_parent):
     """Mirror the model tree into the viewer, preserving the group hierarchy so
     quarters_model / oculus_model (and their subgroups) show up as their own
@@ -134,7 +149,7 @@ def add_tree(node, viewer_parent):
         else:
             mesh = element.modelgeometry
             if mesh is not None:
-                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
+                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.85, 0.85, 0.85))
 
 
 viewer = make_viewer(data_dir)

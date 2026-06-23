@@ -62,8 +62,7 @@ quarter_model.transformation = Translation.from_vector([0, 0, guide.bay_height])
 
 quarter_models = []
 for i in range(4):
-
-    copy = quarter_model.duplicate()      # independent copy (new guids) so the 4 can merge
+    copy = quarter_model.duplicate()  # independent copy (new guids) so the 4 can merge
     copy.transformation = Rotation.from_axis_and_angle(Vector(0, 0, 1), i * math.pi / 2, Point(0, 0, 0)) * copy.transformation
     # Change names
     copy.name = f"quarter_model_{i}"
@@ -88,6 +87,7 @@ compas.json_dump(quarters_model, data_dir / "quarters_model.json")
 viewer = make_viewer(data_dir)
 root_group = viewer.scene.add_group(quarters_model.name)
 
+
 def add_tree(node, viewer_parent):
     """Mirror the model tree into the viewer (mesh-only), keeping the groups -
     so the three bed rows show up as their own groups in the scene tree."""
@@ -98,7 +98,8 @@ def add_tree(node, viewer_parent):
         else:
             mesh = element.modelgeometry
             if mesh is not None:
-                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
+                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.85, 0.85, 0.85))
+
 
 add_tree(quarters_model.tree.root, root_group)
 viewer.show()

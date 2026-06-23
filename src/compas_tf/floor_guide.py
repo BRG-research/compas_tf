@@ -273,8 +273,8 @@ class FloorGuide(Data):
             result1 = intersection_plane_plane(construction_planes["inner_ribs"][1][1], plane1)
             line0 = Line(result0[0], result0[1])
             line2 = Line(result1[1], result1[0])
-            line0 = Line(line0.start, line0.end+line0.direction*1000)
-            line2 = Line(line2.start, line2.end+line2.direction*1000)
+            line0 = Line(line0.start, line0.end + line0.direction * 1000)
+            line2 = Line(line2.start, line2.end + line2.direction * 1000)
             plane0 = Plane(plane0.point, Vector.cross(line0.direction, self.quarter_column_polygon.lines[1].direction))
             plane2 = Plane(plane2.point, Vector.cross(line2.direction, self.quarter_column_polygon.lines[3].direction))
 
@@ -290,7 +290,7 @@ class FloorGuide(Data):
 
             construction_planes["wedges"] = [
                 [plane0.copy(), plane0.offset(self.size_wedge)],
-                [plane1.copy(), plane1.copy().offset(self.size_wedge*1.25)], # plane1_offset
+                [plane1.copy(), plane1.copy().offset(self.size_wedge * 1.25)],  # plane1_offset
                 [plane2.copy(), plane2.offset(self.size_wedge)],
                 [plane4.copy(), plane4.offset(self.size_inner_beams)],
                 [plane5.copy(), plane5.offset(self.size_inner_beams)],
@@ -400,7 +400,6 @@ class FloorGuide(Data):
             Polygon([points0[0], points0[1], points1[1], points1[0]]),
             Polygon([points0[1], points0[2], points1[2], points1[1]]),
             Polygon([points0[2], points0[3], points1[3], points1[2]]),
-
             Polygon([points1[0], points1[1], points2[1], points2[0]]),
             Polygon([points1[1], points1[2], points2[1] + (points2[2] - points2[0]) * 0.25, points2[1] - (points2[2] - points2[0]) * 0.25]),
             Polygon([points1[2], points1[3], points2[2], points2[1]]),
@@ -410,9 +409,6 @@ class FloorGuide(Data):
         # cutter plate a finite thickness (closed solid for the boolean).
         polylines_offset = []
         for idx, polyline in enumerate(polylines):
-
-
-
             dir0 = polylines[idx].points[1] - polylines[idx].points[0]
             dir1 = polylines[idx].points[3] - polylines[idx].points[2]
             dir0.unitize()
@@ -441,13 +437,12 @@ class FloorGuide(Data):
                 dir2.unitize()
                 dir3.unitize()
                 # polylines[idx][2] = polylines[idx][2] - dir3
-                # polylines[idx][3] = polylines[idx][3] - dir3 
-                
+                # polylines[idx][3] = polylines[idx][3] - dir3
+
                 dir2 *= 100
                 dir3 *= 100
                 polylines[idx][0] = polylines[idx][0] - dir2
                 polylines[idx][1] = polylines[idx][1] - dir2
-
 
             z_axis = Vector.cross(polylines[idx].lines[1].direction, polylines[idx].lines[0].direction)
             z_axis.unitize()
@@ -455,7 +450,6 @@ class FloorGuide(Data):
 
         plates = []
         for i in range(len(polylines)):
-
             top = Polyline(list(polylines[i].points) + [polylines[i].points[0]])
             bottom = Polyline(list(polylines_offset[i].points) + [polylines_offset[i].points[0]])
             plates.append(PlateElement(top_polyline=top, bottom_polyline=bottom))
@@ -732,13 +726,7 @@ class FloorGuide(Data):
         Used as the bottom level of the boolean blocks that cut the column, so
         the column is cut down exactly to the deepest point of the outer ribs.
         """
-        return min(
-            pt[2]
-            for plate in self.outer_ribs
-            for poly in (plate.top_polyline, plate.bottom_polyline)
-            if poly is not None
-            for pt in poly.points
-        )
+        return min(pt[2] for plate in self.outer_ribs for poly in (plate.top_polyline, plate.bottom_polyline) if poly is not None for pt in poly.points)
 
     @property
     def beds(self):
@@ -771,7 +759,12 @@ class FloorGuide(Data):
 
             plates = []
             for i in range(len(cut00.points) - 1):
-                top = Polyline(
+                # The cut00/cut01 face is physically the LOWER face of the bed and
+                # cut10/cut11 the upper one, so assign cut00/cut01 -> bottom and
+                # cut10/cut11 -> top. That makes the plate's base-plane normal point
+                # UP (out of the floor), consistent with the other plate families,
+                # instead of down (which had top/bottom inverted).
+                bottom = Polyline(
                     [
                         cut00.points[i],
                         cut00.points[i + 1],
@@ -780,7 +773,7 @@ class FloorGuide(Data):
                         cut00.points[i],
                     ]
                 )
-                bottom = Polyline(
+                top = Polyline(
                     [
                         cut10.points[i],
                         cut10.points[i + 1],
@@ -1287,7 +1280,7 @@ class FloorGuide(Data):
         1x inner plate connecting the 4 beams
         """
 
-        def _wedge(planes, bottom_plane, top_plane):
+        def _wedge(planes, bottom_plane, top_plane, flip=False):
             pts_bottom, pts_top = [], []
             n = len(planes)
             for i in range(n):
@@ -1299,10 +1292,11 @@ class FloorGuide(Data):
                     pts_bottom.append(Point(*rb))
                 if rt:
                     pts_top.append(Point(*rt))
-            return PlateElement(
-                top_polyline=Polyline(pts_top + [pts_top[0]]),
-                bottom_polyline=Polyline(pts_bottom + [pts_bottom[0]]),
-            )
+            top = Polyline(pts_top + [pts_top[0]])
+            bottom = Polyline(pts_bottom + [pts_bottom[0]])
+            if flip:  # swap which face is top vs bottom (for the 8 side plates)
+                top, bottom = bottom, top
+            return PlateElement(top_polyline=top, bottom_polyline=bottom)
 
         cp = self.construction_planes
         side0 = Plane((0, 0, 0), Vector(0, 0, 1))
@@ -1318,13 +1312,14 @@ class FloorGuide(Data):
 
         plates = []
 
-        # 4 boundary beams
+        # 4 boundary beams (side plates - top/bottom swapped)
         for i in range(4):
             plates.append(
                 _wedge(
                     [side2, rotated[(i + 1) % 4], side0, rotated_inner[(i - 1) % 4]],
                     bottom_plane=rotated[i],
                     top_plane=rotated_inner[i],
+                    flip=True,
                 )
             )
 
@@ -1339,13 +1334,23 @@ class FloorGuide(Data):
                     )
                 )
 
-        # 4 boundary inner bottom wedges beams
+        # 4 boundary inner bottom wedges beams.
+        # Loft between the two horizontal planes (side2 -> side1) with the slanted
+        # inner-beam planes as the side walls, so the bottom/top faces - hence the
+        # base_frame - are the large HORIZONTAL faces (normal +Z) and the plate
+        # lays flat. (Same solid as lofting between the slanted faces, just a
+        # different choice of which faces are bottom/top.)
         for i in range(4):
             plates.append(
                 _wedge(
-                    [side2, rotated_inner[(i + 1) % 4], side1, rotated_inner[(i - 1) % 4].offset(-self.size_tsections)],
-                    bottom_plane=rotated_inner[i],
-                    top_plane=rotated_inner[i].offset(-self.size_tsections),
+                    [
+                        rotated_inner[i],
+                        rotated_inner[(i + 1) % 4],
+                        rotated_inner[i].offset(-self.size_tsections),
+                        rotated_inner[(i - 1) % 4].offset(-self.size_tsections),
+                    ],
+                    bottom_plane=side2,
+                    top_plane=side1,
                 )
             )
 

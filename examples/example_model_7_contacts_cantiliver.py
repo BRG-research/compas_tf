@@ -27,21 +27,24 @@ catiliver_model = Model(name="floor_model").merge([quarter_model, column_model])
 # Compute contacts between individual groups
 # ------------------------------------------------------------------ #
 
-catiliver_model.compute_contacts_between_groups([
-    "quarter_model",
-    "column_model",
-])
+catiliver_model.compute_contacts_between_groups(
+    [
+        "quarter_model",
+        "column_model",
+    ]
+)
 print(f"contacts between groups: {sum(1 for _ in catiliver_model.contacts())}")
 
 # ------------------------------------------------------------------ #
 #  Write
 # ------------------------------------------------------------------ #
 
-compas.json_dump(catiliver_model, data_dir / "floor_model.json")
-    
+compas.json_dump(catiliver_model, data_dir / "cantiliver_model.json")
+
 # ------------------------------------------------------------------ #
 #  View
 # ------------------------------------------------------------------ #
+
 
 def add_tree(node, viewer_parent):
     """Mirror the model tree into the viewer, preserving the group hierarchy so
@@ -54,7 +57,7 @@ def add_tree(node, viewer_parent):
         else:
             mesh = element.modelgeometry
             if mesh is not None:
-                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
+                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.85, 0.85, 0.85))
 
 
 viewer = make_viewer(data_dir)

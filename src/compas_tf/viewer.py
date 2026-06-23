@@ -1,4 +1,3 @@
-
 import os
 import pathlib
 import time
@@ -173,10 +172,37 @@ def watcher_running(data_dir) -> bool:
     return False
 
 
+# Default mesh wireframe (edge) colour. compas_viewer draws a mesh's edges in its
+# "contrast" colour - the face ``color`` DARKENED BY 50% - so the examples' grey
+# (0.85) meshes get a medium-grey wireframe (~0.42). Override that with a single,
+# darker grey so the edges read clearly. Set to ``None`` to keep the default.
+EDGECOLOR = (0.08, 0.08, 0.08)
+
+
+def _apply_edgecolor():
+    """Force every mesh's edge colour to :data:`EDGECOLOR` (face colours and line
+    objects are left untouched).
+
+    compas core ``MeshObject`` resolves its edge colour as
+    ``edgecolor = edgecolor or self.contrastcolor``, so overriding
+    ``contrastcolor`` on that one class is the single, targeted hook that
+    recolours every mesh wireframe - no need to pass a colour per ``scene.add``.
+    Idempotent; a no-op when ``EDGECOLOR`` is ``None``.
+    """
+    if EDGECOLOR is None:
+        return
+    from compas.colors import Color
+    from compas.scene.meshobject import MeshObject
+
+    color = Color(*EDGECOLOR)
+    MeshObject.contrastcolor = property(lambda self: color, lambda self, _value: None)
+
+
 def make_viewer(data_dir):
     """Return a live ``Viewer`` (lighted, mm units), or a recording stand-in
     when watch_viewer.py is running, so the example becomes write-only.
     """
+    _apply_edgecolor()
     if watcher_running(data_dir):
         return _RecorderViewer(data_dir)
     from compas_viewer.config import Config
@@ -227,6 +253,8 @@ def triangulated(mesh):
         try:
             tris = earclip_polygon(Polygon([mesh.vertex_coordinates(v) for v in fv]))
         except Exception:
+            tris = None
+        if not tris:  # earclip raised or returned None/empty for a degenerate face
             out.add_face([vmap[v] for v in fv])  # fall back to the original face
             continue
         for tri in tris:

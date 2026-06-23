@@ -44,6 +44,7 @@ compas.json_dump(oculus_model, data_dir / "oculus_model.json")
 viewer = make_viewer(data_dir)
 root_group = viewer.scene.add_group(oculus_model.name)
 
+
 def add_tree(node, viewer_parent):
     """Mirror the model tree into the viewer (mesh-only), keeping the groups -
     so the three bed rows show up as their own groups in the scene tree."""
@@ -54,7 +55,8 @@ def add_tree(node, viewer_parent):
         else:
             mesh = element.modelgeometry
             if mesh is not None:
-                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.6, 0.6, 0.6))
+                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.85, 0.85, 0.85))
+
 
 add_tree(oculus_model.tree.root, root_group)
 viewer.show()

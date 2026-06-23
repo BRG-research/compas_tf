@@ -10,8 +10,12 @@ from compas_model.elements import Element
 from compas_model.elements.element import Feature
 
 
-class ColumnFeature(Feature):
-    """Feature that unions a set of capitel boxes onto the column base geometry.
+class ColumnAddFeature(Feature):
+    """Additive feature: boolean-unions a set of capitel boxes onto the column.
+
+    This is the additive half of the column feature pair; its subtractive
+    counterpart is :class:`ColumnCutFeature`. Retrieve either kind by name with
+    :meth:`ColumnElement.get_features`.
 
     Parameters
     ----------
@@ -57,13 +61,19 @@ class ColumnFeature(Feature):
         return Mesh.from_vertices_and_faces(result[0], result[1])
 
 
+# Backwards-compatible alias: models serialized before the add/cut rename store
+# the capitel feature under the dtype ``compas_tf.column/ColumnFeature``. Keeping
+# the name bound here lets those JSON files still deserialize.
+ColumnFeature = ColumnAddFeature
+
+
 class ColumnCutFeature(Feature):
     """Feature that boolean-differences cutter solids out of the column geometry.
 
     Stored on the column (in its local frame), so the cut travels with the
     element through copy/serialization and the cutter solids stay available for
-    fabrication. The capitel (a :class:`ColumnFeature`) is applied first, so the
-    cutters carve the already-formed column head.
+    fabrication. The capitel (a :class:`ColumnAddFeature`) is applied first, so
+    the cutters carve the already-formed column head.
 
     Parameters
     ----------
@@ -137,7 +147,7 @@ class ColumnElement(Element):
         The height of the column.
     transformation : Optional[:class:`compas.geometry.Transformation`]
         Transformation applied to the column.
-    features : Optional[list[:class:`ColumnFeature`]]
+    features : Optional[list[:class:`ColumnAddFeature` | :class:`ColumnCutFeature`]]
         Features of the column.
     name : Optional[str]
         If no name is defined, the class name is given.
@@ -179,7 +189,7 @@ class ColumnElement(Element):
         depth: float = 0.4,
         height: float = 3.0,
         transformation: Optional[Transformation] = None,
-        features: Optional[list[ColumnFeature]] = None,
+        features: Optional[list[Feature]] = None,
         name: Optional[str] = None,
         capitel_width: float = 40,
         capitel_height: float = 650,
@@ -194,36 +204,102 @@ class ColumnElement(Element):
     # Features
     # =============================================================================
 
-    def compute_features(self) -> list[Feature]:
-        """Ensure the capitel feature exists, then return all features in order.
+    @staticmethod
+    def _type_names(types) -> set:
+        """Normalize a ``types`` argument (class names and/or classes) to a name set."""
+        return {t if isinstance(t, str) else t.__name__ for t in types}
 
-        The capitel is two boxes forming an L-shaped head at the top of the
-        column, applied as a union (a :class:`ColumnFeature`). It is created once
-        and kept first in the list, so any later features - e.g. a
-        :class:`ColumnCutFeature` carving the head - are applied on top of the
-        formed capitel.
+    def get_features(self, types: Optional[list] = None) -> list[Feature]:
+        """Return the column's features, optionally filtered by feature type.
+
+        This is pure retrieval - no geometry is built and the lazy capitel is
+        NOT created (use :meth:`compute_features` for that). Filter by type to
+        pull out a specific kind of feature for modelling, fabrication or
+        inspection, e.g. ``get_features(["ColumnCutFeature"])`` to recover just
+        the cutter solids.
+
+        Parameters
+        ----------
+        types : list[str | type], optional
+            Feature types to keep, given as class names (e.g.
+            ``"ColumnCutFeature"``) or the classes themselves. ``None`` (default)
+            returns every feature, in application order.
 
         Returns
         -------
         list[:class:`Feature`]
         """
-        if not any(isinstance(feature, ColumnFeature) for feature in self._features):
+        if types is None:
+            return list(self._features)
+        names = self._type_names(types)
+        return [feature for feature in self._features if type(feature).__name__ in names]
+
+    def compute_features(self, types: Optional[list] = None) -> list[Feature]:
+        """Ensure the capitel feature exists, then return the features to apply.
+
+        The capitel is two boxes forming an L-shaped head at the top of the
+        column, applied as a union (a :class:`ColumnAddFeature`). It is created
+        once and kept first in the list, so any later
+        :class:`ColumnCutFeature` carving the head is applied on top of the
+        formed capitel.
+
+        Unlike :meth:`get_features`, this ensures the lazy capitel exists. The
+        ``types`` filter selects which feature types are *applied to the main
+        geometry* by :meth:`compute_elementgeometry`: e.g.
+        ``types=["ColumnAddFeature"]`` yields the uncut head (capitel only),
+        ``types=["ColumnCutFeature"]`` only the cuts.
+
+        Parameters
+        ----------
+        types : list[str | type], optional
+            Feature types to apply (see :meth:`get_features`). ``None`` (default)
+            applies every feature.
+
+        Returns
+        -------
+        list[:class:`Feature`]
+        """
+        if not any(isinstance(feature, ColumnAddFeature) for feature in self._features):
             capitel_box0 = Box.from_width_height_depth(self.capitel_width, self.capitel_height, self.depth)
             capitel_box0.translate([self.width * 0.5 + self.capitel_width * 0.5, 0, self.height - self.capitel_height * 0.5])
 
             capitel_box1 = Box.from_width_height_depth(self.depth + self.capitel_width, self.capitel_height, self.capitel_width)
             capitel_box1.translate([self.capitel_width * 0.5, self.width * 0.5 + self.capitel_width * 0.5, self.height - self.capitel_height * 0.5])
 
-            self._features.insert(0, ColumnFeature([capitel_box0, capitel_box1]))
-        return self._features
+            self._features.insert(0, ColumnAddFeature([capitel_box0, capitel_box1]))
+        return self.get_features(types)
+
+    def add_feature(self, feature: Feature) -> Feature:
+        """Append a feature and invalidate cached geometry so it recomputes.
+
+        The capitel is forced to index 0 by :meth:`compute_features`, so additive
+        and subtractive features can be appended in any order and the union still
+        precedes the cuts. Overrides the base ``add_feature`` only to drop the
+        cached element/model geometry.
+
+        Parameters
+        ----------
+        feature : :class:`Feature`
+            Any column feature (:class:`ColumnAddFeature`,
+            :class:`ColumnCutFeature`, ...).
+
+        Returns
+        -------
+        :class:`Feature`
+            The feature that was appended.
+        """
+        self._features.append(feature)
+        self._elementgeometry = None
+        self._modelgeometry = None
+        return feature
 
     def add_cutters(self, meshes: list, name: str = "column_cutters") -> "ColumnCutFeature":
-        """Store cutter solids as a difference feature carved into the column head.
+        """Convenience wrapper: store cutter solids as a :class:`ColumnCutFeature`.
 
-        The cutters must be given in the column's local frame. The capitel is
-        ensured first (so it is unioned before the cut), then the cutters are
-        stored as a :class:`ColumnCutFeature` - serialized in ``__data__`` and
-        copied with the column, so they remain available for fabrication.
+        Equivalent to ``self.add_feature(ColumnCutFeature(meshes, name=name))`` -
+        kept so callers need not import the feature class. The cutters must be in
+        the column's local frame; they are serialized in ``__data__`` and copied
+        with the column, so the cut stays available for fabrication.
 
         Parameters
         ----------
@@ -237,13 +313,7 @@ class ColumnElement(Element):
         :class:`ColumnCutFeature`
             The feature that was appended.
         """
-        self.compute_features()  # make sure the capitel exists and stays first
-        feature = ColumnCutFeature(meshes, name=name)
-        self._features.append(feature)
-        # Invalidate cached geometry (both element- and model-space) so the cut recomputes.
-        self._elementgeometry = None
-        self._modelgeometry = None
-        return feature
+        return self.add_feature(ColumnCutFeature(meshes, name=name))
 
     # =============================================================================
     # Geometry
@@ -286,7 +356,7 @@ class ColumnElement(Element):
     # Implementations of abstract methods
     # =============================================================================
 
-    def compute_elementgeometry(self, include_features: bool = True) -> Mesh:
+    def compute_elementgeometry(self, include_features: bool = True, types: Optional[list] = None) -> Mesh:
         """Compute the mesh shape from the box, applying the column features.
 
         The capitel union and the cutter difference are boolean ops that emit
@@ -296,8 +366,12 @@ class ColumnElement(Element):
         Parameters
         ----------
         include_features : bool, optional
-            If True, apply the column features (capitel union, cutter difference)
-            to the base box geometry.
+            If True, apply the column features to the base box geometry.
+        types : list[str | type], optional
+            Restrict which feature types are applied (see
+            :meth:`compute_features`). ``None`` (default) applies every feature;
+            ``["ColumnAddFeature"]`` yields the uncut head. Ignored when
+            ``include_features`` is False.
 
         Returns
         -------
@@ -307,7 +381,7 @@ class ColumnElement(Element):
         if include_features:
             from compas_tf.solid_difference_modifier import merge_coplanar_faces
 
-            for feature in self.compute_features():
+            for feature in self.compute_features(types):
                 mesh = feature.apply(mesh)
             mesh = merge_coplanar_faces(mesh)
         return mesh

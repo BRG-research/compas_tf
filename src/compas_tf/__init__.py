@@ -10,7 +10,7 @@ from compas_tf.geometry import (
     PolylineLoft,
 )
 from compas_tf.floor_guide import FloorGuide
-from compas_tf.column import ColumnElement, ColumnFeature
+from compas_tf.column import ColumnElement, ColumnAddFeature, ColumnCutFeature, ColumnFeature
 
 # Additional element types for JSON serialization
 from compas_tf.plate import PlateElement
@@ -35,6 +35,8 @@ __all__ = [
     "PolylineLoft",
     "FloorGuide",
     "ColumnElement",
+    "ColumnAddFeature",
+    "ColumnCutFeature",
     "ColumnFeature",
     "PlateElement",
     "SupportElement",
