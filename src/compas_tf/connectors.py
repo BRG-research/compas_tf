@@ -761,11 +761,13 @@ class ConnectorElement(Element):
     name : str, optional
     """
 
-    WIDTH = 21.0  # Y, along the contact face
-    BACK = 140.0  # -X, into the column
+    WIDTH = 30.00  # Y, along the contact face
+    BACK = 220.0  # -X, into the column
     FRONT = 265.0  # +X, into the rib (longest extent -> toward the rib)
-    HEIGHT = 350.0  # -Z, downward from the top
+    HEIGHT = 250.0  # -Z, downward from the top
     RADIUS = 25.0  # cylinder dowel radius
+    EDGE_MARGIN_X = 6.05  # dowel centre this many radii IN from the column/rib ends (-BACK / +FRONT)
+    EDGE_MARGIN_Z = 3.0  # dowel centre this many radii IN from the top/bottom (one radius less than X)
 
     @property
     def __data__(self) -> dict:
@@ -837,23 +839,82 @@ class ConnectorElement(Element):
         frame = Frame(origin, xaxis, yaxis)
         return cls(transformation=Transformation.from_frame(frame), name=name)
 
-    def cutter_mesh(self) -> Mesh:
-        """The connector box in world coordinates (for boolean cutting)."""
-        mesh = self._box.to_mesh()
+    def cutter_mesh(self, overshoot: float = 0.0) -> Mesh:
+        """The connector box in world coordinates (for boolean cutting).
+
+        ``overshoot`` grows the box ONLY at the top (local +Z, above ``z = 0``)
+        by that amount. The box top sits at the contact's top edge, which is
+        coplanar with the column/rib top face - a cutter cap exactly coplanar
+        with a target face makes the mesh boolean difference unreliable (the same
+        reason the dowel cylinders overshoot, see :meth:`cylinder_cutters`), so
+        the top is pushed past that surface. The bottom (``z = -HEIGHT``) is a
+        BLIND pocket floor buried inside the material - extending it there would
+        only cut the pocket deeper than the connector, so it is left flush. The
+        in-plane (X/Y) footprint is unchanged. ``overshoot=0`` returns the exact
+        box (legacy behaviour).
+
+        Parameters
+        ----------
+        overshoot : float
+            Extra length added at the TOP cap so the cut clears the coplanar top
+            face cleanly (e.g. 25). The bottom is not extended.
+
+        Returns
+        -------
+        :class:`compas.datastructures.Mesh`
+        """
+        if not overshoot:
+            mesh = self._box.to_mesh()
+        else:
+            zmax = overshoot  # top grows above z = 0 to clear the coplanar top face
+            zmin = -self.HEIGHT  # bottom stays flush (blind pocket floor, buried in material)
+            center = Point((self.FRONT - self.BACK) * 0.5, 0.0, 0.5 * (zmax + zmin))
+            box = Box(self.BACK + self.FRONT, self.WIDTH, zmax - zmin, frame=Frame(center))
+            mesh = box.to_mesh()
         if self.transformation:
             mesh = mesh.transformed(self.transformation)
         return mesh
 
+    def _dowel_grid(self) -> tuple:
+        """The dowel layout - the SINGLE source the cutter holes
+        (:meth:`cylinder_cutters`) and the real dowels (:meth:`cylinder_elements`)
+        both read, so a hole and its dowel can never drift apart.
+
+        Positions are taken as a fixed MARGIN IN FROM THE BOX BOUNDARIES (not
+        scaled from the centre), with SEPARATE horizontal and vertical margins so
+        the dowels can be inset more along the joint than over the height: the
+        horizontal margin is ``EDGE_MARGIN_X * RADIUS`` and the vertical margin is
+        ``EDGE_MARGIN_Z * RADIUS`` (kept one radius smaller). In the connector's
+        local frame the box spans ``x in [-BACK, +FRONT]`` and ``z in [-HEIGHT,
+        0]``, so:
+
+        - column dowels sit ``mx`` in from the column end ``x = -BACK`` -> ``-BACK + mx``
+        - rib dowels sit ``mx`` in from the rib end ``x = +FRONT``      -> ``+FRONT - mx``
+        - the upper row sits ``mz`` below the top ``z = 0``             -> ``-mz``
+        - the lower row sits ``mz`` above the bottom ``z = -HEIGHT``    -> ``-HEIGHT + mz``
+
+        Returns
+        -------
+        tuple[list[tuple[str, float]], list[float]]
+            ``(sides, rows)`` where ``sides`` is ``[(name, x), ...]`` and ``rows``
+            is the two local-Z heights.
+        """
+        mx = self.EDGE_MARGIN_X * self.RADIUS
+        mz = self.EDGE_MARGIN_Z * self.RADIUS
+        sides = [("column", -self.BACK + mx), ("rib", self.FRONT - mx)]
+        rows = [-mz, -self.HEIGHT + mz]
+        return sides, rows
+
     def cylinder_cutters(self, length: float, overshoot: float = 25.0):
         """Cylindrical dowel cutters: two per side (column and rib).
 
-        The connector height is divided into three; a cylinder sits at each of
-        the two interior levels (1/3 and 2/3 down). They are centred on each
-        side - ``x = -BACK/2`` (column side) and ``x = +FRONT/2`` (rib side) -
-        so the connector knows BACK (140) is toward the column and FRONT (265)
-        toward the rib. Each cylinder's axis runs along the connector width
+        A cylinder sits at each of the four positions from :meth:`_dowel_grid`
+        (two sides x two rows), each held in from the box boundaries by
+        ``EDGE_MARGIN_X * RADIUS`` horizontally and ``EDGE_MARGIN_Z * RADIUS``
+        vertically - column side near ``x = -BACK``, rib side near ``x = +FRONT``.
+        Each cylinder's axis runs along the connector width
         (local Y), with the given ``length`` and radius :attr:`RADIUS`. The two
-        sides carry the same vertical division, just on opposite sides (so the
+        sides carry the same vertical rows, just on opposite sides (so the
         female/male distinction does not change the geometry).
 
         Each *cutter* is extended by ``overshoot`` at both ends so its flat caps
@@ -874,12 +935,12 @@ class ConnectorElement(Element):
             ``(column_cutters, rib_cutters)`` as closed meshes in world
             coordinates - to subtract from the column and the rib respectively.
         """
-        levels = [-self.HEIGHT / 3.0, -2.0 * self.HEIGHT / 3.0]
+        sides, rows = self._dowel_grid()
         cut_length = length + 2.0 * overshoot
 
         def at_side(x):
             cutters = []
-            for z in levels:
+            for z in rows:
                 frame = Frame([x, 0.0, z], [0, 0, 1], [1, 0, 0])  # cylinder axis = local +Y
                 mesh = Cylinder(self.RADIUS, cut_length, frame=frame).to_mesh()
                 if self.transformation:
@@ -887,15 +948,16 @@ class ConnectorElement(Element):
                 cutters.append(mesh)
             return cutters
 
-        return at_side(-self.BACK / 2.0), at_side(self.FRONT / 2.0)
+        side_x = dict(sides)
+        return at_side(side_x["column"]), at_side(side_x["rib"])
 
     def cylinder_elements(self, length: float):
         """The four dowel cylinders as placed model elements (nominal length).
 
-        Same positions as :meth:`cylinder_cutters` (column side at ``-BACK/2``,
-        rib side at ``+FRONT/2``, at the two height thirds, axis along local Y),
-        but at the nominal ``length`` (no cutter overshoot) - these are the real
-        dowels, added to the model like the wedge components.
+        Same positions as :meth:`cylinder_cutters` - the shared
+        :meth:`_dowel_grid` (a margin in from the box boundaries, axis along
+        local Y) - but at the nominal ``length`` (no cutter overshoot); these
+        are the real dowels, added to the model like the wedge components.
 
         Parameters
         ----------
@@ -906,10 +968,10 @@ class ConnectorElement(Element):
         -------
         list[:class:`DowelCylinderElement`]
         """
-        levels = [-self.HEIGHT / 3.0, -2.0 * self.HEIGHT / 3.0]
+        sides, rows = self._dowel_grid()
         elements = []
-        for side, x in (("column", -self.BACK / 2.0), ("rib", self.FRONT / 2.0)):
-            for j, z in enumerate(levels):
+        for side, x in sides:
+            for j, z in enumerate(rows):
                 xform = Translation.from_vector([x, 0.0, z])
                 if self.transformation:
                     xform = self.transformation * xform

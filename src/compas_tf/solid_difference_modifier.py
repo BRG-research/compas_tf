@@ -8,6 +8,60 @@ from compas_model.elements.element import Feature
 from compas_model.modifiers import Modifier
 
 
+def _bbox_center(meshes: list) -> tuple:
+    """The centre of the combined axis-aligned bounding box of ``meshes``."""
+    xs, ys, zs = [], [], []
+    for mesh in meshes:
+        for vertex in mesh.vertices():
+            x, y, z = mesh.vertex_coordinates(vertex)
+            xs.append(x)
+            ys.append(y)
+            zs.append(z)
+    if not xs:
+        return (0.0, 0.0, 0.0)
+    return (0.5 * (min(xs) + max(xs)), 0.5 * (min(ys) + max(ys)), 0.5 * (min(zs) + max(zs)))
+
+
+def heal_mesh(mesh: Mesh, precision: Optional[int] = None) -> Mesh:
+    """Scrub a boolean result: weld coincident vertices, drop collapsed faces.
+
+    Manifold already returns a watertight, welded mesh, so on a good result this
+    is effectively a no-op. Its job is to remove the occasional zero-area sliver
+    face or duplicated vertex a near-degenerate cut can leave behind - the "thin
+    leftover" / barely-valid faces - WITHOUT changing the solid the mesh bounds:
+    it only welds exactly-coincident points and deletes faces that have collapsed
+    to fewer than three distinct vertices.
+
+    Parameters
+    ----------
+    mesh : :class:`compas.datastructures.Mesh`
+    precision : int, optional
+        Decimal precision for the vertex weld (defaults to ``compas.PRECISION``).
+
+    Returns
+    -------
+    :class:`compas.datastructures.Mesh`
+    """
+    if not isinstance(mesh, Mesh):
+        return mesh
+    healed = mesh.copy()
+    try:
+        healed.weld(precision)
+    except Exception:
+        pass
+    for face in list(healed.faces()):
+        if len(set(healed.face_vertices(face))) < 3:  # collapsed after the weld
+            try:
+                healed.delete_face(face)
+            except Exception:
+                pass
+    try:
+        healed.remove_unused_vertices()
+    except Exception:
+        pass
+    return healed
+
+
 class MeshCutFeature(Feature):
     """Feature that boolean-differences cutter solids out of a host element.
 
@@ -35,16 +89,27 @@ class MeshCutFeature(Feature):
         if not self.meshes:
             return shape
 
+        from compas.geometry import Translation
         from compas_manifold.booleans import boolean_chain
 
-        cutters = [mesh.to_vertices_and_faces(True) for mesh in self.meshes]
+        # Run the boolean with the operands shifted to the origin and shift the
+        # result back: Manifold's merge tolerance scales with the bounding-box
+        # magnitude, so working near (0,0,0) instead of out at the model's world
+        # coordinates keeps it as precise as possible. Pure translation - the
+        # carved solid is identical, just temporarily re-centred.
+        cx, cy, cz = _bbox_center([shape] + self.meshes)
+        to_origin = Translation.from_vector([-cx, -cy, -cz])
+        from_origin = Translation.from_vector([cx, cy, cz])
+
+        cutters = [mesh.transformed(to_origin).to_vertices_and_faces(True) for mesh in self.meshes]
         if len(cutters) > 1:
             unioned = boolean_chain(cutters, ["union"] * (len(cutters) - 1))
             cutters = [unioned]
 
-        result = boolean_chain([shape.to_vertices_and_faces(True), cutters[0]], ["difference"])
-        carved = Mesh.from_vertices_and_faces(result[0], result[1])
-        return SolidDifferenceModifier.largest_piece(carved)
+        result = boolean_chain([shape.transformed(to_origin).to_vertices_and_faces(True), cutters[0]], ["difference"])
+        carved = Mesh.from_vertices_and_faces(result[0], result[1]).transformed(from_origin)
+        carved = SolidDifferenceModifier.largest_piece(carved)
+        return heal_mesh(carved)  # scrub any zero-area sliver faces the cut left
 
     # A generic mesh cut has no parametric ("minimal") form; the typed subclasses
     # below override this to return their defining line / polylines.
@@ -492,17 +557,36 @@ class SolidDifferenceModifier(Modifier):
         if len(parts) <= 1:
             return mesh
 
-        def _score(part):
+        def _volume(part):
             try:
                 vol = abs(part.volume())
-                if vol > 0:
-                    return vol
+                return vol if vol > 0 else None
             except Exception:
-                pass
-            return part.number_of_faces()
+                return None
 
-        largest = max(parts, key=_score)
-        print(f"[largest-piece] {len(parts)} disjoint pieces -> kept V/F={largest.number_of_vertices()}/{largest.number_of_faces()}")
+        volumes = [_volume(part) for part in parts]
+
+        def _score(index):
+            return volumes[index] if volumes[index] is not None else float(parts[index].number_of_faces())
+
+        best = max(range(len(parts)), key=_score)
+        largest = parts[best]
+
+        # Dropping a tiny sliver is normal; dropping a NON-trivial piece means the
+        # cut fragmented the host solid (almost always a coplanar / degenerate
+        # cutter) and real geometry is being thrown away - make that loud instead
+        # of silent, so it can be fixed at the source rather than masked here.
+        kept = volumes[best]
+        discarded = sum(v for i, v in enumerate(volumes) if i != best and v)
+        if kept and discarded > 0.01 * kept:
+            import warnings
+
+            warnings.warn(
+                f"largest_piece kept 1 of {len(parts)} solids and discarded {discarded:.4g} mm^3 "
+                f"(~{100 * discarded / kept:.0f}% of the kept volume) - the cut is fragmenting the host; "
+                f"check for coplanar/degenerate cutters",
+                stacklevel=2,
+            )
         return largest
 
     @staticmethod

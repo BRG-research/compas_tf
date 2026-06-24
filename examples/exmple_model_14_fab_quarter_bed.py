@@ -12,6 +12,8 @@ from compas_model.elements.group import Group
 from compas_model.models import Model
 
 from compas_tf.plate import PlateElement
+from compas_tf.viewer import TeeScene
+from compas_tf.viewer import dump_bundle
 from compas_tf.viewer import frame_rectangle
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated
@@ -238,9 +240,10 @@ def draw_plate(plate, parent):
 
 
 viewer = make_viewer(data_dir)
+scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
 
 # 1) The three bed strips as assembled (before unrolling).
-assembled = viewer.scene.add_group("beds_assembled")
+assembled = scene.add_group("beds_assembled")
 strips = [bed_strip(name) for name in BED_GROUPS]
 for name, plates in zip(BED_GROUPS, strips):
     group = assembled.add_group(name)
@@ -259,10 +262,25 @@ explode_from_centre(strips, SPREAD)
 compas.json_dump(quarter, data_dir / "quarter_fab_model.json")
 
 # 3) Draw the unrolled layout.
-flat = viewer.scene.add_group("beds_unrolled")
+flat = scene.add_group("beds_unrolled")
 for name, plates in zip(BED_GROUPS, strips):
     group = flat.add_group(name)
     for plate in plates:
         draw_plate(plate, group)
 
+# Plain, already-computed geometry for Rhino (no recompute on load) - see RHINO below.
+dump_bundle(scene, data_dir / "quarter_bed_fab_rhino.json")
+
 viewer.show()
+
+
+# ====================================================================== #
+#  RHINO  -  copy the code between the triple quotes into the Rhino 8
+#  ScriptEditor (Python 3) and Run it to add THIS example's geometry to the
+#  active Rhino document (named layers, per-object colour). Needs only the
+#  installed compas_tf (see install steps); recomputes nothing.
+# ====================================================================== #
+RHINO = r'''
+from compas_tf.rhino import draw_bundle
+draw_bundle(r"C:\brg\compas_tf\data\quarter_bed_fab_rhino.json")
+'''

@@ -11,6 +11,8 @@ from compas_model.elements.group import Group
 from compas_model.models import Model
 
 from compas_tf.plate import PlateElement
+from compas_tf.viewer import TeeScene
+from compas_tf.viewer import dump_bundle
 from compas_tf.viewer import frame_rectangle
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated
@@ -280,9 +282,10 @@ def draw_plate(plate, parent):
 
 
 viewer = make_viewer(data_dir)
+scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
 
 # 1) The frame beams as assembled (before laying flat).
-assembled = viewer.scene.add_group("frame_assembled")
+assembled = scene.add_group("frame_assembled")
 for plate in beams:
     draw_plate(plate, assembled)
 
@@ -299,8 +302,23 @@ deoverlap(beams, MARGIN)
 
 compas.json_dump(quarter, data_dir / "quarter_frame_fab_model.json")
 
-flat = viewer.scene.add_group("frame_flat")
+flat = scene.add_group("frame_flat")
 for plate in beams:
     draw_plate(plate, flat)
 
+# Plain, already-computed geometry for Rhino (no recompute on load) - see RHINO below.
+dump_bundle(scene, data_dir / "quarter_frame_fab_rhino.json")
+
 viewer.show()
+
+
+# ====================================================================== #
+#  RHINO  -  copy the code between the triple quotes into the Rhino 8
+#  ScriptEditor (Python 3) and Run it to add THIS example's geometry to the
+#  active Rhino document (named layers, per-object colour). Needs only the
+#  installed compas_tf (see install steps); recomputes nothing.
+# ====================================================================== #
+RHINO = r'''
+from compas_tf.rhino import draw_bundle
+draw_bundle(r"C:\brg\compas_tf\data\quarter_frame_fab_rhino.json")
+'''

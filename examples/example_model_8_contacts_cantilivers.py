@@ -7,6 +7,8 @@ from compas_model.models import Model
 
 from compas_tf.connectors import ConnectorElement
 from compas_tf.plate import PlateElement
+from compas_tf.viewer import TeeScene
+from compas_tf.viewer import dump_bundle
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated
 
@@ -71,7 +73,9 @@ for i, (a, b, contact) in enumerate(edge_contacts):
     # Cut the connector box plus its dowel cylinders into each element: the box
     # and the column-side cylinders into the column, the box and the rib-side
     # cylinders into the rib. Cylinder length = rib thickness, radius 25.
-    box = connector.cutter_mesh()
+    # overshoot so the box caps poke past the column/rib faces (not flush) - a
+    # coplanar cap makes the boolean difference unreliable; see cutter_mesh.
+    box = connector.cutter_mesh(overshoot=25.0)
     column_cylinders, rib_cylinders = connector.cylinder_cutters(rib.computed_thickness)
 
     to_column = column.modeltransformation.inverted()
@@ -95,6 +99,26 @@ for i, (a, b, contact) in enumerate(edge_contacts):
 
 compas.json_dump(cantilever_model, data_dir / "cantilevers_model.json")
 
+# OBJ export: the simplest way into Rhino (File > Import, no compas needed there).
+# element.modelgeometry is the carved, watertight mesh, so the OBJ carries the
+# connector pockets and dowel holes as closed geometry - one named object per
+# element. OBJ is mesh-only, so it drops the lines/colours/layers the Rhino
+# bundle keeps (see the RHINO block below); use whichever fits.
+from compas.files import OBJWriter  # noqa: E402
+
+_meshes = []
+for element in cantilever_model.elements():
+    if isinstance(element, Group):
+        continue
+    geometry = element.modelgeometry
+    if geometry is None:
+        continue
+    geometry = geometry.copy()
+    geometry.name = element.name or type(element).__name__
+    _meshes.append(geometry)
+OBJWriter(str(data_dir / "cantilevers_model.obj"), _meshes, author="compas_tf").write()
+print(f"[obj] wrote data/cantilevers_model.obj ({len(_meshes)} objects)")
+
 # ------------------------------------------------------------------ #
 #  View
 # ------------------------------------------------------------------ #
@@ -115,10 +139,26 @@ def add_tree(node, viewer_parent):
 
 
 viewer = make_viewer(data_dir)
-add_tree(cantilever_model.tree.root, viewer.scene)
+scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
+add_tree(cantilever_model.tree.root, scene)
 
-contacts_group = viewer.scene.add_group("contacts")
+contacts_group = scene.add_group("contacts")
 for i, contact in enumerate(cantilever_model.contacts()):
     contacts_group.add(contact.polygon, name=f"contact_{i}", color=(1.0, 0.0, 0.0))
 
+# Plain, already-computed geometry for Rhino (no recompute on load) - see RHINO below.
+dump_bundle(scene, data_dir / "cantilevers_rhino.json")
+
 viewer.show()
+
+
+# ====================================================================== #
+#  RHINO  -  copy the code between the triple quotes into the Rhino 8
+#  ScriptEditor (Python 3) and Run it to add THIS example's geometry to the
+#  active Rhino document (named layers, per-object colour). Needs only the
+#  installed compas_tf (see install steps); recomputes nothing.
+# ====================================================================== #
+RHINO = r'''
+from compas_tf.rhino import draw_bundle
+draw_bundle(r"C:\brg\compas_tf\data\cantilevers_rhino.json")
+'''

@@ -115,6 +115,65 @@ class SceneRecorder:
         return _RecorderNode(self, None)
 
 
+class _TeeNode:
+    """A group handle that forwards ``add``/``add_group`` to BOTH a live scene
+    group and a :class:`SceneRecorder` group, so geometry drawn into the viewer
+    is captured into the recorder bundle at the same time.
+    """
+
+    def __init__(self, live, rec_node):
+        self._live = live
+        self._rec = rec_node
+
+    def add(self, item, **style):
+        self._live.add(item, **style)
+        return self._rec.add(item, **style)
+
+    def add_group(self, name=None, **kwargs):
+        return _TeeNode(self._live.add_group(name), self._rec.add_group(name))
+
+
+class TeeScene:
+    """Drop-in for ``viewer.scene`` that draws into the live scene AND records a
+    flat node bundle alongside it.
+
+    Wrap the viewer's scene once (``scene = TeeScene(viewer.scene)``) and use it
+    exactly like ``viewer.scene`` - every ``add``/``add_group`` is mirrored into
+    an internal :class:`SceneRecorder`. Call :func:`dump_bundle` at the end to
+    write the recorded geometry to a JSON "Rhino bundle" (plain COMPAS Mesh /
+    Polyline / Polygon / Line + layer + colour), which the
+    :mod:`compas_tf.rhino` loader replays into Rhino with no recompute.
+    """
+
+    def __init__(self, live_scene):
+        self._live = live_scene
+        self._rec = SceneRecorder()
+
+    @property
+    def nodes(self):
+        return self._rec.nodes
+
+    def add(self, item, **style):
+        self._live.add(item, **style)
+        return self._rec.add(item, **style)
+
+    def add_group(self, name=None, **kwargs):
+        return _TeeNode(self._live.add_group(name), self._rec.add_group(name))
+
+
+def dump_bundle(scene, path):
+    """Write a :class:`TeeScene` (or :class:`SceneRecorder`) to a Rhino bundle.
+
+    The bundle is ``{"nodes": [...]}`` - the recorded group/geometry node list -
+    serialized with :func:`compas.json_dump`, so the embedded COMPAS geometry
+    round-trips. Load it in Rhino with :func:`compas_tf.rhino.draw_bundle`.
+    """
+    nodes = scene.nodes if hasattr(scene, "nodes") else list(scene)
+    compas.json_dump({"nodes": nodes}, str(path))
+    print(f"[bundle] wrote {pathlib.Path(path).name} ({sum(1 for n in nodes if n.get('kind') == 'geometry')} objects)")
+    return path
+
+
 class _Stub:
     """Absorbs any attribute access/call (e.g. ``viewer.renderer.x = ...``)."""
 
