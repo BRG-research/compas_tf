@@ -162,3 +162,44 @@ RHINO = r'''
 from compas_tf.rhino import draw_bundle
 draw_bundle(r"C:\brg\compas_tf\data\cantilevers_rhino.json")
 '''
+
+# ------------------------------------------------------------------ #
+#  STEP  -  solid closed Breps via compas_occt. Every element mesh becomes a
+#  solid OCCBrep; simplify() merges the boolean triangles back into flat
+#  faces - and unlike a Mesh face, a Brep face carries its hole loops
+#  properly, so drilled/slotted faces come out as single faces with holes.
+#  All solids are compounded into ONE file: data/cantilevers_model.stp.
+# ------------------------------------------------------------------ #
+from compas.tolerance import TOL  # noqa: E402
+from compas_occt.brep import OCCBrep  # noqa: E402
+
+TOL.lineardeflection = 0.1
+
+breps = []
+for element in cantilever_model.elements():
+    if isinstance(element, Group):
+        continue
+    mesh = element.modelgeometry
+    if mesh is None:
+        continue
+    brep = OCCBrep.from_mesh(mesh, solid=True)
+    # Tight deflections: the DEFAULT angulardeflection (0.1 rad = 5.7 deg) also
+    # merges NEARLY-coplanar faces - it flattened the twisted loft quads of the
+    # tsections/ribs and changed their solids (tsections lost 42% volume). With
+    # 1e-6 rad only exactly-coplanar boolean triangles merge and every solid
+    # keeps its exact mesh volume.
+    brep.simplify(merge_edges=True, merge_faces=True, lineardeflection=1e-3, angulardeflection=1e-6)
+    brep.name = element.name or type(element).__name__
+    if not brep.is_solid:
+        print(f"[step] WARNING: '{brep.name}' did not convert to a closed solid")
+    mesh_volume = mesh.volume()
+    if mesh_volume and abs(brep.volume - mesh_volume) > 1e-6 * abs(mesh_volume):
+        # simplify distorted the shape - keep the exact (triangulated) Brep.
+        print(f"[step] WARNING: simplify changed '{brep.name}' volume by {brep.volume - mesh_volume:+.1f} mm3, keeping unsimplified Brep")
+        brep = OCCBrep.from_mesh(mesh, solid=True)
+        brep.name = element.name or type(element).__name__
+    breps.append(brep)
+
+compound = OCCBrep.from_breps(breps)
+compound.to_step(str(data_dir / "cantilevers_model.stp"), name="cantilever_model", author="compas_tf")
+print(f"[step] wrote data/cantilevers_model.stp ({len(breps)} solids)")

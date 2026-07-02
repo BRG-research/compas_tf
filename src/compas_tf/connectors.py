@@ -584,7 +584,7 @@ class ConnectorWedgeElement(Element):
                 normal, yaxis = normal.scaled(-1.0), yaxis.scaled(-1.0)
             center = face_center + normal * (0.5 * -depth)  # box sits on the plate side of the face
             frame = Frame(center, xaxis, yaxis)  # z-axis = x cross y = normal
-            box = Box(self.length + 2 * margin, edge_len + 2 * margin, depth, frame=frame).to_mesh()
+            box = Box(self.length + 2 * margin, edge_len + 2 * margin+20, depth, frame=frame).to_mesh()
             if self.transformation:
                 box = box.transformed(self.transformation)
             boxes.append(box)

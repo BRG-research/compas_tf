@@ -22,6 +22,31 @@ def _bbox_center(meshes: list) -> tuple:
     return (0.5 * (min(xs) + max(xs)), 0.5 * (min(ys) + max(ys)), 0.5 * (min(zs) + max(zs)))
 
 
+def _halfedge_defects(mesh: Mesh) -> tuple:
+    """Count topological defects directly from the face loops.
+
+    Returns ``(duplicates, unpaired)`` where ``duplicates`` is the number of
+    extra uses of a directed half-edge (any value > 0 means two faces run the
+    same edge in the same direction - a pinched, non-manifold surface) and
+    ``unpaired`` is the number of directed half-edges without a reverse twin
+    (any value > 0 means the mesh is open).
+
+    This exists because ``Mesh.from_vertices_and_faces`` silently *overwrites*
+    duplicate half-edges in the half-edge dict, so ``is_manifold()`` and
+    ``is_closed()`` report ``True`` on exactly the meshes this needs to catch.
+    """
+    count = {}
+    for face in mesh.faces():
+        fverts = mesh.face_vertices(face)
+        n = len(fverts)
+        for i in range(n):
+            halfedge = (fverts[i], fverts[(i + 1) % n])
+            count[halfedge] = count.get(halfedge, 0) + 1
+    duplicates = sum(c - 1 for c in count.values() if c > 1)
+    unpaired = sum(1 for (a, b) in count if (b, a) not in count)
+    return duplicates, unpaired
+
+
 def heal_mesh(mesh: Mesh, precision: Optional[int] = None) -> Mesh:
     """Scrub a boolean result: weld coincident vertices, drop collapsed faces.
 
@@ -31,6 +56,12 @@ def heal_mesh(mesh: Mesh, precision: Optional[int] = None) -> Mesh:
     leftover" / barely-valid faces - WITHOUT changing the solid the mesh bounds:
     it only welds exactly-coincident points and deletes faces that have collapsed
     to fewer than three distinct vertices.
+
+    Caveat: where the carved solid touches itself tangentially (a pocket corner
+    or hole rim grazing a face), Manifold intentionally emits coincident-but-
+    distinct vertices so each surface sheet stays 2-manifold. Welding those
+    glues the sheets together and pinches the solid (duplicate directed
+    half-edges), so the weld is reverted whenever it introduces such defects.
 
     Parameters
     ----------
@@ -49,6 +80,8 @@ def heal_mesh(mesh: Mesh, precision: Optional[int] = None) -> Mesh:
         healed.weld(precision)
     except Exception:
         pass
+    if any(after > before for after, before in zip(_halfedge_defects(healed), _halfedge_defects(mesh))):
+        healed = mesh.copy()  # the weld glued intentional vertex splits - keep the unwelded topology
     for face in list(healed.faces()):
         if len(set(healed.face_vertices(face))) < 3:  # collapsed after the weld
             try:
@@ -371,6 +404,15 @@ def _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh):
     return Mesh.from_vertices_and_faces(vertices, new_faces)
 
 
+# Debug kill-switch: set False to skip ALL coplanar-face merging and keep the
+# raw (watertight, triangulated) boolean output - for visually isolating whether
+# an artefact comes from the boolean itself or from the merge step. Keep True in
+# normal use: contact detection needs one polygon per flat face, or every
+# coplanar contact fragments into one contact per triangle (duplicated
+# connectors/dowels downstream).
+MERGE_COPLANAR_FACES_ENABLED = True
+
+
 def merge_coplanar_faces(mesh: Mesh, normal_tol: float = 1e-3, offset_tol: float = 1e-3) -> Mesh:
     """Merge groups of adjacent coplanar faces into single polygon faces.
 
@@ -400,9 +442,19 @@ def merge_coplanar_faces(mesh: Mesh, normal_tol: float = 1e-3, offset_tol: float
     from compas.geometry import dot_vectors
     from compas.geometry import length_vector
 
+    if not MERGE_COPLANAR_FACES_ENABLED:
+        return mesh.copy()
+
     work = mesh.copy()
     try:
-        work.weld()  # boolean output has coincident-but-distinct vertices at seams
+        # CGAL-fallback output has coincident-but-distinct vertices at seams that
+        # must be welded or face adjacency breaks. Manifold output is already
+        # welded EXCEPT for intentional vertex splits where the solid touches
+        # itself tangentially - welding those pinches the mesh (duplicate
+        # directed half-edges), so revert the weld if it introduces defects.
+        work.weld()
+        if any(after > before for after, before in zip(_halfedge_defects(work), _halfedge_defects(mesh))):
+            work = mesh.copy()
     except Exception:
         pass
 
@@ -491,10 +543,14 @@ def merge_coplanar_faces(mesh: Mesh, normal_tol: float = 1e-3, offset_tol: float
     merged = Mesh.from_vertices_and_faces(vertices, faces_idx)
 
     # Safety net: coplanar merging is a cleanup for contact detection, not a
-    # correctness requirement. On complex cuts it can introduce non-manifold
-    # edges, so never downgrade a manifold input to a non-manifold output -
-    # fall back to the (manifold) welded mesh.
+    # correctness requirement. On complex cuts (pinch vertices, untraceable
+    # boundaries) it can pinch or open the mesh, so never make the topology
+    # worse than the input - fall back to the pre-merge mesh. Defects are
+    # counted from the face loops (is_manifold()/is_closed() cannot see
+    # duplicate half-edges, which compas silently overwrites).
     try:
+        if any(after > before for after, before in zip(_halfedge_defects(merged), _halfedge_defects(work))):
+            return work
         if not merged.is_manifold():
             return work
     except Exception:

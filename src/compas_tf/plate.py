@@ -493,6 +493,17 @@ class PlateElement(Element):
         pts0 = PlateElement._remove_duplicate_points(list(polyline0.points))
         pts1 = PlateElement._remove_duplicate_points(list(polyline1.points))
 
+        # Outward-facing winding (same rule as compute_elementgeometry): the
+        # bottom -> top direction must follow the bottom loop's normal. If it
+        # doesn't, reverse both loops in lockstep - otherwise the loft comes out
+        # inside-out, and an inside-out cutter makes a boolean difference ADD
+        # its volume instead of removing it (Manifold reads it as a negative
+        # solid).
+        up_dir = Vector.from_start_end(Point(*Polygon(pts0).centroid), Point(*Polygon(pts1).centroid))
+        if up_dir.dot(Polygon(pts0).normal) < 0:
+            pts0 = list(reversed(pts0))
+            pts1 = list(reversed(pts1))
+
         polyline0 = Polyline(pts0)
         polyline1 = Polyline(pts1)
 
