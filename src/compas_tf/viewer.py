@@ -257,6 +257,27 @@ def _apply_edgecolor():
     MeshObject.contrastcolor = property(lambda self: color, lambda self, _value: None)
 
 
+def _patch_group_nesting():
+    """Give compas_viewer's ``Group`` an ``add_group`` method.
+
+    A live ``Group`` cannot create sub-groups itself - only the scene can, via
+    ``scene.add_group(name, parent=group)``. The recorder nodes and
+    :class:`_TeeNode` both expose ``add_group`` on group handles, and every
+    example mirrors nested model trees through exactly that call, so a LIVE
+    viewer run crashed on the first nested group. Patching the one method onto
+    ``Group`` makes live and recorded scenes interchangeable. Idempotent.
+    """
+    from compas_viewer.scene import Group
+
+    if hasattr(Group, "add_group"):
+        return
+
+    def add_group(self, name=None, **kwargs):
+        return self.scene.add_group(name, parent=self, **kwargs)
+
+    Group.add_group = add_group
+
+
 def make_viewer(data_dir):
     """Return a live ``Viewer`` (lighted, mm units), or a recording stand-in
     when watch_viewer.py is running, so the example becomes write-only.
@@ -267,6 +288,7 @@ def make_viewer(data_dir):
     from compas_viewer.config import Config
     from compas_viewer.viewer import Viewer
 
+    _patch_group_nesting()
     config = Config()
     config.unit = "mm"
     viewer = Viewer(config)

@@ -17,6 +17,7 @@ interface and additionally exposes ``boolean_geometry`` / ``boolean_geometries``
 """
 
 import math
+from pathlib import Path
 from typing import Optional
 
 from compas.datastructures import Mesh
@@ -453,13 +454,27 @@ class ConnectorWedgeElement(Element):
     #  Cylinders (dowels) generated along the interface length
     # ----------------------------------------------------------------- #
 
-    def create_cylinders(self):
+    def create_cylinders(self, horizontal: bool = True):
         """Distribute :class:`ConnectorCylinderElement` dowels along the wedge.
 
         Mirrors ``WedgeElement.dowel_lines``: the ``DOWEL`` axis (local Y) is
         copied to ``max(int(length / spacing), 1)`` evenly-spaced stations along
-        local X. Each cylinder shares the wedge's transformation so it lands in
-        the same model frame.
+        local X.
+
+        By default the dowels are kept PARALLEL TO THE GROUND (world XY). The
+        raw dowel direction is the wedge's local Y = the contact normal, so on
+        an inclined wall (e.g. the oculus) the bolts would come out inclined
+        with the face. With ``horizontal=True`` each dowel's world axis is
+        projected onto the horizontal plane through its own centre - the faces
+        stay inclined as they are, only the bolt direction is flattened - and
+        the centre and nominal dowel length are preserved. On a vertical wall
+        the contact normal is already horizontal, so this is a no-op. Pass
+        ``horizontal=False`` for the perpendicular-to-face behaviour.
+
+        Parameters
+        ----------
+        horizontal : bool
+            Flatten the dowel axes parallel to the world XY plane (default).
 
         Returns
         -------
@@ -472,12 +487,25 @@ class ConnectorWedgeElement(Element):
         for i in range(n):
             x = -half_len + (i + 0.5) * (self.length / n)
             line = base.translated(Vector(x, 0, 0))
+            transformation = self.transformation
+            if horizontal:
+                # World axis, flattened around its centre: project the direction
+                # onto the horizontal plane through the dowel midpoint, keep the
+                # centre and the nominal length.
+                world = line.transformed(self.transformation) if self.transformation else line
+                direction = Vector(world.end.x - world.start.x, world.end.y - world.start.y, 0.0)
+                if direction.length > 1e-9:
+                    direction.unitize()
+                    center = Point(*world.midpoint)
+                    half = 0.5 * world.length
+                    line = Line(center + direction * -half, center + direction * half)
+                    transformation = None  # the flattened axis is already in world coordinates
             cylinders.append(
                 ConnectorCylinderElement(
                     line=line,
                     radius=self.cylinder_radius,
                     sides=self.cylinder_sides,
-                    transformation=self.transformation,
+                    transformation=transformation,
                     name=f"{self.name or 'wedge'}_cylinder_{i}",
                 )
             )
@@ -1027,3 +1055,188 @@ class ConnectorElement(Element):
 
     def compute_point(self) -> Point:
         return Point(*self.modelgeometry.centroid())
+
+
+# ===================================================================== #
+#  Outer-rib connector (fixed fabrication shape, loaded from OBJ templates)
+# ===================================================================== #
+
+
+class OuterRibConnectorElement(Element):
+    """Connector joining two quarters' outer ribs at a seam, from OBJ templates.
+
+    Unlike the parametric connectors above, this is a fixed fabrication shape
+    modelled in Rhino and shipped as three OBJ files in
+    ``data/OuterRibConnector/``:
+
+    - ``OuterRibConnector.obj``      — the connector body (the visible element);
+    - ``OuterRibConnector_cut0.obj`` — the MALE boolean cutter, to subtract from
+      the rib on the local ``-Y`` side;
+    - ``OuterRibConnector_cut1.obj`` — the FEMALE boolean cutter, to subtract
+      from the rib on the local ``+Y`` side.
+
+    The OBJs are modelled in the connector's LOCAL frame, deliberately offset so
+    placement needs no further shifting:
+
+    - local ``y = 0`` is the rib-rib interface plane. The body spans
+      ``y in [-400, +400]`` (one half into each rib) and each cutter overshoots
+      the interface by 10, so no cutter cap is coplanar with a rib end face
+      (a flush cap makes the boolean difference unreliable);
+    - local ``+X`` points from the placement origin DOWN the rib end face; the
+      body spans ``x in [138.5, 208.9]``, i.e. it hangs below the seam's top
+      edge by that built-in offset;
+    - local ``Z`` spans the rib thickness (``z in [-15, +15]``).
+
+    :meth:`from_contact` builds the matching placement frame: origin at the
+    middle of the contact polygon's TOP edge, ``+X`` = world down, ``+Y`` = the
+    horizontal contact normal.
+
+    Parameters
+    ----------
+    transformation : :class:`compas.geometry.Transformation`, optional
+        Places the local template in the model (see :meth:`from_contact`).
+    features : list[:class:`compas_model.elements.element.Feature`], optional
+    name : str, optional
+    """
+
+    OBJ_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "OuterRibConnector"
+    BODY_OBJ = "OuterRibConnector.obj"
+    CUT_MALE_OBJ = "OuterRibConnector_cut0.obj"
+    CUT_FEMALE_OBJ = "OuterRibConnector_cut1.obj"
+
+    _templates: dict = {}
+
+    @property
+    def __data__(self) -> dict:
+        return {
+            "transformation": self.transformation,
+            "features": self._features,
+            "name": self.name,
+        }
+
+    def __init__(
+        self,
+        transformation: Optional[Transformation] = None,
+        features: Optional[list] = None,
+        name: Optional[str] = None,
+    ):
+        super().__init__(transformation=transformation, features=features, name=name)
+
+    @classmethod
+    def template(cls, filename: str) -> Mesh:
+        """A fresh copy of one of the OBJ templates, in the connector's local frame.
+
+        The file is read once and cached at class level; every call returns an
+        independent copy, so callers can transform it freely.
+        """
+        path = cls.OBJ_DIR / filename
+        key = str(path)
+        if key not in cls._templates:
+            cls._templates[key] = Mesh.from_obj(path)
+        return cls._templates[key].copy()
+
+    @classmethod
+    def from_contact(cls, contact, name: Optional[str] = None) -> "OuterRibConnectorElement":
+        """Create a connector oriented to a rib-rib seam contact.
+
+        The placement frame: origin at the middle of the contact polygon's TOP
+        edge, ``+X`` = world down (into the seam face), ``+Y`` = the horizontal
+        contact normal — matching the local frame the OBJ templates are
+        modelled in, so the templates land on the seam with no extra offsets.
+
+        Parameters
+        ----------
+        contact : :class:`compas_model.interactions.Contact`
+            The seam contact between two outer ribs.
+        name : str, optional
+
+        Returns
+        -------
+        :class:`OuterRibConnectorElement`
+        """
+        pts = list(contact.polygon.points)
+        normal = GeomPolygon(pts).normal
+
+        # Y = horizontal component of the contact normal (across the seam).
+        yaxis = Vector(normal[0], normal[1], 0.0)
+        if yaxis.length < 1e-9:
+            raise ValueError("outer-rib seam contact is horizontal; cannot orient the connector across it")
+        yaxis.unitize()
+        xaxis = Vector(0.0, 0.0, -1.0)  # down the seam face
+
+        # Anchor at the MIDDLE of the contact's TOP edge (same rule as
+        # ConnectorElement.from_contact): the template's built-in 138.5 offset
+        # along local +X hangs the body below this point.
+        top_z = max(p[2] for p in pts)
+        z_extent = top_z - min(p[2] for p in pts)
+        tol = max(1.0, 0.02 * z_extent)
+        top_pts = [p for p in pts if top_z - p[2] <= tol]
+        origin = Point(*[0.5 * (min(p[i] for p in top_pts) + max(p[i] for p in top_pts)) for i in range(3)])
+        frame = Frame(origin, xaxis, yaxis)
+        return cls(transformation=Transformation.from_frame(frame), name=name)
+
+    def cutter_meshes(self) -> tuple:
+        """The ``(male, female)`` boolean cutters in WORLD coordinates.
+
+        The male cutter carves the rib on the connector's local ``-Y`` side,
+        the female cutter the rib on the ``+Y`` side. Use :meth:`cutter_for` to
+        pick the right one for a given rib automatically.
+        """
+        male = self.template(self.CUT_MALE_OBJ)
+        female = self.template(self.CUT_FEMALE_OBJ)
+        if self.transformation:
+            male = male.transformed(self.transformation)
+            female = female.transformed(self.transformation)
+        return male, female
+
+    def cutter_for(self, point) -> Mesh:
+        """The cutter (world coordinates) for the rib on ``point``'s side of the seam.
+
+        Parameters
+        ----------
+        point : point-like
+            A world point identifying the rib, e.g. its centroid. On the
+            connector's local ``-Y`` side it gets the MALE cutter, on the
+            ``+Y`` side the FEMALE one.
+
+        Returns
+        -------
+        :class:`compas.datastructures.Mesh`
+        """
+        male, female = self.cutter_meshes()
+        local = Point(*point)
+        if self.transformation:
+            local = local.transformed(self.transformation.inverted())
+        return male if local.y < 0 else female
+
+    # ==========================================================================
+    # Implementations of abstract methods
+    # ==========================================================================
+
+    def compute_elementgeometry(self, include_features: bool = True) -> Mesh:
+        mesh = self.template(self.BODY_OBJ)
+        if include_features and self._features:
+            for feature in self._features:
+                mesh = feature.apply(mesh)
+        return mesh
+
+    def compute_aabb(self, inflate: float = 1.0) -> Box:
+        box = _placed_geometry(self).aabb()
+        if inflate != 1.0:
+            box.xsize *= inflate
+            box.ysize *= inflate
+            box.zsize *= inflate
+        self._aabb = box
+        return box
+
+    def compute_obb(self, inflate: float = 1.0) -> Box:
+        box = _placed_geometry(self).obb()
+        if inflate != 1.0:
+            box.xsize *= inflate
+            box.ysize *= inflate
+            box.zsize *= inflate
+        self._obb = box
+        return box
+
+    def compute_point(self) -> Point:
+        return Point(*_placed_geometry(self).centroid())

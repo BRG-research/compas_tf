@@ -6,6 +6,7 @@ from compas_model.elements import Group
 from compas_model.models import Model
 
 from compas_tf.connectors import ConnectorElement
+from compas_tf.connectors import OuterRibConnectorElement
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle
@@ -92,6 +93,52 @@ for i, (a, b, contact) in enumerate(edge_contacts):
     # nominal length (= rib thickness), placed alongside the cuts.
     for cylinder in connector.cylinder_elements(rib.computed_thickness):
         cantilever_model.add_element(cylinder, parent=cylinders_group)
+
+# ------------------------------------------------------------------ #
+# Contacts between the quarters' outer ribs ONLY - all-pairs mode: every
+# outer_ribs_<i> group against every OTHER one, pairs within a single group
+# are never tested (so the two ribs of one quarter do not pair up). The 4
+# quarters meet at 4 seams -> exactly 4 face-face contact pairs. Contacts
+# from the column <-> rib step above are cleared first, so the result holds
+# only the rib <-> rib seam contacts computed here.
+# ------------------------------------------------------------------ #
+
+for edge in list(cantilever_model.graph.edges()):
+    cantilever_model.graph.edge_attribute(edge, name="contacts", value=[])
+
+cantilever_model.compute_contacts_between_groups(
+    [f"outer_ribs_{i}" for i in range(4)],
+)
+
+rib_contacts = []
+for edge in cantilever_model.graph.edges():
+    contacts = cantilever_model.graph.edge_attribute(edge, name="contacts")
+    if contacts:
+        a = cantilever_model.graph.node_element(edge[0])
+        b = cantilever_model.graph.node_element(edge[1])
+        for contact in contacts:
+            rib_contacts.append((a, b, contact))
+print(f"outer-rib seam contacts: {len(rib_contacts)} (expected 4)")
+
+# ------------------------------------------------------------------ #
+# One OuterRibConnectorElement per seam. The OBJ templates are modelled in
+# the connector's local frame (interface plane at local y = 0, body hanging
+# a built-in 138.5 below the placement origin), so from_contact only has to
+# orient that frame to the seam: origin at the contact's top-edge midpoint,
+# +X = world down, +Y = the horizontal contact normal. The MALE cutter
+# (cut0) carves the rib on the local -Y side, the FEMALE (cut1) the +Y side;
+# both overshoot the interface by 10 so no cap is coplanar with a seam face.
+# ------------------------------------------------------------------ #
+
+rib_connectors_group = cantilever_model.add_group("outer_rib_connectors")
+for i, (a, b, contact) in enumerate(rib_contacts):
+    rib_connector = OuterRibConnectorElement.from_contact(contact, name=f"outer_rib_connector_{i}")
+    cantilever_model.add_element(rib_connector, parent=rib_connectors_group)
+    for rib in (a, b):
+        cutter = rib_connector.cutter_for(rib.modelgeometry.centroid())
+        rib.add_cutters([cutter.transformed(rib.modeltransformation.inverted())], name=f"outer_rib_connector_{i}_cut")
+
+print(f"outer-rib connectors placed: {len(rib_contacts)}")
 
 # ------------------------------------------------------------------ #
 #  Write
