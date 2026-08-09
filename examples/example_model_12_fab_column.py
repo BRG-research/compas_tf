@@ -3,8 +3,8 @@ import pathlib
 import compas
 from compas.geometry import Frame
 from compas.geometry import Transformation
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.column import ColumnElement
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle
@@ -20,7 +20,7 @@ RED = (0.9, 0.2, 0.2)
 # Deserialize the cantilevers model written by example_model_8, pick a column.
 # ------------------------------------------------------------------ #
 
-model: Model = compas.json_load(data_dir / "cantilevers_model.json")
+model: TFModel = compas.json_load(data_dir / "cantilevers_model.json")
 column: ColumnElement = model.find_element_with_name("column_0")
 xform = Transformation.from_frame_to_frame(Frame.worldXY().translated((-column.width * 0.5, -column.depth * 0.5, 0)), Frame.worldYZ())
 

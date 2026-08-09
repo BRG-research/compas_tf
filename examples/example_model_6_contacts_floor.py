@@ -4,8 +4,8 @@ import compas
 from compas.geometry import Point
 from compas.geometry import Vector
 from compas_model.elements import Group
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.connectors import ConnectorWedgeElement
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.plate import PlateElement
@@ -21,16 +21,16 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 # ------------------------------------------------------------------ #
 
 guide: FloorGuide = compas.json_load(data_dir / "floorguide.json")
-quarters_model: Model = compas.json_load(data_dir / "quarters_model.json")
-oculus_model: Model = compas.json_load(data_dir / "oculus_model.json")
+quarters_model: TFModel = compas.json_load(data_dir / "quarters_model.json")
+oculus_model: TFModel = compas.json_load(data_dir / "oculus_model.json")
 
 # ------------------------------------------------------------------ #
 # Merge the quarters and the oculus into one model.
 # ------------------------------------------------------------------ #
-floor_model = Model(name="floor_model").merge([quarters_model, oculus_model])
+floor_model = TFModel(name="floor_model").merge([quarters_model, oculus_model])
 
 # ------------------------------------------------------------------ #
-# Top/bottom contacts between the joint-ring plates (base Model, no FloorModel).
+# Top/bottom contacts between the joint-ring plates (base TFModel, no FloorModel).
 #
 # The wedges only sit where the *large* faces of the inner_beams plates and the
 # 4 oculus boundary plates meet - the same set example_2 uses. We pair those

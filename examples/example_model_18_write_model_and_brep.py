@@ -3,7 +3,6 @@ import time
 
 import compas
 from compas_model.elements import Group
-from compas_model.models import Model
 
 from compas_tf.model import TFModel
 from compas_tf.viewer import make_viewer
@@ -29,7 +28,7 @@ GREY = (0.85, 0.85, 0.85)
 # This is the only step here that runs a boolean.
 # ------------------------------------------------------------------ #
 
-source: Model = compas.json_load(SOURCE_FILE)
+source: TFModel = compas.json_load(SOURCE_FILE)
 model = TFModel.from_model(source, name="cantilevers_baked")
 
 start = time.perf_counter()

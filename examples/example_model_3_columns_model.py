@@ -5,8 +5,8 @@ import compas
 from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Vector
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated
@@ -18,7 +18,7 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 # ------------------------------------------------------------------ #
 
 guide: FloorGuide = compas.json_load(data_dir / "floorguide.json")
-column_model: Model = compas.json_load(data_dir / "column_model.json")
+column_model: TFModel = compas.json_load(data_dir / "column_model.json")
 
 # ------------------------------------------------------------------ #
 # Create a columns_model by placing four columns at the grid corners
@@ -36,7 +36,7 @@ for i in range(4):
 
     column_models.append(copy)
 
-columns_model = Model(name="columns_model").merge(column_models)
+columns_model = TFModel(name="columns_model").merge(column_models)
 
 # ------------------------------------------------------------------ #
 #  Write

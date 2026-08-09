@@ -9,8 +9,8 @@ import pathlib
 
 import compas
 from compas_model.elements import Group
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated
 
@@ -21,15 +21,15 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 # (example_model_10).
 # ------------------------------------------------------------------ #
 
-cantilever_model: Model = compas.json_load(data_dir / "cantilever_model.json")
-shoring_model: Model = compas.json_load(data_dir / "shoring_model.json")
+cantilever_model: TFModel = compas.json_load(data_dir / "cantilever_model.json")
+shoring_model: TFModel = compas.json_load(data_dir / "shoring_model.json")
 
 # ------------------------------------------------------------------ #
 # Merge into one model. merge() nests each input under its own top-level group,
 # named after it ("cantilever_model" / "shoring_model").
 # ------------------------------------------------------------------ #
 
-full_model = Model(name="full_model").merge([cantilever_model, shoring_model])
+full_model = TFModel(name="full_model").merge([cantilever_model, shoring_model])
 print(f"full_model: {sum(1 for _ in full_model.elements())} elements")
 
 # ------------------------------------------------------------------ #

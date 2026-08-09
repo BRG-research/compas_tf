@@ -7,8 +7,8 @@ from compas.geometry import Rotation
 from compas.geometry import Translation
 from compas.geometry import Vector
 from compas_model.elements import Group
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated
@@ -26,7 +26,7 @@ guide: FloorGuide = compas.json_load(data_dir / "floorguide.json")
 # (the oculus is its own model - see example_model_5)
 # ------------------------------------------------------------------ #
 
-quarter_model = Model(name="quarter_model")
+quarter_model = TFModel(name="quarter_model")
 
 plate_sections = [
     ("beds", guide.beds),
@@ -71,7 +71,7 @@ for i in range(4):
 
     quarter_models.append(copy)
 
-quarters_model = Model(name="quarters_model").merge(quarter_models)
+quarters_model = TFModel(name="quarters_model").merge(quarter_models)
 print(quarters_model)
 # ------------------------------------------------------------------ #
 #  Write

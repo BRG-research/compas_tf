@@ -16,6 +16,17 @@ from compas.geometry import Line
 LOCK_FILE = ".watch_viewer.lock"
 SCENE_FILE = "_viewer_scene.json"
 
+
+def headless() -> bool:
+    """True when ``COMPAS_TF_HEADLESS`` is set, so ``show()`` must not block.
+
+    Every example ends in ``viewer.show()``, which opens a window and holds the
+    process until it is closed by hand. That is right when running one example,
+    and impossible when regenerating the whole ``data/`` chain, so the examples
+    are left untouched and the viewer closes itself instead.
+    """
+    return os.environ.get("COMPAS_TF_HEADLESS", "").strip() not in ("", "0", "false", "False")
+
 # Default data directory (repo ``data/``). viewer.py lives at
 # src/compas_tf/viewer.py, so three parents up is the repo root.
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "data"
@@ -298,6 +309,13 @@ def make_viewer(data_dir):
     config.unit = "mm"
     viewer = Viewer(config)
     viewer.renderer.rendermode = "lighted"
+
+    if headless():
+        # Everything up to here still runs - the scene is built for real, so a
+        # bad geometry or an unregistered scene object still raises. Only the
+        # blocking Qt event loop is skipped, which is what lets the whole
+        # example chain be run end to end (see tools/run_examples.py).
+        viewer.show = lambda *args, **kwargs: print("[viewer] COMPAS_TF_HEADLESS -> window skipped")
     return viewer
 
 

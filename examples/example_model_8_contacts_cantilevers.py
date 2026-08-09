@@ -3,8 +3,8 @@ import pathlib
 import compas
 from compas.geometry import Point
 from compas_model.elements import Group
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.connectors import ConnectorElement
 from compas_tf.connectors import OuterRibConnectorElement
 from compas_tf.plate import PlateElement
@@ -19,15 +19,15 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 # Deserialize the floor and the columns written by earlier examples
 # ------------------------------------------------------------------ #
 
-floor_model: Model = compas.json_load(data_dir / "floor_model.json")
-columns_model: Model = compas.json_load(data_dir / "columns_model.json")
+floor_model: TFModel = compas.json_load(data_dir / "floor_model.json")
+columns_model: TFModel = compas.json_load(data_dir / "columns_model.json")
 
 # ------------------------------------------------------------------ #
 # Merge floor + columns into one model. merge() nests each input under
 # its own top-level group, named after it ("floor_model" / "columns_model").
 # ------------------------------------------------------------------ #
 
-cantilever_model = Model(name="cantilever_model").merge([floor_model, columns_model])
+cantilever_model = TFModel(name="cantilever_model").merge([floor_model, columns_model])
 
 # ------------------------------------------------------------------ #
 # Contacts between the columns and ONLY the outer ribs - a two-sided

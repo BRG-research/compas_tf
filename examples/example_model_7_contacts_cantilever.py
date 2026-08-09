@@ -2,8 +2,8 @@ import pathlib
 
 import compas
 from compas_model.elements import Group
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated
@@ -15,31 +15,31 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 # ------------------------------------------------------------------ #
 
 guide: FloorGuide = compas.json_load(data_dir / "floorguide.json")
-quarter_model: Model = compas.json_load(data_dir / "quarter_model.json")
-column_model: Model = compas.json_load(data_dir / "column_model.json")
+quarter_model: TFModel = compas.json_load(data_dir / "quarter_model.json")
+column_model: TFModel = compas.json_load(data_dir / "column_model.json")
 
 # ------------------------------------------------------------------ #
 # Interactions between quarters and oculus models
 # ------------------------------------------------------------------ #
-catiliver_model = Model(name="floor_model").merge([quarter_model, column_model])
+cantilever_model = TFModel(name="floor_model").merge([quarter_model, column_model])
 
 # ------------------------------------------------------------------ #
 # Compute contacts between individual groups
 # ------------------------------------------------------------------ #
 
-catiliver_model.compute_contacts_between_groups(
+cantilever_model.compute_contacts_between_groups(
     [
         "quarter_model",
         "column_model",
     ]
 )
-print(f"contacts between groups: {sum(1 for _ in catiliver_model.contacts())}")
+print(f"contacts between groups: {sum(1 for _ in cantilever_model.contacts())}")
 
 # ------------------------------------------------------------------ #
 #  Write
 # ------------------------------------------------------------------ #
 
-compas.json_dump(catiliver_model, data_dir / "cantiliver_model.json")
+compas.json_dump(cantilever_model, data_dir / "cantilever_model.json")
 
 # ------------------------------------------------------------------ #
 #  View
@@ -61,10 +61,10 @@ def add_tree(node, viewer_parent):
 
 
 viewer = make_viewer(data_dir)
-add_tree(catiliver_model.tree.root, viewer.scene)
+add_tree(cantilever_model.tree.root, viewer.scene)
 
 contacts_group = viewer.scene.add_group("contacts")
-for i, contact in enumerate(catiliver_model.contacts()):
+for i, contact in enumerate(cantilever_model.contacts()):
     contacts_group.add(contact.polygon, name=f"contact_{i}", color=(1.0, 0.0, 0.0))
 
 viewer.show()

@@ -3,8 +3,8 @@ import pathlib
 import compas
 from compas.geometry import Translation
 from compas_model.elements import Group
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.viewer import make_viewer
 from compas_tf.viewer import triangulated
@@ -22,7 +22,7 @@ guide: FloorGuide = compas.json_load(data_dir / "floorguide.json")
 # (4 boundary beams + bottom wedges + 1 inner plate)
 # ------------------------------------------------------------------ #
 
-oculus_model = Model(name="oculus_model")
+oculus_model = TFModel(name="oculus_model")
 
 group = oculus_model.add_group("oculus")
 for i, plate in enumerate(guide.oculus):

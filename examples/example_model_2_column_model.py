@@ -4,8 +4,8 @@ import compas
 from compas.geometry import Frame  # noqa: F401
 from compas.geometry import Transformation  # noqa: F401
 from compas.geometry import Translation
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.column import ColumnElement
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.support import SupportElement
@@ -25,7 +25,7 @@ guide: FloorGuide = compas.json_load(data_dir / "floorguide.json")
 # One support, one L-shaped column
 # ------------------------------------------------------------------ #
 
-column_model = Model(name="column_model")
+column_model = TFModel(name="column_model")
 
 
 support = SupportElement(name="support")
@@ -51,7 +51,7 @@ column_model.add_element(column)
 column_model.add_interaction(support, column)
 
 # ------------------------------------------------------------------ #
-#  Model can be transformed
+#  TFModel can be transformed
 # ------------------------------------------------------------------ #
 translation = Translation.from_vector(guide.corner_point_column(guide.size_column_head))
 column_model.transformation = translation

@@ -5,8 +5,8 @@ from compas.geometry import Frame
 from compas.geometry import Point
 from compas.geometry import Transformation
 from compas.geometry import Vector
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.connectors import ConnectorElement
 from compas_tf.connectors import ConnectorWedgeElement
 from compas_tf.viewer import make_viewer
@@ -40,10 +40,10 @@ GAP = 250.0  # spacing left between laid-flat connectors along +X
 WEDGE_NAMES = ["connector_wedge_0", "connector_wedge_1", "connector_wedge_2"]
 BOX_NAMES = ["connector_0"]
 
-model: Model = compas.json_load(data_dir / "cantilevers_model.json")
+model: TFModel = compas.json_load(data_dir / "cantilevers_model.json")
 by_name = {element.name: element for element in model.elements()}
 
-fab = Model(name="quarter_connectors_fab_model")
+fab = TFModel(name="quarter_connectors_fab_model")
 wedges_group = fab.add_group("wedges")
 boxes_group = fab.add_group("box_connectors")
 

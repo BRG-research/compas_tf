@@ -17,8 +17,8 @@ from compas.geometry import Rotation
 from compas.geometry import Translation
 from compas.geometry import Vector
 from compas_model.elements import Group
-from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.schoring_element import Dataset
 from compas_tf.schoring_element import SchoringElement
@@ -87,7 +87,7 @@ for i in range(4):
     submodels.append(m)
 
 # Tower at origin
-model_tower = Model("tower")
+model_tower = TFModel("tower")
 tower = TowerElement()
 tower.transformation = Rotation.from_axis_and_angle(Vector(0, 0, 1), math.pi / 4, Point(0, 0, 0))
 model_tower.add_element(tower)
@@ -103,7 +103,7 @@ for sm in submodels:
         sm.name = f"prop_{prop_index}"
         prop_index += 1
 
-shoring_model = Model(name="shoring_model").merge(submodels)
+shoring_model = TFModel(name="shoring_model").merge(submodels)
 
 # ------------------------------------------------------------------ #
 #  Write
