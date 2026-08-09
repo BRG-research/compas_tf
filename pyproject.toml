@@ -56,6 +56,12 @@ optional-dependencies = { dev = { file = "requirements-dev.txt" } }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# SupportElement and OuterRibConnectorElement read these OBJ meshes at
+# construction time, so deserializing any model that contains one needs them
+# present inside the installed package.
+[tool.setuptools.package-data]
+compas_tf = ["data/*.obj", "data/*.mtl", "data/OuterRibConnector/*.obj", "data/OuterRibConnector/*.mtl"]
+
 # ============================================================================
 # replace pytest.ini
 # ============================================================================

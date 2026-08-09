@@ -46,7 +46,11 @@ class SupportElement(TFElement):
         The bottom polygon of the support (square, 140 x 140 mm).
     """
 
-    DATA_DIR = Path(__file__).parent.parent.parent / "data"
+    # Package data, NOT the repo's data/ folder: this mesh is read in
+    # __init__, so every deserialization of a model containing a support
+    # needs it. Pointing outside the package made an installed compas_tf
+    # resolve it to <site-packages>/../../data and fail with FileNotFoundError.
+    DATA_DIR = Path(__file__).parent / "data"
     MESH_FILE = "column_base_power_base_sherpa_150402_PB_L-140-C.obj"
     HEAD_PLATE_DIAMETER = 106  # mm
     BASE_PLATE_SIZE = 140  # mm

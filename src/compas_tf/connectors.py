@@ -1110,7 +1110,8 @@ class OuterRibConnectorElement(TFElement):
     name : str, optional
     """
 
-    OBJ_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "OuterRibConnector"
+    # Package data - see the note on SupportElement.DATA_DIR.
+    OBJ_DIR = Path(__file__).resolve().parent / "data" / "OuterRibConnector"
     BODY_OBJ = "OuterRibConnector.obj"
     CUT_MALE_OBJ = "OuterRibConnector_cut0.obj"
     CUT_FEMALE_OBJ = "OuterRibConnector_cut1.obj"
