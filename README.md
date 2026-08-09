@@ -1,12 +1,5 @@
 # compas_tf
 
-Timber floor development.
-
-<img width="2784" height="1720" alt="image" src="https://github.com/user-attachments/assets/cda72e0f-519d-4058-8736-261175f67d48" />
-<img width="1317" height="1128" alt="image" src="https://github.com/user-attachments/assets/53569564-7db7-4ba5-8f2b-6990057e8894" />
-
-
-
 ## Install
 
 Prerequisites: [git](https://git-scm.com/downloads), [uv](https://docs.astral.sh/uv/getting-started/installation/), Python 3.12.
