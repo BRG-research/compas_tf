@@ -2,7 +2,8 @@
 
 Timber floor development.
 
-<img width="2560" height="1440" alt="floor model" src="https://github.com/user-attachments/assets/09d2c68b-67c3-489d-9ef1-2f2fcbd17851" />
+<img width="2784" height="1720" alt="image" src="https://github.com/user-attachments/assets/cda72e0f-519d-4058-8736-261175f67d48" />
+
 
 ## Install
 
