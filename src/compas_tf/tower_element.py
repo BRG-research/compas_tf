@@ -7,15 +7,17 @@ from compas.geometry import Box
 from compas.geometry import Frame
 from compas.geometry import Point
 from compas.geometry import Transformation
-from compas_model.elements.element import Element
-from compas_model.elements.element import Feature
+
+from compas_tf.element import TFElement
+from compas_tf.element import TFFeature
+from compas_tf.element import baked
 
 
-class TowerElementFeature(Feature):
+class TowerElementFeature(TFFeature):
     pass
 
 
-class TowerElement(Element):
+class TowerElement(TFElement):
     """A single tower floor element loaded from a JSON dataset file.
 
     The element contains one mesh oriented relative to a world-XY base frame.
@@ -57,6 +59,7 @@ class TowerElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            **self._baked_data(),
         }
 
     def __init__(
@@ -74,6 +77,7 @@ class TowerElement(Element):
             self._mesh_cache[dataset] = data["meshes"][0]
         self.geometry: Mesh = self._mesh_cache[dataset].copy()
 
+    @baked
     def compute_elementgeometry(self, include_features: bool = False) -> Mesh:
         if self.transformation is not None:
             self.base_frame.transform(self.transformation)

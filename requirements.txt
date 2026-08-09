@@ -1,8 +1,7 @@
 compas >= 2
 compas_model
-# compas_viewer fork: group-visibility cascade + signal-safe live scene reload
-# (used by examples/watch_viewer.py). Installed from GitHub so it works on any
-# machine regardless of local paths.
-compas_viewer @ git+https://github.com/petrasvestartas/compas_viewer.git@main
 shapely
 compas_manifold >= 0.1.0
+# Brep kernel: compas_tf.brep.get_brep / TFModel.to_step, and the STEP exports
+# in the examples. Also ships the Brep scene object compas_viewer needs.
+compas_occt >= 0.1.18

@@ -13,13 +13,14 @@ from compas.geometry import Vector
 from compas.geometry import bestfit_plane
 from compas.geometry.triangulation_earclip import Earcut
 from compas.itertools import pairwise
-from compas_model.elements.element import Element
-from compas_model.elements.element import Feature
 
+from compas_tf.element import TFElement
+from compas_tf.element import TFFeature
+from compas_tf.element import baked
 from compas_tf.geometry import PolylineLoft
 
 
-class PlateFeature(Feature):
+class PlateFeature(TFFeature):
     pass
 
 
@@ -57,7 +58,7 @@ def _flip_polyline(polyline: Polyline) -> Polyline:
     return Polyline(list(reversed(polyline.points)))
 
 
-class PlateElement(Element):
+class PlateElement(TFElement):
     """Class representing a plate element constructed from top/bottom polylines or polygons.
 
     Can be constructed in two ways:
@@ -120,16 +121,8 @@ class PlateElement(Element):
             "features": self._features,
             "name": self.name,
             "debug": self.debug,
-            "modelgeometry": self._modelgeometry,
+            **self._baked_data(),
         }
-
-    @classmethod
-    def __from_data__(cls, data: dict) -> "PlateElement":
-        modelgeometry = data.pop("modelgeometry", None)
-        plate = cls(**data)
-        if modelgeometry is not None:
-            plate._modelgeometry = modelgeometry
-        return plate
 
     def __init__(
         self,
@@ -526,6 +519,7 @@ class PlateElement(Element):
 
         return Mesh.from_vertices_and_faces(vertices, faces)
 
+    @baked
     def compute_elementgeometry(self, include_features=True) -> Mesh:
         """Compute the shape of the plate from the given polygons or pre-computed mesh.
 

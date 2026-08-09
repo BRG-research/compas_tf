@@ -31,9 +31,10 @@ from compas.geometry import Polyline
 from compas.geometry import Transformation
 from compas.geometry import Translation
 from compas.geometry import Vector
-from compas_model.elements.element import Element
-from compas_model.elements.element import Feature
 
+from compas_tf.element import TFElement
+from compas_tf.element import TFFeature
+from compas_tf.element import baked
 from compas_tf.geometry import PolylineLoft
 
 
@@ -86,11 +87,11 @@ def _placed_geometry(element) -> Mesh:
 # ===================================================================== #
 
 
-class ConnectorBoxFeature(Feature):
+class ConnectorBoxFeature(TFFeature):
     pass
 
 
-class ConnectorBoxElement(Element):
+class ConnectorBoxElement(TFElement):
     """A box-shaped connector centred on the element's local frame.
 
     Parameters
@@ -118,6 +119,7 @@ class ConnectorBoxElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            **self._baked_data(),
         }
 
     def __init__(
@@ -139,6 +141,7 @@ class ConnectorBoxElement(Element):
         """Box geometry in the element's local frame (centred on the origin)."""
         return Box(self.width, self.depth, self.height, frame=Frame.worldXY())
 
+    @baked
     def compute_elementgeometry(self, include_features: bool = False) -> Mesh:
         return self.box.to_mesh()
 
@@ -182,11 +185,11 @@ class ConnectorBoxElement(Element):
 # ===================================================================== #
 
 
-class ConnectorCylinderFeature(Feature):
+class ConnectorCylinderFeature(TFFeature):
     pass
 
 
-class ConnectorCylinderElement(Element):
+class ConnectorCylinderElement(TFElement):
     """A cylinder connector built from an axis line and a radius.
 
     The cylinder is lofted between two ``sides``-gon circles centred on the ends
@@ -218,6 +221,7 @@ class ConnectorCylinderElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            **self._baked_data(),
         }
 
     def __init__(
@@ -265,6 +269,7 @@ class ConnectorCylinderElement(Element):
         circle_top = circle_bottom.translated(z * length)
         return PolylineLoft.to_mesh(circle_bottom, circle_top)
 
+    @baked
     def compute_elementgeometry(self, include_features: bool = False) -> Mesh:
         return self.compute_mesh()
 
@@ -308,11 +313,11 @@ class ConnectorCylinderElement(Element):
 # ===================================================================== #
 
 
-class ConnectorWedgeFeature(Feature):
+class ConnectorWedgeFeature(TFFeature):
     pass
 
 
-class ConnectorWedgeElement(Element):
+class ConnectorWedgeElement(TFElement):
     """The floor contact wedge (copied from :class:`compas_tf.wedge.WedgeElement`),
     exposed as a free connector that is sized and placed from an interface line.
 
@@ -362,6 +367,7 @@ class ConnectorWedgeElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            **self._baked_data(),
         }
 
     def __init__(
@@ -550,6 +556,7 @@ class ConnectorWedgeElement(Element):
             faces.append([j, i, n + i, n + j])
         return Mesh.from_vertices_and_faces(vertices, faces)
 
+    @baked
     def compute_elementgeometry(self, include_features: bool = False) -> Mesh:
         return self.build_mesh()
 
@@ -612,7 +619,7 @@ class ConnectorWedgeElement(Element):
                 normal, yaxis = normal.scaled(-1.0), yaxis.scaled(-1.0)
             center = face_center + normal * (0.5 * -depth)  # box sits on the plate side of the face
             frame = Frame(center, xaxis, yaxis)  # z-axis = x cross y = normal
-            box = Box(self.length + 2 * margin, edge_len + 2 * margin+20, depth, frame=frame).to_mesh()
+            box = Box(self.length + 2 * margin, edge_len + 2 * margin + 20, depth, frame=frame).to_mesh()
             if self.transformation:
                 box = box.transformed(self.transformation)
             boxes.append(box)
@@ -698,11 +705,11 @@ class ConnectorWedgeElement(Element):
         return Point(*_placed_geometry(self).centroid())
 
 
-class ConnectorFeature(Feature):
+class ConnectorFeature(TFFeature):
     pass
 
 
-class DowelCylinderElement(Element):
+class DowelCylinderElement(TFElement):
     """A cylindrical dowel connector.
 
     Like the wedge components, this is a real model element (visible, serialized)
@@ -729,6 +736,7 @@ class DowelCylinderElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            **self._baked_data(),
         }
 
     def __init__(self, radius=25.0, length=100.0, transformation=None, features=None, name=None):
@@ -737,6 +745,7 @@ class DowelCylinderElement(Element):
         self.length = length
         self._mesh = Cylinder(radius, length, frame=Frame([0, 0, 0], [0, 0, 1], [1, 0, 0])).to_mesh()
 
+    @baked
     def compute_elementgeometry(self, include_features: bool = False) -> Mesh:
         return self._mesh
 
@@ -762,7 +771,7 @@ class DowelCylinderElement(Element):
         return Point(*self.modelgeometry.centroid())
 
 
-class ConnectorElement(Element):
+class ConnectorElement(TFElement):
     """Rectangular connector box straddling the contact between two elements.
 
     Local frame (before ``transformation``):
@@ -803,6 +812,7 @@ class ConnectorElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            **self._baked_data(),
         }
 
     def __init__(
@@ -1010,6 +1020,7 @@ class ConnectorElement(Element):
     # Implementations of abstract methods
     # ==========================================================================
 
+    @baked
     def compute_elementgeometry(self, include_features: bool = True) -> Mesh:
         mesh = self._box.to_mesh()
         if include_features and self._features:
@@ -1062,7 +1073,7 @@ class ConnectorElement(Element):
 # ===================================================================== #
 
 
-class OuterRibConnectorElement(Element):
+class OuterRibConnectorElement(TFElement):
     """Connector joining two quarters' outer ribs at a seam, from OBJ templates.
 
     Unlike the parametric connectors above, this is a fixed fabrication shape
@@ -1112,6 +1123,7 @@ class OuterRibConnectorElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            **self._baked_data(),
         }
 
     def __init__(
@@ -1213,6 +1225,7 @@ class OuterRibConnectorElement(Element):
     # Implementations of abstract methods
     # ==========================================================================
 
+    @baked
     def compute_elementgeometry(self, include_features: bool = True) -> Mesh:
         mesh = self.template(self.BODY_OBJ)
         if include_features and self._features:

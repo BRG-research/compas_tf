@@ -7,6 +7,8 @@ from compas.geometry import Brep
 from compas_model.elements.element import Feature
 from compas_model.modifiers import Modifier
 
+from compas_tf.element import TFFeature
+
 
 def _bbox_center(meshes: list) -> tuple:
     """The centre of the combined axis-aligned bounding box of ``meshes``."""
@@ -95,7 +97,7 @@ def heal_mesh(mesh: Mesh, precision: Optional[int] = None) -> Mesh:
     return healed
 
 
-class MeshCutFeature(Feature):
+class MeshCutFeature(TFFeature):
     """Feature that boolean-differences cutter solids out of a host element.
 
     Stored on the host element (in its local frame), so the cut travels with

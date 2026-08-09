@@ -14,13 +14,14 @@ from compas.geometry import intersection_line_plane
 from compas.geometry import intersection_plane_plane
 from compas.geometry import intersection_plane_plane_plane
 
+from compas_tf.brep import BrepMixin
 from compas_tf.geometry import BezierCurve
 from compas_tf.geometry import PolylineCut
 from compas_tf.geometry import PolylineOffset
 from compas_tf.plate import PlateElement
 
 
-class FloorGuide(Data):
+class FloorGuide(Data, BrepMixin):
     """Provides geometry parameters for building column heads and edge beams.
 
     Depending if the column is bigger than column head, there is either cutters of a beam of a separate block.
@@ -112,6 +113,26 @@ class FloorGuide(Data):
             "wedge_plane_angle": self.wedge_plane_angle,
             "bay_height": self.bay_height,
         }
+
+    # The plate groups the guide produces, in the order a quarter is assembled.
+    PLATE_GROUPS = ("outer_ribs", "inner_ribs", "inner_beams", "tsections", "beds", "oculus", "column_cutters")
+
+    def plates(self) -> list:
+        """Every :class:`compas_tf.plate.PlateElement` the guide produces, flattened.
+
+        Each group is a lazy property, so this builds them all on first call.
+        """
+        plates = []
+        for group in self.PLATE_GROUPS:
+            value = getattr(self, group, None)
+            if value is None:
+                continue
+            plates.extend(value if isinstance(value, (list, tuple)) else [value])
+        return [plate for plate in plates if isinstance(plate, PlateElement)]
+
+    def brep_meshes(self, variant=None) -> list:
+        """The geometry of every plate the guide produces - what :meth:`get_brep` converts."""
+        return [plate.placedgeometry for plate in self.plates()]
 
     @classmethod
     def __from_data__(cls, data: dict) -> "FloorGuide":

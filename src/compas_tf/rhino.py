@@ -21,6 +21,7 @@ emits the objects into the active Rhino document.
 Run in the Rhino 8 ScriptEditor (Python 3) after ``compas_tf`` is installed::
 
     from compas_tf.rhino import draw_bundle
+
     draw_bundle(r"C:\\brg\\compas_tf\\data\\oculus_fab_model_rhino.json")
 """
 

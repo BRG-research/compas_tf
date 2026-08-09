@@ -11,9 +11,11 @@ from compas.geometry import Line
 from compas.geometry import Point
 from compas.geometry import Transformation
 from compas.geometry import Vector
-from compas_model.elements.element import Element
-from compas_model.elements.element import Feature
 from compas_model.models import Model
+
+from compas_tf.element import TFElement
+from compas_tf.element import TFFeature
+from compas_tf.element import baked
 
 # from compas_occ import brep
 
@@ -109,11 +111,11 @@ class Dataset(object):
             return dataset_group
 
 
-class SchoringElementFeature(Feature):
+class SchoringElementFeature(TFFeature):
     pass
 
 
-class SchoringElement(Element):
+class SchoringElement(TFElement):
     """A single shoring component loaded from a JSON dataset file.
 
     Data structure
@@ -219,7 +221,14 @@ class SchoringElement(Element):
 
     @property
     def __data__(self) -> dict:
-        return {"dataset": self.dataset, "transformation": self.transformation, "features": self._features, "name": self.name, "geometry_as_brep": self.geometry_as_brep}
+        return {
+            "dataset": self.dataset,
+            "transformation": self.transformation,
+            "features": self._features,
+            "name": self.name,
+            "geometry_as_brep": self.geometry_as_brep,
+            **self._baked_data(),
+        }
 
     def __init__(
         self,
@@ -250,6 +259,7 @@ class SchoringElement(Element):
         self.zsize = abs(self.frames[0].point[2])
         self.max_extension_length = data["extension_length"]
 
+    @baked
     def compute_elementgeometry(self, include_features: bool = False) -> Union[Mesh, Brep]:
         """Compute the shape of the element from the loaded geometry.
         This shape is relative to the frame of the element.

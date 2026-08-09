@@ -9,6 +9,13 @@ from compas_tf.geometry import (
     PolylineCut,
     PolylineLoft,
 )
+
+# Shared bases: baked-geometry serialization (TFElement/TFFeature/TFModel) and
+# the mesh -> solid Brep conversion (BrepMixin.get_brep) every class exposes.
+from compas_tf.brep import BrepMixin, mesh_to_brep, meshes_to_brep
+from compas_tf.element import TFElement, TFFeature, baked, bakekey
+from compas_tf.model import TFModel
+
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.column import ColumnElement, ColumnAddFeature, ColumnCutFeature, ColumnFeature
 
@@ -33,6 +40,14 @@ __all__ = [
     "PolylineOffset",
     "PolylineCut",
     "PolylineLoft",
+    "BrepMixin",
+    "mesh_to_brep",
+    "meshes_to_brep",
+    "TFElement",
+    "TFFeature",
+    "TFModel",
+    "baked",
+    "bakekey",
     "FloorGuide",
     "ColumnElement",
     "ColumnAddFeature",

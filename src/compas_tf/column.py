@@ -6,11 +6,14 @@ from compas.geometry import Frame
 from compas.geometry import Line
 from compas.geometry import Point
 from compas.geometry import Transformation
-from compas_model.elements import Element
 from compas_model.elements.element import Feature
 
+from compas_tf.element import TFElement
+from compas_tf.element import TFFeature
+from compas_tf.element import baked
 
-class ColumnAddFeature(Feature):
+
+class ColumnAddFeature(TFFeature):
     """Additive feature: boolean-unions a set of capitel boxes onto the column.
 
     This is the additive half of the column feature pair; its subtractive
@@ -35,6 +38,10 @@ class ColumnAddFeature(Feature):
     def __init__(self, boxes: list = None, name: Optional[str] = None):
         super().__init__(name=name)
         self.boxes = [box.copy() for box in (boxes or [])]
+
+    def brep_meshes(self, variant: Optional[str] = None) -> list:
+        """The capitel boxes as meshes - what :meth:`get_brep` converts."""
+        return [box.to_mesh() for box in self.boxes]
 
     def apply(self, shape: Mesh) -> Mesh:
         """Boolean-union the capitel boxes onto the column base mesh.
@@ -67,7 +74,7 @@ class ColumnAddFeature(Feature):
 ColumnFeature = ColumnAddFeature
 
 
-class ColumnCutFeature(Feature):
+class ColumnCutFeature(TFFeature):
     """Feature that boolean-differences cutter solids out of the column geometry.
 
     Stored on the column (in its local frame), so the cut travels with the
@@ -130,7 +137,7 @@ class ColumnCutFeature(Feature):
         return SolidDifferenceModifier.largest_piece(carved)
 
 
-class ColumnElement(Element):
+class ColumnElement(TFElement):
     """Class representing a column element with a square section, constructed from the WorldXY Frame.
 
     The column is defined in its local frame, where the height corresponds to the
@@ -181,6 +188,7 @@ class ColumnElement(Element):
             "name": self.name,
             "capitel_width": self.capitel_width,
             "capitel_height": self.capitel_height,
+            **self._baked_data(),
         }
 
     def __init__(
@@ -209,7 +217,7 @@ class ColumnElement(Element):
         """Normalize a ``types`` argument (class names and/or classes) to a name set."""
         return {t if isinstance(t, str) else t.__name__ for t in types}
 
-    def get_features(self, types: Optional[list] = None) -> list[Feature]:
+    def get_features(self, types: Optional[list] = None, placed: bool = False) -> list[Feature]:
         """Return the column's features, optionally filtered by feature type.
 
         This is pure retrieval - no geometry is built and the lazy capitel is
@@ -224,15 +232,40 @@ class ColumnElement(Element):
             Feature types to keep, given as class names (e.g.
             ``"ColumnCutFeature"``) or the classes themselves. ``None`` (default)
             returns every feature, in application order.
+        placed : bool, optional
+            If True, return independent copies whose geometry has been moved
+            into model coordinates by the column's ``modeltransformation`` - the
+            same transform that builds ``modelgeometry``, so the returned
+            cutters line up with the column wherever it sits. The stored
+            features are left untouched. Default is False: the features as
+            stored, in the column's local frame.
 
         Returns
         -------
         list[:class:`Feature`]
         """
         if types is None:
-            return list(self._features)
-        names = self._type_names(types)
-        return [feature for feature in self._features if type(feature).__name__ in names]
+            features = list(self._features)
+        else:
+            names = self._type_names(types)
+            features = [feature for feature in self._features if type(feature).__name__ in names]
+
+        if not placed:
+            return features
+
+        return [self._place(feature, self.placement) for feature in features]
+
+    @staticmethod
+    def _place(feature: Feature, transformation: Transformation) -> Feature:
+        """An independent copy of ``feature`` with its geometry moved by ``transformation``."""
+        if hasattr(feature, "placed"):
+            return feature.placed(transformation)
+        placed = feature.copy()
+        if getattr(placed, "meshes", None):
+            placed.meshes = [mesh.transformed(transformation) for mesh in placed.meshes]
+        if getattr(placed, "boxes", None):
+            placed.boxes = [box.transformed(transformation) for box in placed.boxes]
+        return placed
 
     def compute_features(self, types: Optional[list] = None) -> list[Feature]:
         """Ensure the capitel feature exists, then return the features to apply.
@@ -356,6 +389,7 @@ class ColumnElement(Element):
     # Implementations of abstract methods
     # =============================================================================
 
+    @baked
     def compute_elementgeometry(self, include_features: bool = True, types: Optional[list] = None) -> Mesh:
         """Compute the mesh shape from the box, applying the column features.
 
@@ -376,6 +410,12 @@ class ColumnElement(Element):
         Returns
         -------
         :class:`compas.datastructures.Mesh`
+
+        Notes
+        -----
+        Decorated with :func:`compas_tf.element.baked`: if this exact variant
+        has been baked (see :meth:`compas_tf.element.TFElement.bake` /
+        :meth:`bake_stock`), the stored mesh is returned and no boolean runs.
         """
         mesh = self.box.to_mesh(True)
         if include_features:
@@ -385,6 +425,32 @@ class ColumnElement(Element):
                 mesh = feature.apply(mesh)
             mesh = merge_coplanar_faces(mesh)
         return mesh
+
+    # The feature filter that yields the uncut stock: the capitel union applied,
+    # the cuts not yet. Kept as a constant so the bake key and the lookup agree.
+    STOCK_TYPES = ["ColumnAddFeature"]
+
+    @property
+    def stock(self) -> Mesh:
+        """The UNCUT column: base box + capitel, before any cutter is applied.
+
+        The fabrication starting point - the raw glulam blank the cuts are made
+        in. Served from the bake cache once :meth:`bake_stock` has run.
+        """
+        return self.compute_elementgeometry(types=self.STOCK_TYPES)
+
+    def bake_stock(self) -> Mesh:
+        """Compute the uncut :attr:`stock` once and store it for serialization.
+
+        Sugar for ``bake(types=ColumnElement.STOCK_TYPES)``. Bake this next to
+        the plain :meth:`compas_tf.element.TFElement.bake` to carry both the
+        blank and the carved part in the JSON.
+
+        Returns
+        -------
+        :class:`compas.datastructures.Mesh`
+        """
+        return self.bake(types=self.STOCK_TYPES)
 
     def extend(self, distance: float) -> None:
         """Extend the column.

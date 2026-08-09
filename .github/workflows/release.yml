@@ -20,11 +20,30 @@ jobs:
           invoke_lint: true
           invoke_test: true
 
-  Publish:
+  github-release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: compas-dev/compas-actions.publish@v3
         with:
-          pypi_token: ${{ secrets.PYPI }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_to_pypi: false
+
+  # PyPI trusted publisher (OIDC) - configured on pypi.org as:
+  #   repository BRG-research/compas_tf, workflow release.yml, environment pypi
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: python -m pip install --upgrade build
+      - run: python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1

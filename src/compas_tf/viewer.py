@@ -281,6 +281,11 @@ def _patch_group_nesting():
 def make_viewer(data_dir):
     """Return a live ``Viewer`` (lighted, mm units), or a recording stand-in
     when watch_viewer.py is running, so the example becomes write-only.
+
+    Breps need nothing extra here: ``compas_viewer`` registers a Brep scene
+    object only for ``compas_occ``, but ``compas_occt`` ships its own
+    ``register_scene_objects`` plugin (``compas_occt/scene.py``) that compas
+    collects alongside it, so ``scene.add(brep)`` already works.
     """
     _apply_edgecolor()
     if watcher_running(data_dir):
