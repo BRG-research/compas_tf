@@ -827,8 +827,9 @@ class BaseModel(Datastructure):
         if groupset_b is None:
             if len(present) < 2:
                 raise ValueError(
-                    "compute_contacts_between_groups needs at least two non-empty groups to form a pair; "
-                    "found elements only for {} of the requested {}.".format(sorted(present), sorted(groupset_a))
+                    "compute_contacts_between_groups needs at least two non-empty groups to form a pair; found elements only for {} of the requested {}.".format(
+                        sorted(present), sorted(groupset_a)
+                    )
                 )
 
             def accept(key_u: str, key_v: str) -> bool:
@@ -836,8 +837,7 @@ class BaseModel(Datastructure):
         else:
             if not (present & groupset_a) or not (present & groupset_b):
                 raise ValueError(
-                    "compute_contacts_between_groups (two-sided) needs elements on both sides; "
-                    "found {} for side A {} and {} for side B {}.".format(
+                    "compute_contacts_between_groups (two-sided) needs elements on both sides; found {} for side A {} and {} for side B {}.".format(
                         sorted(present & groupset_a), sorted(groupset_a), sorted(present & groupset_b), sorted(groupset_b)
                     )
                 )

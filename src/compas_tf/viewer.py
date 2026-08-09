@@ -27,6 +27,7 @@ def headless() -> bool:
     """
     return os.environ.get("COMPAS_TF_HEADLESS", "").strip() not in ("", "0", "false", "False")
 
+
 # Default data directory (repo ``data/``). viewer.py lives at
 # src/compas_tf/viewer.py, so three parents up is the repo root.
 DATA_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "data"
