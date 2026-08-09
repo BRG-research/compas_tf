@@ -116,6 +116,20 @@ generated/
 *.3dmbak
 *.rhl
 
+# Rhino / Illustrator backup files
+*.objbak
+*.aibak
+
+# Per-element OBJ debug exports
+examples/obj_export/
+
+# Dated whole-model OBJ exports (regenerated each run)
+data/floor_model_*.obj
+
+# watch_viewer.py live-reload lock + recorded scene
+data/.watch_viewer.lock
+data/_viewer_scene.json
+
 libs/**
 !libs/PLACEHOLDER
 

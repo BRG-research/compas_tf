@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "PowerShell(uv pip install --python .venv\\\\Scripts\\\\python.exe -e \".[dev]\")",
-      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"import compas, compas_model, compas_viewer, compas_cgal, compas_tf; from compas_tf.floor_guide import FloorGuide; from compas_tf.floor_model import FloorModel; from compas_tf.floor_builder import FloorBuilder; print\\('all imports OK'\\)\")"
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"import compas, compas_model, compas_viewer, compas_cgal, compas_tf; from compas_tf.floor_guide import FloorGuide; from compas_tf.floor_model import FloorModel; from compas_tf.floor_builder import FloorBuilder; print\\('all imports OK'\\)\")",
+      "PowerShell($paths = @\\(\"C:\\\\brg\\\\compas_model\",\"C:\\\\brg\\\\code_python\\\\compas_model\",\"C:\\\\brg\\\\compas_tf\\\\..\\\\compas_model\"\\); foreach \\($p in $paths\\) { if \\(Test-Path $p\\) { Write-Output \"FOUND: $p\"; if \\(Test-Path \"$p\\\\.git\"\\) { Write-Output \\(\"  branch: \" + \\(git -C $p rev-parse --abbrev-ref HEAD\\)\\); $hit = git -C $p grep -l \"capitel_width\" 2>$null; if \\($hit\\) { Write-Output \"  -> has capitel_width\" } else { Write-Output \"  -> NO capitel_width on current branch\" } } } else { Write-Output \"missing: $p\" } }; echo \"---- pip info ----\"; & c:/brg/compas_tf/.venv/Scripts/pip.exe show compas_model | Select-String \"Location|Version|Editable\")",
+      "Bash(python -c \"import compas_model.elements.element as e; print\\(e.__file__\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import compas_cgal, os; d=os.path.dirname\\(compas_cgal.__file__\\); print\\(os.listdir\\(d\\)\\)\")"
     ]
   }
 }

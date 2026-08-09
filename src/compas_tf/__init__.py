@@ -8,51 +8,63 @@ from compas_tf.geometry import (
     PolylineOffset,
     PolylineCut,
     PolylineLoft,
-    PlaneIntersect,
 )
-from compas_tf.floor_builder import FloorBuilder
-from compas_tf.floor_model import FloorModel
-from compas_tf.column_head import ColumnHeadElement, ColumnHeadFeature
-from compas_tf.quarter_floor import QuarterFloorElement, QuarterFloorFeature, QuarterResult
-from compas_tf.oculus import OculusElement, OculusFeature
+
+# Shared bases: baked-geometry serialization (TFElement/TFFeature/TFModel) and
+# the mesh -> solid Brep conversion (BrepMixin.get_brep) every class exposes.
+from compas_tf.brep import BrepMixin, mesh_to_brep, meshes_to_brep
+from compas_tf.element import TFElement, TFFeature, baked, bakekey
+from compas_tf.model import TFModel
+
+from compas_tf.floor_guide import FloorGuide
+from compas_tf.column import ColumnElement, ColumnAddFeature, ColumnCutFeature, ColumnFeature
 
 # Additional element types for JSON serialization
 from compas_tf.plate import PlateElement
-from compas_tf.prop import PropElement
 from compas_tf.support import SupportElement
-from compas_tf.joint_screw import ScrewElement
-from compas_tf.joint_dowel import DowelElement
-from compas_tf.wedge import WedgeElement
-from compas_tf.joint_strip import AlignmentStripElement
-from compas_tf.joint_sherpaxl120 import SherpaXL120Element
-from compas_tf.joint_hilti import HiltiElement
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.tower_element import TowerElement, TowerElementFeature
+from compas_tf.connectors import (
+    ConnectorBoxElement,
+    ConnectorBoxFeature,
+    ConnectorCylinderElement,
+    ConnectorCylinderFeature,
+    ConnectorWedgeElement,
+    ConnectorWedgeFeature,
+    ConnectorElement,
+    ConnectorFeature,
+    DowelCylinderElement,
+)
 
 __all__ = [
     "PolylineOffset",
     "PolylineCut",
     "PolylineLoft",
-    "PlaneIntersect",
-    "FloorBuilder",
-    "FloorModel",
-    "ColumnHeadElement",
-    "ColumnHeadFeature",
-    "QuarterFloorElement",
-    "QuarterFloorFeature",
-    "QuarterResult",
-    "OculusElement",
-    "OculusFeature",
+    "BrepMixin",
+    "mesh_to_brep",
+    "meshes_to_brep",
+    "TFElement",
+    "TFFeature",
+    "TFModel",
+    "baked",
+    "bakekey",
+    "FloorGuide",
+    "ColumnElement",
+    "ColumnAddFeature",
+    "ColumnCutFeature",
+    "ColumnFeature",
     "PlateElement",
-    "PropElement",
     "SupportElement",
-    "ScrewElement",
-    "DowelElement",
-    "WedgeElement",
-    "AlignmentStripElement",
-    "SherpaXL120Element",
-    "HiltiElement",
     "SchoringElement",
     "TowerElement",
     "TowerElementFeature",
+    "ConnectorBoxElement",
+    "ConnectorBoxFeature",
+    "ConnectorCylinderElement",
+    "ConnectorCylinderFeature",
+    "ConnectorWedgeElement",
+    "ConnectorWedgeFeature",
+    "ConnectorElement",
+    "ConnectorFeature",
+    "DowelCylinderElement",
 ]

@@ -23,7 +23,25 @@
       "PowerShell(py -3 -m pip show compas_tf 2>&1)",
       "PowerShell(uv venv --python 3.12 .venv)",
       "PowerShell(uv pip install --python .venv\\\\Scripts\\\\python.exe -e \".[dev]\" compas_viewer)",
-      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"from compas_tf.floor_guide import FloorGuide; from compas_viewer.viewer import Viewer; print\\('imports OK'\\)\")"
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -c \"from compas_tf.floor_guide import FloorGuide; from compas_viewer.viewer import Viewer; print\\('imports OK'\\)\")",
+      "Bash(git fetch *)",
+      "Bash(/Users/petras/brg/2_code/compas_tf/.venv/bin/python -m pip list)",
+      "Bash(.venv/bin/python -c \"import inspect; from compas_model.algorithms.contacts import polygon_polygon_overlap as f; print\\(inspect.signature\\(f\\)\\); print\\(inspect.getsourcefile\\(f\\)\\)\")",
+      "Bash(timeout 120 .venv/bin/python examples/example_2_floor_model_booleans.py)",
+      "Bash(.venv/bin/python examples/example_2_floor_model_booleans.py)",
+      "Bash(.venv/bin/python -c \"import compas_nest; print\\('installed', compas_nest.__file__\\)\")",
+      "Bash(.venv/bin/pip show *)",
+      "WebFetch(domain:github.com)",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(rm -rf /Users/petras/brg/2_code/compas_tf/.claude/projects 2>/dev/null; ls /Users/petras/.claude/projects/-Users-petras-brg-2-code-compas-tf/memory/ 2>&1)",
+      "WebFetch(domain:git.ista.ac.at)",
+      "WebFetch(domain:visualcomputing.ist.ac.at)",
+      "WebSearch",
+      "WebFetch(domain:web-ext.u-aizu.ac.jp)",
+      "WebFetch(domain:onlinelibrary.wiley.com)"
+    ],
+    "additionalDirectories": [
+      "/Users/petras/brg/2_code/compas_tf/.claude/projects"
     ]
   }
 }

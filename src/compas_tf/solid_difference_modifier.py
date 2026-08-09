@@ -1,9 +1,301 @@
 from collections import defaultdict
+from typing import Optional
 from typing import Union
 
 from compas.datastructures import Mesh
 from compas.geometry import Brep
+from compas_model.elements.element import Feature
 from compas_model.modifiers import Modifier
+
+from compas_tf.element import TFFeature
+
+
+def _bbox_center(meshes: list) -> tuple:
+    """The centre of the combined axis-aligned bounding box of ``meshes``."""
+    xs, ys, zs = [], [], []
+    for mesh in meshes:
+        for vertex in mesh.vertices():
+            x, y, z = mesh.vertex_coordinates(vertex)
+            xs.append(x)
+            ys.append(y)
+            zs.append(z)
+    if not xs:
+        return (0.0, 0.0, 0.0)
+    return (0.5 * (min(xs) + max(xs)), 0.5 * (min(ys) + max(ys)), 0.5 * (min(zs) + max(zs)))
+
+
+def _halfedge_defects(mesh: Mesh) -> tuple:
+    """Count topological defects directly from the face loops.
+
+    Returns ``(duplicates, unpaired)`` where ``duplicates`` is the number of
+    extra uses of a directed half-edge (any value > 0 means two faces run the
+    same edge in the same direction - a pinched, non-manifold surface) and
+    ``unpaired`` is the number of directed half-edges without a reverse twin
+    (any value > 0 means the mesh is open).
+
+    This exists because ``Mesh.from_vertices_and_faces`` silently *overwrites*
+    duplicate half-edges in the half-edge dict, so ``is_manifold()`` and
+    ``is_closed()`` report ``True`` on exactly the meshes this needs to catch.
+    """
+    count = {}
+    for face in mesh.faces():
+        fverts = mesh.face_vertices(face)
+        n = len(fverts)
+        for i in range(n):
+            halfedge = (fverts[i], fverts[(i + 1) % n])
+            count[halfedge] = count.get(halfedge, 0) + 1
+    duplicates = sum(c - 1 for c in count.values() if c > 1)
+    unpaired = sum(1 for (a, b) in count if (b, a) not in count)
+    return duplicates, unpaired
+
+
+def heal_mesh(mesh: Mesh, precision: Optional[int] = None) -> Mesh:
+    """Scrub a boolean result: weld coincident vertices, drop collapsed faces.
+
+    Manifold already returns a watertight, welded mesh, so on a good result this
+    is effectively a no-op. Its job is to remove the occasional zero-area sliver
+    face or duplicated vertex a near-degenerate cut can leave behind - the "thin
+    leftover" / barely-valid faces - WITHOUT changing the solid the mesh bounds:
+    it only welds exactly-coincident points and deletes faces that have collapsed
+    to fewer than three distinct vertices.
+
+    Caveat: where the carved solid touches itself tangentially (a pocket corner
+    or hole rim grazing a face), Manifold intentionally emits coincident-but-
+    distinct vertices so each surface sheet stays 2-manifold. Welding those
+    glues the sheets together and pinches the solid (duplicate directed
+    half-edges), so the weld is reverted whenever it introduces such defects.
+
+    Parameters
+    ----------
+    mesh : :class:`compas.datastructures.Mesh`
+    precision : int, optional
+        Decimal precision for the vertex weld (defaults to ``compas.PRECISION``).
+
+    Returns
+    -------
+    :class:`compas.datastructures.Mesh`
+    """
+    if not isinstance(mesh, Mesh):
+        return mesh
+    healed = mesh.copy()
+    try:
+        healed.weld(precision)
+    except Exception:
+        pass
+    if any(after > before for after, before in zip(_halfedge_defects(healed), _halfedge_defects(mesh))):
+        healed = mesh.copy()  # the weld glued intentional vertex splits - keep the unwelded topology
+    for face in list(healed.faces()):
+        if len(set(healed.face_vertices(face))) < 3:  # collapsed after the weld
+            try:
+                healed.delete_face(face)
+            except Exception:
+                pass
+    try:
+        healed.remove_unused_vertices()
+    except Exception:
+        pass
+    return healed
+
+
+class MeshCutFeature(TFFeature):
+    """Feature that boolean-differences cutter solids out of a host element.
+
+    Stored on the host element (in its local frame), so the cut travels with
+    copy/serialization and the cutter solids stay available for fabrication. The
+    cutters are unioned into a single solid first (so shared/coplanar faces are
+    not re-processed) and the largest connected piece of the result is kept.
+
+    Parameters
+    ----------
+    meshes : list[:class:`compas.datastructures.Mesh`]
+        Closed cutter solids to subtract, in the host element's local frame.
+    name : str, optional
+    """
+
+    @property
+    def __data__(self) -> dict:
+        return {"meshes": self.meshes, "name": self.name}
+
+    def __init__(self, meshes: list = None, name: Optional[str] = None):
+        super().__init__(name=name)
+        self.meshes = [mesh.copy() for mesh in (meshes or [])]
+
+    def apply(self, shape: Mesh) -> Mesh:
+        if not self.meshes:
+            return shape
+
+        from compas.geometry import Translation
+        from compas_manifold.booleans import boolean_chain
+
+        # Run the boolean with the operands shifted to the origin and shift the
+        # result back: Manifold's merge tolerance scales with the bounding-box
+        # magnitude, so working near (0,0,0) instead of out at the model's world
+        # coordinates keeps it as precise as possible. Pure translation - the
+        # carved solid is identical, just temporarily re-centred.
+        cx, cy, cz = _bbox_center([shape] + self.meshes)
+        to_origin = Translation.from_vector([-cx, -cy, -cz])
+        from_origin = Translation.from_vector([cx, cy, cz])
+
+        cutters = [mesh.transformed(to_origin).to_vertices_and_faces(True) for mesh in self.meshes]
+        if len(cutters) > 1:
+            unioned = boolean_chain(cutters, ["union"] * (len(cutters) - 1))
+            cutters = [unioned]
+
+        result = boolean_chain([shape.transformed(to_origin).to_vertices_and_faces(True), cutters[0]], ["difference"])
+        carved = Mesh.from_vertices_and_faces(result[0], result[1]).transformed(from_origin)
+        carved = SolidDifferenceModifier.largest_piece(carved)
+        return heal_mesh(carved)  # scrub any zero-area sliver faces the cut left
+
+    # A generic mesh cut has no parametric ("minimal") form; the typed subclasses
+    # below override this to return their defining line / polylines.
+    minimal = None
+
+    def placed(self, transformation) -> "MeshCutFeature":
+        """Return an independent copy with the cutter geometry moved by ``transformation``.
+
+        Used to bring a stored (local-frame) feature into model space without
+        mutating the original. Subclasses that are parametric override this to
+        move their defining geometry instead of the (derived) meshes.
+        """
+        feature = self.copy()
+        feature.meshes = [mesh.transformed(transformation) for mesh in feature.meshes]
+        return feature
+
+
+class CylinderCutFeature(MeshCutFeature):
+    """A cylindrical cut defined parametrically by an axis ``line`` + ``radius``.
+
+    The ``(line, radius, sides)`` is the source of truth; the closed boolean
+    cutter mesh is derived from it on demand (so it is never serialized). Use
+    :attr:`minimal` (the axis line) for fabrication / inspection, and
+    :attr:`meshes` for the boolean difference.
+
+    Parameters
+    ----------
+    line : :class:`compas.geometry.Line`
+        The cylinder axis, in the host element's local frame.
+    radius : float
+        The cylinder radius.
+    sides : int, optional
+        Polygon resolution of the derived cutter mesh.
+    name : str, optional
+    """
+
+    @property
+    def __data__(self) -> dict:
+        return {"line": self.line, "radius": self.radius, "sides": self.sides, "name": self.name}
+
+    def __init__(self, line=None, radius: float = 10.0, sides: int = 8, name: Optional[str] = None):
+        Feature.__init__(self, name=name)
+        self.line = line
+        self.radius = radius
+        self.sides = sides
+
+    @property
+    def meshes(self) -> list:
+        """The cylinder cutter as a one-item list of closed meshes (for booleans)."""
+        from compas_tf.connectors import ConnectorCylinderElement
+
+        return [ConnectorCylinderElement(line=self.line, radius=self.radius, sides=self.sides).compute_mesh()]
+
+    @property
+    def minimal(self):
+        """The axis line - the minimal representation of a cylinder cut."""
+        return self.line
+
+    def placed(self, transformation) -> "CylinderCutFeature":
+        feature = self.copy()
+        feature.line = self.line.transformed(transformation)
+        return feature
+
+
+class PrismCutFeature(MeshCutFeature):
+    """A prism cut (box, wedge, ... any extrusion) defined by co-wound ``bottom``
+    and ``top`` boundary polylines, lofted exactly like a plate.
+
+    The two polylines are the source of truth; the closed boolean cutter mesh is
+    the loft between them, derived on demand. Use :attr:`minimal`
+    (``(bottom, top)``) for fabrication / inspection - the same top/bottom
+    representation a :class:`compas_tf.plate.PlateElement` uses.
+
+    Parameters
+    ----------
+    bottom, top : :class:`compas.geometry.Polyline`
+        Co-wound boundary polylines (vertex *i* of ``bottom`` matches vertex *i*
+        of ``top``), in the host element's local frame.
+    name : str, optional
+    """
+
+    @property
+    def __data__(self) -> dict:
+        return {"bottom": self.bottom, "top": self.top, "name": self.name}
+
+    def __init__(self, bottom=None, top=None, name: Optional[str] = None):
+        Feature.__init__(self, name=name)
+        self.bottom = bottom
+        self.top = top
+
+    @property
+    def meshes(self) -> list:
+        """The prism cutter as a one-item list of closed meshes (for booleans)."""
+        from compas_tf.plate import PlateElement
+
+        return [PlateElement.loft(self.bottom, self.top, cap=True, close=True)]
+
+    @property
+    def minimal(self):
+        """``(bottom, top)`` polylines - the minimal representation of a prism cut."""
+        return (self.bottom, self.top)
+
+    def placed(self, transformation) -> "PrismCutFeature":
+        feature = self.copy()
+        feature.bottom = self.bottom.transformed(transformation)
+        feature.top = self.top.transformed(transformation)
+        return feature
+
+
+def _difference_backend():
+    """Return the pairwise boolean-difference backend (compas_manifold).
+
+    Manifold's ``boolean_difference_mesh_mesh`` always returns watertight,
+    oriented 2-manifold output and does not hang on the near-degenerate /
+    self-intersecting cutters that make other corefinement kernels stall::
+
+        boolean_difference_mesh_mesh(target_vf, cutter_vf) -> (V, F)
+
+    where the inputs are ``(vertices, faces)`` tuples and the result is a pair
+    of numpy arrays (triangulated faces).
+
+    Returns
+    -------
+    tuple[callable, str]
+        The ``boolean_difference_mesh_mesh`` function and the backend name.
+    """
+    from compas_manifold.booleans import boolean_difference_mesh_mesh
+
+    return (boolean_difference_mesh_mesh, "manifold")
+
+
+def _chain_backend():
+    """Return the batched boolean-chain backend (compas_manifold).
+
+    ::
+
+        boolean_chain(meshes, operations) -> (V, F)
+        boolean_chain_with_face_source(meshes, operations) -> (V, F, S)
+
+    where ``meshes`` is an iterable of ``(vertices, faces)`` tuples and ``S`` is
+    an ``[N, 2]`` array of ``[mesh_id, face_id]`` tags.
+
+    Returns
+    -------
+    tuple[callable, callable, str]
+        ``(boolean_chain, boolean_chain_with_face_source, backend_name)``.
+    """
+    from compas_manifold.booleans import boolean_chain
+    from compas_manifold.booleans import boolean_chain_with_face_source
+
+    return (boolean_chain, boolean_chain_with_face_source, "manifold")
 
 
 def _triangulate_mesh(mesh, precision=12):
@@ -114,6 +406,160 @@ def _polygonal_mesh_from_face_source(V, F, S, tri_to_orig_per_mesh):
     return Mesh.from_vertices_and_faces(vertices, new_faces)
 
 
+# Debug kill-switch: set False to skip ALL coplanar-face merging and keep the
+# raw (watertight, triangulated) boolean output - for visually isolating whether
+# an artefact comes from the boolean itself or from the merge step. Keep True in
+# normal use: contact detection needs one polygon per flat face, or every
+# coplanar contact fragments into one contact per triangle (duplicated
+# connectors/dowels downstream).
+MERGE_COPLANAR_FACES_ENABLED = True
+
+
+def merge_coplanar_faces(mesh: Mesh, normal_tol: float = 1e-3, offset_tol: float = 1e-3) -> Mesh:
+    """Merge groups of adjacent coplanar faces into single polygon faces.
+
+    Boolean kernels (and the capitel union) emit triangle soup; face-face
+    contact detection needs one polygon per flat region or it fragments/misses
+    contacts. This welds the mesh, groups adjacent faces that share a common
+    plane (matching unit normal and plane offset within tolerance), and re-traces
+    each group's outer boundary into a single polygon face.
+
+    Parameters
+    ----------
+    mesh : :class:`compas.datastructures.Mesh`
+        The mesh to clean (typically a triangulated boolean result).
+    normal_tol : float
+        Max ``|n_a x n_b|`` (sine of the angle) for two normals to count as parallel.
+    offset_tol : float
+        Max difference in plane offset (distance along the normal) for two faces
+        to count as co-planar.
+
+    Returns
+    -------
+    :class:`compas.datastructures.Mesh`
+        A mesh with maximal planar polygon faces. Returns a copy unchanged if it
+        has a single face.
+    """
+    from compas.geometry import cross_vectors
+    from compas.geometry import dot_vectors
+    from compas.geometry import length_vector
+
+    if not MERGE_COPLANAR_FACES_ENABLED:
+        return mesh.copy()
+
+    work = mesh.copy()
+    try:
+        # CGAL-fallback output has coincident-but-distinct vertices at seams that
+        # must be welded or face adjacency breaks. Manifold output is already
+        # welded EXCEPT for intentional vertex splits where the solid touches
+        # itself tangentially - welding those pinches the mesh (duplicate
+        # directed half-edges), so revert the weld if it introduces defects.
+        work.weld()
+        if any(after > before for after, before in zip(_halfedge_defects(work), _halfedge_defects(mesh))):
+            work = mesh.copy()
+    except Exception:
+        pass
+
+    faces = list(work.faces())
+    if len(faces) <= 1:
+        return work
+
+    planes = {}
+    for face in faces:
+        normal = work.face_normal(face)
+        if length_vector(normal) == 0:
+            planes[face] = None
+        else:
+            planes[face] = (normal, dot_vectors(normal, work.face_centroid(face)))
+
+    # Union-find: union adjacent faces that lie on the same plane.
+    parent = {face: face for face in faces}
+
+    def find(x):
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:
+            parent[x], x = root, parent[x]
+        return root
+
+    for face in faces:
+        plane = planes[face]
+        if plane is None:
+            continue
+        normal, offset = plane
+        for nbr in work.face_neighbors(face):
+            other = planes.get(nbr)
+            if other is None:
+                continue
+            n2, d2 = other
+            if dot_vectors(normal, n2) > 0 and length_vector(cross_vectors(normal, n2)) < normal_tol and abs(offset - d2) < offset_tol:
+                parent[find(face)] = find(nbr)
+
+    groups = defaultdict(list)
+    for face in faces:
+        groups[find(face)].append(face)
+
+    new_faces = []
+    for grp in groups.values():
+        if len(grp) == 1:
+            new_faces.append(work.face_vertices(grp[0]))
+            continue
+
+        # Boundary half-edges of the merged region are those with no reverse twin.
+        half_edges = set()
+        for face in grp:
+            verts = work.face_vertices(face)
+            for i in range(len(verts)):
+                half_edges.add((verts[i], verts[(i + 1) % len(verts)]))
+        nxt = {a: b for (a, b) in half_edges if (b, a) not in half_edges}
+
+        loops = []
+        visited = set()
+        for start in list(nxt):
+            if start in visited:
+                continue
+            loop = [start]
+            visited.add(start)
+            step = nxt.get(start)
+            while step is not None and step != start and step not in visited:
+                loop.append(step)
+                visited.add(step)
+                step = nxt.get(step)
+            if len(loop) >= 3:
+                loops.append(loop)
+
+        if len(loops) == 1:
+            new_faces.append(loops[0])  # single outer boundary -> one polygon face
+        else:
+            # Region with hole(s) (e.g. a dowel hole on a face) or an untraceable
+            # boundary: a single polygon face cannot carry a hole, so keep the
+            # original (already-manifold) boolean faces for this group rather than
+            # merging - merging would orphan the hole and open the mesh.
+            new_faces.extend(work.face_vertices(face) for face in grp)
+
+    vkeys = list(work.vertices())
+    vindex = {vk: i for i, vk in enumerate(vkeys)}
+    vertices = [work.vertex_coordinates(vk) for vk in vkeys]
+    faces_idx = [[vindex[vk] for vk in fverts] for fverts in new_faces]
+    merged = Mesh.from_vertices_and_faces(vertices, faces_idx)
+
+    # Safety net: coplanar merging is a cleanup for contact detection, not a
+    # correctness requirement. On complex cuts (pinch vertices, untraceable
+    # boundaries) it can pinch or open the mesh, so never make the topology
+    # worse than the input - fall back to the pre-merge mesh. Defects are
+    # counted from the face loops (is_manifold()/is_closed() cannot see
+    # duplicate half-edges, which compas silently overwrites).
+    try:
+        if any(after > before for after, before in zip(_halfedge_defects(merged), _halfedge_defects(work))):
+            return work
+        if not merged.is_manifold():
+            return work
+    except Exception:
+        return work
+    return merged
+
+
 class SolidDifferenceModifier(Modifier):
     SUPPORTED_WITH_FACE_SOURCE = {"union", "difference", "intersection"}
 
@@ -140,6 +586,68 @@ class SolidDifferenceModifier(Modifier):
         return cls(operation=data.get("operation", "difference"))
 
     @staticmethod
+    def largest_piece(mesh: Mesh) -> Mesh:
+        """Return the largest connected component of a (possibly disjoint) mesh.
+
+        A boolean difference can split the target into several disconnected
+        solids (e.g. a cut that lops a chunk off the column head); we keep only
+        the main body. "Largest" is measured by absolute volume, falling back to
+        face count for any component whose volume cannot be evaluated.
+
+        Parameters
+        ----------
+        mesh : :class:`compas.datastructures.Mesh`
+
+        Returns
+        -------
+        :class:`compas.datastructures.Mesh`
+            The largest component, or ``mesh`` unchanged if it is already a
+            single connected piece.
+        """
+        if not isinstance(mesh, Mesh):
+            return mesh
+        try:
+            if mesh.is_connected():
+                return mesh
+        except Exception:
+            pass
+        parts = mesh.exploded()
+        if len(parts) <= 1:
+            return mesh
+
+        def _volume(part):
+            try:
+                vol = abs(part.volume())
+                return vol if vol > 0 else None
+            except Exception:
+                return None
+
+        volumes = [_volume(part) for part in parts]
+
+        def _score(index):
+            return volumes[index] if volumes[index] is not None else float(parts[index].number_of_faces())
+
+        best = max(range(len(parts)), key=_score)
+        largest = parts[best]
+
+        # Dropping a tiny sliver is normal; dropping a NON-trivial piece means the
+        # cut fragmented the host solid (almost always a coplanar / degenerate
+        # cutter) and real geometry is being thrown away - make that loud instead
+        # of silent, so it can be fixed at the source rather than masked here.
+        kept = volumes[best]
+        discarded = sum(v for i, v in enumerate(volumes) if i != best and v)
+        if kept and discarded > 0.01 * kept:
+            import warnings
+
+            warnings.warn(
+                f"largest_piece kept 1 of {len(parts)} solids and discarded {discarded:.4g} mm^3 "
+                f"(~{100 * discarded / kept:.0f}% of the kept volume) - the cut is fragmenting the host; "
+                f"check for coplanar/degenerate cutters",
+                stacklevel=2,
+            )
+        return largest
+
+    @staticmethod
     def apply_batch(sources: list, targetgeometry: Mesh, operations: list = None) -> Mesh:
         """Apply a sequence of boolean operations in a single CGAL call.
 
@@ -164,12 +672,20 @@ class SolidDifferenceModifier(Modifier):
 
         has_xor = any(op == "xor" for op in operations)
 
+        # A pure-difference result may be split into disjoint solids; keep only
+        # the largest piece. Skipped when a union/intersection is in the mix,
+        # where multiple disconnected pieces can be intentional.
+        only_difference = all(op == "difference" for op in operations)
+
+        def _finish(mesh):
+            return SolidDifferenceModifier.largest_piece(mesh) if only_difference else mesh
+
+        boolean_chain, boolean_chain_with_face_source, backend = _chain_backend()
+
         op_summary = "+".join(sorted(set(operations)))
-        print(f"[batch-bool] boolean_chain ({op_summary}): target + {len(sources)} mesh(es)")
+        print(f"[batch-bool] {backend} boolean_chain ({op_summary}): target + {len(sources)} mesh(es)")
 
         if has_xor:
-            from compas_cgal.booleans import boolean_chain
-
             all_vf = []
             for mesh in [targetgeometry] + list(sources):
                 verts, tris, _ = _triangulate_mesh(mesh)
@@ -184,9 +700,7 @@ class SolidDifferenceModifier(Modifier):
                 print("[batch-bool] empty result, keeping original")
                 return targetgeometry
             print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
-            return Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
-
-        from compas_cgal.booleans import boolean_chain_with_face_source
+            return _finish(Mesh.from_vertices_and_faces(V.tolist(), F.tolist()))
 
         all_vf = []
         for mesh in [targetgeometry] + list(sources):
@@ -204,9 +718,9 @@ class SolidDifferenceModifier(Modifier):
 
         if V is not None:
             print(f"[batch-bool] OK -> V/F={len(V)}/{len(F)}")
-            return Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
+            return _finish(Mesh.from_vertices_and_faces(V.tolist(), F.tolist()))
 
-        from compas_cgal.booleans import boolean_difference_mesh_mesh
+        boolean_difference_mesh_mesh, _ = _difference_backend()
 
         print("[batch-bool] chain returned empty, falling back to sequential")
         result_mesh = targetgeometry
@@ -223,7 +737,7 @@ class SolidDifferenceModifier(Modifier):
                 return targetgeometry
             result_mesh = Mesh.from_vertices_and_faces(V.tolist(), F.tolist())
         print(f"[batch-bool] sequential OK -> V/F={result_mesh.number_of_vertices()}/{result_mesh.number_of_faces()}")
-        return result_mesh
+        return _finish(result_mesh)
 
     """Modifier for boolean difference between two geometries.
 
@@ -257,7 +771,8 @@ class SolidDifferenceModifier(Modifier):
 
         """
         from compas.geometry import Polyhedron
-        from compas_cgal.booleans import boolean_difference_mesh_mesh
+
+        boolean_difference_mesh_mesh, backend = _difference_backend()
 
         # Get source geometry
         source_geom = source.modelgeometry
@@ -292,7 +807,7 @@ class SolidDifferenceModifier(Modifier):
         try:
             V, F = boolean_difference_mesh_mesh(TARGET, SOURCE)
         except Exception as exc:
-            print(f"[diff] CGAL raised for '{source_name}': {exc}")
+            print(f"[diff] {backend} raised for '{source_name}': {exc}")
             return targetgeometry
 
         vertices = V.tolist()
@@ -305,4 +820,5 @@ class SolidDifferenceModifier(Modifier):
         shape = Polyhedron(vertices, faces)
         shape = shape.to_mesh()
         print(f"[diff] '{source_name}' OK  -> result V/F={len(vertices)}/{len(faces)}")
-        return shape
+        # A difference can split the target into disjoint solids; keep the main body.
+        return SolidDifferenceModifier.largest_piece(shape)

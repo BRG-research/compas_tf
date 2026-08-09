@@ -1,37 +1,46 @@
 # compas_tf
 
-Repository for the timber floor development.
+Timber floor development.
 
-<img width="2560" height="1440" alt="Screenshot from 2025-12-08 19-32-04" src="https://github.com/user-attachments/assets/09d2c68b-67c3-489d-9ef1-2f2fcbd17851" />
-<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/bad7b42c-1998-4b0e-ae74-81e7ee667522" />
-<img width="2494" height="1568" alt="Screenshot from 2025-12-10 19-05-58" src="https://github.com/user-attachments/assets/496f0dd5-b06e-482c-b3a1-7ab65b1d3051" />
-<img width="2494" height="1568" alt="Screenshot from 2025-12-10 19-06-33" src="https://github.com/user-attachments/assets/ab1e5a47-9f85-4785-ad50-eca10c7dbd6e" />
+<img width="2560" height="1440" alt="floor model" src="https://github.com/user-attachments/assets/09d2c68b-67c3-489d-9ef1-2f2fcbd17851" />
 
+## Install
 
-## Quick Setup (Git Bash)
-
-```bash
-cd /c/brg/compas_tf
-source .venv/Scripts/activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-pip install -e .
-```
-
-## Run
-
-```bash
-python examples/model.py
-```
-
-## Fresh Install
+Prerequisites: [git](https://git-scm.com/downloads), [uv](https://docs.astral.sh/uv/getting-started/installation/), Python 3.12.
 
 ```bash
 git clone https://github.com/BRG-research/compas_tf.git
 cd compas_tf
 uv venv .venv --python 3.12
-source .venv/Scripts/activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-pip install -e ".[dev]" compas_model compas_viewer
+source .venv/Scripts/activate      # macOS / Linux: source .venv/bin/activate
+uv pip install -r requirements.txt -r requirements-dev.txt
+uv pip install -e .
 ```
+
+> Use `uv pip`, not plain `pip` — a `uv venv` has no pip of its own, so a bare
+> `pip install` lands in the wrong environment.
+
+`compas_viewer` is installed from the GitHub fork
+[`petrasvestartas/compas_viewer`](https://github.com/petrasvestartas/compas_viewer)
+(group-visibility cascade + signal-safe live scene reload used by
+`examples/example_0_watch_viewer.py`). To work on the viewer itself, clone that
+repo and `uv pip install -e path/to/compas_viewer` over the top.
+
+All mesh booleans (difference, union, chain) use **`compas_manifold`**, which
+installs automatically with the requirements.
+
+## Run
+
+Each example opens its own viewer. For a faster loop, launch the persistent
+watcher **first** — then every example only writes its scene and the watcher
+live-reloads it (geometry + sidebar tree), keeping the camera:
+
+```bash
+python examples/example_0_watch_viewer.py           # launch once, leave open
+python examples/example_2_floor_model_booleans.py   # build floor model, run booleans
+python examples/example_3_orient_to_2d.py           # nest parts to 2D (uv pip install compas_nest)
+```
+
+## References
+
+- [compas_nest](https://github.com/petrasvestartas/compas_nest) — 2D nesting of part outlines.

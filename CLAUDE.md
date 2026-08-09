@@ -1,20 +1,39 @@
 # Plan
 
-- project directory: C:\brg\code_python\compas_tf
+- project directory: C:\brg\compas_tf
 
-## Quarter slab
+## Architecture (current)
 
-- Separate from slab.py the quarter sab geometry, where the base input is defined in floor_builder.py. Place the contents inside quarter.floor.py using the builder pattern is written in column_head.py and edge_beam.py build method. Create complex task with planning and check the memory how current classes were separated using floor_builder. After making a plan start implementing quarter slab build.
+- `FloorGuide` (`src/compas_tf/floor_guide.py`) is the single parametric source of
+  the floor geometry: ribs, inner beams, t-sections, beds, oculus, and the column
+  cutters (all `PlateElement`s), plus `corner_point_column()` for column/support
+  placement.
+- `FloorBuilder` and the element family that was built on it
+  (`quarter_floor.py`/`QuarterFloorElement`, `column_head.py`/`ColumnHeadElement`,
+  `oculus.py`/`OculusElement`) have been **removed** — everything comes from `FloorGuide`.
+- `FloorModel(guide=...)` (`src/compas_tf/floor_model.py`) assembles the model:
+  `add_support` → `add_column` → `add_floor_guide` (×4 quarters) →
+  `add_column_connections` → `compute_contacts_inner_beams` →
+  `precompute_boolean_modifiers`.
+- Mesh booleans: `compas_manifold` for differences (with `compas_cgal` fallback),
+  `compas_cgal` for unions. See memory notes `boolean-backend-manifold` and
+  `floorguide-single-source`.
+- Canonical example: `examples/example_2_floor_model_booleans.py` (writes
+  `data/floor_model_booleans.json` and `data/floorguide.json`).
 
-## Interfaces
+## Interfaces (joints to define — TODO)
 
-- Define faces on the element fae that have a potential to create joint.
-- Create a joint - columnhead - column
-- Create a joint - columnhead - columnhead
-- Create a joint - column - edgebeam
-- Create a joint - columnhead - plate
-- Create a joint - quarterslab - quarter slab
-- Create a joint - quarterslab - oculusch
+Define the faces on each element that can form a joint, then create joints between:
 
+- column head (column capitel) ↔ column
+- column head ↔ column head
+- column ↔ edge beam (outer rib)
+- column head ↔ plate
+- quarter slab ↔ quarter slab
+- quarter slab ↔ oculus
 
- 
+Note: this joint list predates the FloorGuide refactor and uses the old
+ColumnHead / QuarterSlab / Oculus element names. Re-ground it in the current
+`FloorGuide` vocabulary when implementing — i.e. `PlateElement` groups
+(`outer_ribs`, `inner_ribs`, `inner_beams`, `tsections`, `beds`, `oculus`),
+`ColumnElement`, and `FloorColumnConnectionElement`.

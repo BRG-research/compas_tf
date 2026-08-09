@@ -8,15 +8,17 @@ from compas.geometry import Point
 from compas.geometry import Polygon
 from compas.geometry import Transformation
 from compas.geometry import Vector
-from compas_model.elements.element import Element
-from compas_model.elements.element import Feature
+
+from compas_tf.element import TFElement
+from compas_tf.element import TFFeature
+from compas_tf.element import baked
 
 
-class SupportFeature(Feature):
+class SupportFeature(TFFeature):
     pass
 
 
-class SupportElement(Element):
+class SupportElement(TFElement):
     """Class representing a column-base element constructed from an OBJ file.
 
     Connection type: Sherpa Power Base 150402_PB_L-140-C.
@@ -56,6 +58,7 @@ class SupportElement(Element):
             "transformation": self.transformation,
             "features": self._features,
             "name": self.name,
+            **self._baked_data(),
         }
 
     def __init__(
@@ -71,6 +74,7 @@ class SupportElement(Element):
         self.top_polygon.translate([0, 0, 150])
         self.bottom_polygon = Polygon.from_rectangle(Point(70, 70, 0), 140, 140)
 
+    @baked
     def compute_elementgeometry(self, include_features=False) -> Mesh:
         """Compute the shape of the plate from the given polygons.
         This shape is relative to the frame of the element.
