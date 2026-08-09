@@ -10,6 +10,7 @@ from compas.geometry import convex_hull_xy
 from compas_model.elements.group import Group
 from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle
@@ -43,8 +44,8 @@ MARGIN = 30.0  # min gap left between laid-flat beam footprints by the de-overla
 # quarter seen from above, each resting on its top face.
 # ------------------------------------------------------------------ #
 
-model: Model = compas.json_load(data_dir / "cantilevers_model.json")
-quarter: Model = model.find_group_with_name("quarter_model_0")
+model: TFModel = TFModel.from_model(compas.json_load(data_dir / "cantilevers_model.json"))
+quarter: TFModel = model.find_group_with_name("quarter_model_0")
 
 
 def find_node(node, name):

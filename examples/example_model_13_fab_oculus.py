@@ -7,6 +7,7 @@ from compas.geometry import Transformation
 from compas.geometry import Vector
 from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle
@@ -29,8 +30,8 @@ CUT = (0.9, 0.2, 0.2)  # cut feature solids (box slot + dowels)
 # modelgeometry then all agree, and each plate can be re-placed on its own.
 # ------------------------------------------------------------------ #
 
-model: Model = compas.json_load(data_dir / "cantilevers_model.json")
-oculus: Model = model.find_group_with_name("oculus")
+model: TFModel = TFModel.from_model(compas.json_load(data_dir / "cantilevers_model.json"))
+oculus: TFModel = model.find_group_with_name("oculus")
 plates = [element for element in oculus.elements() if isinstance(element, PlateElement)]
 
 placements = [plate.modeltransformation for plate in plates]

@@ -11,6 +11,7 @@ from compas.geometry import angle_vectors_signed
 from compas_model.elements.group import Group
 from compas_model.models import Model
 
+from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle
@@ -49,8 +50,8 @@ SPREAD = 500.0  # explode distance: push each strip this far from the group cent
 # then all agree, and the unroll move can simply be composed onto it.
 # ------------------------------------------------------------------ #
 
-model: Model = compas.json_load(data_dir / "cantilevers_model.json")
-quarter: Model = model.find_group_with_name("quarter_model_0")
+model: TFModel = TFModel.from_model(compas.json_load(data_dir / "cantilevers_model.json"))
+quarter: TFModel = model.find_group_with_name("quarter_model_0")
 
 BED_GROUPS = ["beds_0_0", "beds_1_0", "beds_2_0"]
 
