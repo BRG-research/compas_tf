@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Added `compas_tf.contacts` - contact detection on Brep faces instead of mesh faces: `brep_brep_contacts`, `prepare_faces`, the `BrepContacts` element-pair detector (with a per-element Brep and face cache), the `involving` / `between` skip predicates, and the `contact_holes` accessor. The face pairs are prefiltered on opposite normals and boundary AABBs rather than by `Brep.overlap`, which would tessellate every Brep first - identical results, 3.8x faster, and no dependence on `TOL.lineardeflection`.
 * Added `TFModel.compute_contacts_brep`, the one-call Brep version of the contact search, all-pairs or restricted to named groups.
-* Added `TFModel.clear_contacts`, `TFModel.contact_breps` and `TFModel.contacts_to_step`.
+* Added `TFModel.clear_contacts`, `TFModel.contact_pairs`, `TFModel.contact_breps`, `TFModel.contact_adjacency`, `TFModel.contacts_to_step` and `TFModel.contacts_to_json`. STEP drops per-shape names, so the contact faces carry no adjacency; it goes in a JSON sidecar keyed by index, which STEP does preserve.
 * Added a `contactmethod` hook to `TFModel.compute_contacts` and `BaseModel.compute_contacts_between_groups`, so the spatial search can be driven by something other than `element.compute_contacts`.
 * Added a `cache` argument to `TFModel.element_breps` and `TFModel.to_step`, to reuse Breps already built by a contact search.
 

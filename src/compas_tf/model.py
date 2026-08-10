@@ -196,26 +196,77 @@ class TFModel(BaseModel, BrepMixin):
         compound.to_step(str(path), name=self.name or "compas_tf_model", author=author)
         return str(path)
 
+    def contact_pairs(self) -> Iterator:
+        """``(index, element_a, element_b, contact)`` for every contact.
+
+        The order is the one :meth:`contacts` yields, and it is what makes the
+        adjacency sidecar work - see :meth:`contacts_to_json`. Everything that
+        writes contacts out goes through here, so the indices always agree.
+        """
+        index = 0
+        for edge in self.graph.edges():
+            contacts = self.graph.edge_attribute(edge, name="contacts")
+            if not contacts:
+                continue
+            a = self.graph.node_element(edge[0])
+            b = self.graph.node_element(edge[1])
+            for contact in contacts:
+                yield index, a, b, contact
+                index += 1
+
     def contact_breps(self) -> list:
-        """One planar-face Brep per contact, named ``contact_<i>``.
+        """One planar-face Brep per contact, named ``contact_<i>__<a>__<b>``.
 
         Boundary loop only - holes are dropped, since a contact written this way
-        is a surface for inspection, not a solid.
+        is a surface for inspection, not a solid. The name is for use in memory:
+        STEP does not carry it (see :meth:`contacts_to_json`).
         """
         from compas_occt.brep import OCCBrep
 
         breps = []
-        for index, contact in enumerate(self.contacts()):
+        for index, a, b, contact in self.contact_pairs():
             brep = OCCBrep.from_polygons([contact.polygon], solid=False)
-            brep.name = f"contact_{index}"
+            brep.name = f"contact_{index}__{a.name}__{b.name}"
             breps.append(brep)
         return breps
+
+    def contact_adjacency(self) -> list[dict]:
+        """Which element each contact joins to which, one record per contact.
+
+        Returns
+        -------
+        list[dict]
+            ``index``, ``a`` / ``b`` (element names), ``a_type`` / ``b_type``,
+            ``a_guid`` / ``b_guid``, and ``area``. ``index`` is the position of
+            the matching face in :meth:`contacts_to_step`'s output.
+        """
+        records = []
+        for index, a, b, contact in self.contact_pairs():
+            records.append(
+                {
+                    "index": index,
+                    "a": a.name,
+                    "b": b.name,
+                    "a_type": type(a).__name__,
+                    "b_type": type(b).__name__,
+                    "a_guid": str(a.guid),
+                    "b_guid": str(b.guid),
+                    "area": contact.polygon.area,
+                }
+            )
+        return records
 
     def contacts_to_step(self, path: str, author: str = "compas_tf") -> str:
         """Write the contacts to their own STEP file, one face each.
 
         Separate from :meth:`to_step` on purpose: that file is the shop's, and a
         reader splits it with ``.solids``, which would drop loose faces.
+
+        The faces carry no adjacency - STEP drops the per-shape name (a
+        round-trip through ``to_step`` / ``from_step`` returns them all as
+        ``OCCBrepFace``, and ``from_step_with_attributes`` collapses the
+        compound into one unnamed entry). What it does preserve is the ORDER, so
+        pair the file with :meth:`contacts_to_json` and match on index.
         """
         from compas_occt.brep import OCCBrep
 
@@ -224,6 +275,20 @@ class TFModel(BaseModel, BrepMixin):
             raise ValueError("contacts_to_step: the model has no contacts; run a contact search first.")
         compound = OCCBrep.from_breps(breps)
         compound.to_step(str(path), name=f"{self.name or 'compas_tf_model'}_contacts", author=author)
+        return str(path)
+
+    def contacts_to_json(self, path: str) -> str:
+        """Write the contact adjacency beside the contact STEP.
+
+        Record ``i`` describes face ``i`` of the file
+        :meth:`contacts_to_step` wrote, which is the only way to know which two
+        elements a face in that file joins.
+        """
+        import json
+
+        records = self.contact_adjacency()
+        with open(path, "w") as f:
+            json.dump({"model": self.name, "count": len(records), "contacts": records}, f, indent=1)
         return str(path)
 
     # ==========================================================================

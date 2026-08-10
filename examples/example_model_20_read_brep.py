@@ -1,6 +1,8 @@
+import json
 import pathlib
 import sys
 import time
+from collections import Counter
 
 from compas.tolerance import TOL
 from compas_occt.brep import OCCBrep
@@ -11,6 +13,7 @@ data_dir = pathlib.Path(__file__).parent.parent / "data"
 
 STEP_FILE = data_dir / "cantilevers_baked_model.stp"  # written by example_model_18
 CONTACTS_STEP_FILE = data_dir / "cantilevers_baked_contacts.stp"
+CONTACTS_JSON_FILE = data_dir / "cantilevers_baked_contacts.json"
 
 RED = (1.0, 0.0, 0.0)
 
@@ -48,12 +51,22 @@ volume = sum(brep.volume for brep in breps)
 print(f"{STEP_FILE.stem}: {solids}/{len(breps)} closed solids, {faces} faces, {volume:.3e} mm3")
 
 contacts = []
+adjacency = []
 if CONTACTS_STEP_FILE.exists():
     start = time.perf_counter()
     contact_compound = OCCBrep.from_step(CONTACTS_STEP_FILE)
     contacts = contact_compound.faces
     area = sum(face.area for face in contacts)
     print(f"[load] {CONTACTS_STEP_FILE.name}: {time.perf_counter() - start:.1f}s, {len(contacts)} contact faces, {area:.3e} mm2")
+
+    # Which two elements each face joins. STEP drops the per-shape name but
+    # keeps the order, so record i belongs to face i.
+    if CONTACTS_JSON_FILE.exists():
+        adjacency = json.loads(CONTACTS_JSON_FILE.read_text())["contacts"]
+        joins = Counter(tuple(sorted((r["a_type"], r["b_type"]))) for r in adjacency)
+        print(f"[load] {CONTACTS_JSON_FILE.name}: {len(adjacency)} adjacency records")
+        for (ta, tb), count in joins.most_common():
+            print(f"        {count:4d}  {ta} <-> {tb}")
 
 # ------------------------------------------------------------------ #
 # View - a Brep goes into the scene like any other geometry. compas_viewer
@@ -76,9 +89,11 @@ if contacts:
     # contacts the default grey.
     contacts_group = viewer.scene.add_group("contacts")
     for index, face in enumerate(contacts):
+        record = adjacency[index] if index < len(adjacency) else None
+        name = f"contact_{index}__{record['a']}__{record['b']}" if record else f"contact_{index}"
         viewer.scene.add(
             face.to_polygon(),
-            name=f"contact_{index}",
+            name=name,
             parent=contacts_group,
             facecolor=RED,
             linecolor=RED,

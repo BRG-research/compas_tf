@@ -18,6 +18,7 @@ SOURCE_FILE = data_dir / "cantilevers_model.json"  # written by example_model_8
 MODEL_FILE = data_dir / "cantilevers_baked_model.json"
 STEP_FILE = data_dir / "cantilevers_baked_model.stp"
 CONTACTS_STEP_FILE = data_dir / "cantilevers_baked_contacts.stp"
+CONTACTS_JSON_FILE = data_dir / "cantilevers_baked_contacts.json"
 
 # ------------------------------------------------------------------ #
 # Load the full model written by example_model_8 and BAKE it.
@@ -99,7 +100,9 @@ print(f"[write] {MODEL_FILE.name}: {time.perf_counter() - start:.1f}s, {MODEL_FI
 # keeps the unsimplified Brep if it moved.
 #
 # The contacts go to their own STEP, one planar face each - to_step() splits on
-# .solids, which would drop loose faces. example_model_20 reads both.
+# .solids, which would drop loose faces - plus a JSON sidecar saying which two
+# elements each face joins. STEP drops per-shape names but keeps their ORDER,
+# so record i describes face i. example_model_20 reads all three.
 # ------------------------------------------------------------------ #
 
 start = time.perf_counter()
@@ -108,7 +111,11 @@ print(f"[write] {STEP_FILE.name}: {time.perf_counter() - start:.1f}s, {STEP_FILE
 
 start = time.perf_counter()
 model.contacts_to_step(CONTACTS_STEP_FILE)
-print(f"[write] {CONTACTS_STEP_FILE.name}: {time.perf_counter() - start:.1f}s, {CONTACTS_STEP_FILE.stat().st_size / 1024:.0f} KB")
+model.contacts_to_json(CONTACTS_JSON_FILE)
+print(
+    f"[write] {CONTACTS_STEP_FILE.name}: {time.perf_counter() - start:.1f}s, "
+    f"{CONTACTS_STEP_FILE.stat().st_size / 1024:.0f} KB + {CONTACTS_JSON_FILE.name} {CONTACTS_JSON_FILE.stat().st_size / 1024:.0f} KB"
+)
 
 # ------------------------------------------------------------------ #
 # View - the element tree mirrored so the groups stay browsable, contacts in
