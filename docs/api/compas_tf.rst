@@ -46,7 +46,6 @@ Features
 
     ColumnAddFeature
     ColumnCutFeature
-    ColumnFeature
     ConnectorFeature
     ConnectorBoxFeature
     ConnectorCylinderFeature

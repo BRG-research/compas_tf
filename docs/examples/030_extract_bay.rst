@@ -12,10 +12,34 @@ assembled on site.
 .. code-block:: text
 
     49 of 237 elements, 208 contacts
+    columns_model  (2 parts)
+      column_model_0  (2 parts)
+    floor_model  (43 parts)
+      quarters_model  (38 parts)
+        quarter_model_0  (34 parts)
+          beds_0  (18 parts)
+            beds_0_0  (6 parts)
+            ...
+          tsections_0  (6 parts)
+          outer_ribs_0  (2 parts)
+        quarter_model_1  (2 parts)
+        quarter_model_3  (2 parts)
+      connectors  (3 parts)
+      oculus_model  (2 parts)
+    connectors  (2 parts)
+    outer_rib_connectors  (2 parts)
 
 The result is a model like any other: it writes to JSON, exports to STEP, and
 draws. The source is untouched, and the copy is independent - fresh guids - so
 it can be placed and merged back alongside the original.
+
+Note what the tree shows: the bay is not a bag of parts. Every group keeps its
+place, so it is still ``floor_model/quarters_model/quarter_model_0/beds_0/...``,
+pruned to what the bay contains - and ``quarter_model_1`` and ``quarter_model_3``
+appear too, because ``neighbors=True`` reached the outer ribs and inner beams
+they share with quarter 0. Mirror that tree into the viewer rather than
+flattening it, or the structure is lost in the picture even though it is in the
+model.
 
 
 Both groups at once

@@ -9,7 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added `BaseModel.find_groups_with_names` - several named groups extracted at once as one standalone model, for lifting an assembly (one column plus the quarter it carries) out of the building. The plural matters: contacts BETWEEN the groups only survive if the groups come out together, so `find_group_with_name` twice plus `merge` keeps every internal contact and drops exactly the joint that connects them. Each group keeps its ancestor chain, pruned to what was asked for, so the extracted parts stay where they are in the world. `neighbors=True` also brings in the elements that interact with the extracted ones - the fasteners live in their own top-level groups, so a bay extracted by name alone has none - one step out only, or the whole model follows one edge at a time. On the cantilevers model: 49 elements and 208 contacts against 36 and 125 without.
+* Added `examples/example_model_21_extract_bay.py`, and the documentation the reading side never had: `docs/examples/010_read_model`, `020_read_brep`, `030_extract_bay`, `040_project_setup` (a consumer project from scratch) and `050_pipeline`, plus a written `tutorial` and a populated API reference.
+
 ### Changed
+
+* Changed `examples/example_model_19_read_model.py` and `example_model_20_read_brep.py` to the minimum API that does the job. What the comment blocks explained - baking, Brep contacts against mesh contacts, the STEP name/order sidecar, the deflection - is now prose in the docs, where it is read once rather than scrolled past in every example.
+* Changed `README.md`, which still described a `compas_viewer` fork and an `example_0_watch_viewer.py` that no longer exist.
 
 ### Removed
 
