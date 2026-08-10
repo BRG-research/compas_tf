@@ -71,11 +71,15 @@ for index, brep in enumerate(breps):
     group.add(brep, name=brep.name or f"brep_{index}")
 
 if contacts:
+    # viewer.scene.add(parent=...), NOT contacts_group.add(...): Group.add routes
+    # through SceneObject.add, which drops facecolor/linecolor and leaves the
+    # contacts the default grey.
     contacts_group = viewer.scene.add_group("contacts")
     for index, face in enumerate(contacts):
-        contacts_group.add(
+        viewer.scene.add(
             face.to_polygon(),
             name=f"contact_{index}",
+            parent=contacts_group,
             facecolor=RED,
             linecolor=RED,
             show_points=False,
