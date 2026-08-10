@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Changed `example_model_21_extract_bay.py` to name only the hardware that mounts the cantilever on its column (`ConnectorElement`, `DowelCylinderElement`). The wedges and their bolts are inner-beam hardware and `OuterRibConnectorElement` joins one quarter to the next, so the bay is 46 elements and 143 contacts rather than 64 and 168. `docs/examples/030_extract_bay` gets the viewer screenshot of it.
 * Changed `example_model_18` to `_22` to drop the timing scaffolding and the comment blocks the documentation now carries.
 * Changed the docs to say how big anything is - 237 elements and 733 contacts in the building, 185 in the floor, 34 in a quarter, 46 in a bay - in the tutorial tree and the screenshot captions.
-* Changed `.github/workflows/docs.yml` to pin Python 3.12. `python-version: 3.x` resolved to 3.14.6 and `pyproject.toml` caps at `<3.13` (no cp313 wheels for `compas_occt` or `compas_manifold`), so `pip install .` failed before mkdocs ever ran.
+* Changed `requires-python` to `>=3.10`. It said `>=3.9`, which `shapely >= 2.1` rules out, and was briefly capped at `<3.13` on the assumption that `compas_occt` and `compas_manifold` stop at 3.12 - they ship a `cp312-abi3` wheel, built against the stable ABI, so it installs on every CPython from 3.12 on. Verified up to 3.14; the cap was what broke the docs workflow, which now pins 3.12 to match the local environment rather than out of necessity.
 
 ### Removed
 
