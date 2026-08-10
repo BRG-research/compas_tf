@@ -60,6 +60,7 @@ markdown_extensions:
   - md_in_html
   - pymdownx.blocks.caption
   - pymdownx.caret
+  - pymdownx.details
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
@@ -136,7 +137,6 @@ nav:
   - Getting Started:
       - Introduction: index.md
       - Installation: installation.md
-      - Tutorial: tutorial.md
       - License: license.md
       - Changelog: changelog.md
   - Examples:

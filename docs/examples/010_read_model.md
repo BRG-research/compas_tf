@@ -26,6 +26,15 @@ outer_rib_connectors       4
 One quarter is 34: 18 beds (3 rows of 6), 6 t-sections, 2 outer ribs, 2 inner
 ribs, 3 inner beams and 3 wedges.
 
+The element types behind those names:
+
+| Element | What it is |
+| --- | --- |
+| `PlateElement` | A plate lofted between two outlines - ribs, beds, t-sections, inner beams and the oculus, 145 of the 237. |
+| `ColumnElement`, `SupportElement` | The column with its capitel, and the steel base under it. |
+| `ConnectorElement`, `ConnectorWedgeElement`, `ConnectorCylinderElement`, `DowelCylinderElement` | The fasteners and their dowels. |
+| `Group` | The interior nodes of the tree. They carry no geometry. |
+
 ```python
 --8<-- "examples/example_model_19_read_model.py"
 ```
