@@ -1,15 +1,7 @@
-"""example_model_11_full.py
-
-The full model: merge the cantilever model (floor + columns + connectors, from
-example_model_8) with the shoring model (props + tower, from example_model_10)
-into one ``full_model``. Each input keeps its own top-level group in the tree.
-"""
-
 import pathlib
 
 import compas
 from compas_model.elements import Group
-
 from compas_viewer import Viewer
 
 from compas_tf.model import TFModel

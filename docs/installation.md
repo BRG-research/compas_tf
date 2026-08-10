@@ -23,9 +23,35 @@ pip install compas_viewer
 
 Optional. Only the drawing needs it - every example ends in `viewer.show()`.
 
-## Start a project with uv
+## Get uv
 
-`uv` builds and manages the environment for you. No activating, no `pip`.
+[uv](https://github.com/astral-sh/uv) builds and manages the environment for
+you - no activating, no `pip`. Install it once
+([full instructions](https://docs.astral.sh/uv/getting-started/installation/)):
+
+=== "Windows"
+
+    ```powershell
+    winget install --id=astral-sh.uv -e
+    ```
+
+    Or without winget:
+
+    ```powershell
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```
+
+=== "macOS / Linux"
+
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+    Or `brew install uv`.
+
+Then `uv --version` should answer, and `uv self update` keeps it current.
+
+## Start a project with uv
 
 ```bash
 uv init my-project
@@ -68,8 +94,8 @@ effect with no reinstall.
 Did it work?
 
 ```bash
-python -m pytest tests/ -q          # 12 passed
-python tools/run_examples.py        # 23/23 ok
+python -m pytest tests/ -q          # 11 passed
+python tools/run_examples.py        # 21/21 ok
 ```
 
 `run_examples.py` runs every example with the window suppressed and rewrites

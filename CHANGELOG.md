@@ -11,10 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Changed `docs/installation.md` to say how to get uv, per platform - `winget install --id=astral-sh.uv` or the `astral.sh/uv/install.ps1` script on Windows, `astral.sh/uv/install.sh` or Homebrew elsewhere - with links to the repository and the official instructions. The page told you to run `uv init` without ever saying where `uv` comes from. Needs `pymdownx.tabbed`, which `mkdocs.yml` did not have.
 * Changed the example pages to the minimum that is not already in the script beside them - 445 lines to 287. What is left per page is the screenshot, the script, its output, and only the facts the code does not show: the deflection numbers, why the contacts need a second STEP, why `neighbors=` takes types. `040_project_setup` gets the uv install link back and drops the `--optional viewer` / `uv sync --extra` pair for a plain `uv add compas_viewer`, both verified by running them into a scratch project.
 * Changed the `release` workflow's build matrix to Python 3.10-3.12. It still ran 3.9, which `requires-python = ">=3.10"` now rejects, and the `publish` job needs the build - so the tag went up and nothing was published.
 
 ### Removed
+
+* Removed `examples/example_model_15_fab_formwork.py`, `example_model_17_quantities.py` and their entries in `tools/run_examples.py`. Both were 0-byte files that the runner counted as passing and the pipeline page described as if they did something. The chain is 21 examples.
+* Removed `tests/test_placeholder.py` - `assert True`, the stub that kept pytest from failing on an empty suite before there were real tests. 11 remain.
 
 ## [0.1.11] 2026-08-10
 

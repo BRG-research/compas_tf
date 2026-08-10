@@ -4,12 +4,11 @@ import compas
 from compas.geometry import Point
 from compas.geometry import Vector
 from compas_model.elements import Group
-
 from compas_viewer import Viewer
 
-from compas_tf.model import TFModel
 from compas_tf.connectors import ConnectorWedgeElement
 from compas_tf.floor_guide import FloorGuide
+from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
 from compas_tf.solid_difference_modifier import CylinderCutFeature
 from compas_tf.solid_difference_modifier import PrismCutFeature

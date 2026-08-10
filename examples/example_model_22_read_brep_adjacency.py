@@ -1,13 +1,3 @@
-"""example_model_22_read_brep_adjacency.py
-
-Ask the STEP files what is connected to what.
-
-Reads cantilevers_baked_model.stp, cantilevers_baked_contacts.stp and
-cantilevers_baked_contacts.json (example_model_18). STEP drops per-shape names
-but keeps their order, so the sidecar's record i describes contact face i - which
-is what turns 733 anonymous faces into 585 named joints.
-"""
-
 import json
 import pathlib
 from collections import defaultdict

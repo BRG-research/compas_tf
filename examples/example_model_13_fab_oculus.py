@@ -5,7 +5,6 @@ from compas.geometry import Frame
 from compas.geometry import Point
 from compas.geometry import Transformation
 from compas.geometry import Vector
-
 from compas_viewer import Viewer
 
 from compas_tf.model import TFModel

@@ -8,7 +8,6 @@ from compas.geometry import Translation
 from compas.geometry import Vector
 from compas.geometry import convex_hull_xy
 from compas_model.elements.group import Group
-
 from compas_viewer import Viewer
 
 from compas_tf.model import TFModel

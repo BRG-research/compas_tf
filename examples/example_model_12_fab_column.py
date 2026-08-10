@@ -3,11 +3,10 @@ import pathlib
 import compas
 from compas.geometry import Frame
 from compas.geometry import Transformation
-
 from compas_viewer import Viewer
 
-from compas_tf.model import TFModel
 from compas_tf.column import ColumnElement
+from compas_tf.model import TFModel
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle
 

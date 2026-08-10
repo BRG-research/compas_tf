@@ -3,12 +3,11 @@ import pathlib
 import compas
 from compas.geometry import Point
 from compas_model.elements import Group
-
 from compas_viewer import Viewer
 
-from compas_tf.model import TFModel
 from compas_tf.connectors import ConnectorElement
 from compas_tf.connectors import OuterRibConnectorElement
+from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle

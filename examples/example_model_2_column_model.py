@@ -4,12 +4,11 @@ import compas
 from compas.geometry import Frame  # noqa: F401
 from compas.geometry import Transformation  # noqa: F401
 from compas.geometry import Translation
-
 from compas_viewer import Viewer
 
-from compas_tf.model import TFModel
 from compas_tf.column import ColumnElement
 from compas_tf.floor_guide import FloorGuide
+from compas_tf.model import TFModel
 from compas_tf.support import SupportElement
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"

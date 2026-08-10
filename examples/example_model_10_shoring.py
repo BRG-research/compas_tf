@@ -1,13 +1,3 @@
-"""example_model_10_shoring.py
-
-Build a shoring model: 4-fold rotational schoring (prop) assemblies around the
-floor column positions, four custom vertical props, and a central tower.
-
-Reads floorguide.json (example_model_1) so the prop positions are driven by the
-same parametric geometry. The individual scaffolding/tower models are merged
-into one ``shoring_model`` (each becomes its own group in the scene tree).
-"""
-
 import math
 import pathlib
 
@@ -17,11 +7,10 @@ from compas.geometry import Rotation
 from compas.geometry import Translation
 from compas.geometry import Vector
 from compas_model.elements import Group
-
 from compas_viewer import Viewer
 
-from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
+from compas_tf.model import TFModel
 from compas_tf.schoring_element import Dataset
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.tower_element import TowerElement

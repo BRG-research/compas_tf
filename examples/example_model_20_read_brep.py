@@ -1,12 +1,3 @@
-"""example_model_20_read_brep.py
-
-Open the STEP files - the model as plain solids, the way a shop gets it.
-
-Reads cantilevers_baked_model.stp and cantilevers_baked_contacts.stp
-(example_model_18). No elements, no tree, no names: STEP carries none of them,
-which is the trade for a file any CAD system opens.
-"""
-
 import pathlib
 
 from compas.colors import Color

@@ -5,11 +5,10 @@ import compas
 from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Vector
-
 from compas_viewer import Viewer
 
-from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
+from compas_tf.model import TFModel
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 

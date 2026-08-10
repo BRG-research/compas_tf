@@ -3,11 +3,10 @@ import pathlib
 import compas
 from compas.geometry import Translation
 from compas_model.elements import Group
-
 from compas_viewer import Viewer
 
-from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
+from compas_tf.model import TFModel
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 

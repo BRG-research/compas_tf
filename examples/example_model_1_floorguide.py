@@ -2,7 +2,6 @@ import pathlib
 
 import compas
 from compas.geometry import Frame
-
 from compas_viewer import Viewer
 
 from compas_tf.floor_guide import FloorGuide

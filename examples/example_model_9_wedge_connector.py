@@ -1,21 +1,7 @@
-"""Wedge connector and its boolean cuts - a self-contained demo.
-
-A ConnectorWedgeElement is built on a single interface edge, then used purely as
-a GEOMETRY SOURCE for cut features. Instead of the triangular wedge itself, the
-cutters are BOXES oriented to the wedge's two INCLINED faces (the slants A-B and
-A-C of the triangular profile) - each box's large face lies on an incline and
-extends outward into the plate that face meets. Each box (plus the dowels) is
-differenced out of a host slab, the same MeshCutFeature path a PlateElement uses.
-
-Everything is drawn in model space - no viewer-side transforms - so the cutters
-sit exactly where they cut.
-"""
-
 import pathlib
 
 from compas.geometry import Point
 from compas.geometry import Vector
-
 from compas_viewer import Viewer
 
 from compas_tf.connectors import ConnectorWedgeElement

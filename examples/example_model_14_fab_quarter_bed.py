@@ -9,7 +9,6 @@ from compas.geometry import Translation
 from compas.geometry import Vector
 from compas.geometry import angle_vectors_signed
 from compas_model.elements.group import Group
-
 from compas_viewer import Viewer
 
 from compas_tf.model import TFModel
