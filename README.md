@@ -32,8 +32,8 @@ standalone project that does nothing but read one.
 ## Develop it
 
 Prerequisites: [git](https://git-scm.com/downloads),
-[uv](https://docs.astral.sh/uv/getting-started/installation/), and Python 3.12 -
-3.10 and 3.11 work too, 3.9 and 3.13 do not.
+[uv](https://docs.astral.sh/uv/getting-started/installation/), and Python 3.10
+or newer.
 
 ```bash
 git clone https://github.com/BRG-research/compas_tf.git

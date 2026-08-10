@@ -9,10 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added `compas_tf.viewer.zoom_to`, which frames the camera on the geometry before `viewer.show()`. On a model in millimetres the viewer opens at `[-10, -10, 10]` with a far plane of 1000 (scaled by `camera.scale`, which starts at 1), so a 6015 mm building is entirely clipped until you press ++f++. compas_viewer's own `zoom_selected` cannot be called for you - it reads the scene objects' bounding boxes, which do not exist until the renderer has run - so this does the same arithmetic from `element.aabb` / `brep.aabb` instead, keeping the camera's existing view direction. Using `target - position` as `zoom_selected` does is degenerate before the first render: the default position sits almost on the origin, so on a model centred 1.5 m up the camera ends up underneath the building.
+
 ### Changed
 
+* Changed `find_groups_with_names(neighbors=...)` to accept a tuple of element types, or a predicate, as well as a bool. `True` admits anything that touches the selection, which is rarely what an assembly means: across the seam a bay touches `outer_ribs_1_1`, `outer_ribs_0_3`, `inner_beams_2_1`, `inner_beams_0_3` and two oculus plates, so the extraction came out with 2-part fragments of `quarter_model_1`, `quarter_model_3` and `oculus_model` hanging off it. The filter applies to both passes, which matters more than it looks: under `True` the oculus arrives by contact and then `connector_wedge_7`'s cylinders arrive because their boxes overlap `oculus_3` - one wrong admission widening what the box pass tests against.
 * Changed `example_model_21_extract_bay.py` to name only the hardware that mounts the cantilever on its column (`ConnectorElement`, `DowelCylinderElement`). The wedges and their bolts are inner-beam hardware and `OuterRibConnectorElement` joins one quarter to the next, so the bay is 46 elements and 143 contacts rather than 64 and 168. `docs/examples/030_extract_bay` gets the viewer screenshot of it.
 * Changed `example_model_18` to `_22` to drop the timing scaffolding and the comment blocks the documentation now carries.
+* Changed the docs to say how big anything is - 237 elements and 733 contacts in the building, 185 in the floor, 34 in a quarter, 46 in a bay - in the tutorial tree and the screenshot captions.
+* Changed `.github/workflows/docs.yml` to pin Python 3.12. `python-version: 3.x` resolved to 3.14.6 and `pyproject.toml` caps at `<3.13` (no cp313 wheels for `compas_occt` or `compas_manifold`), so `pip install .` failed before mkdocs ever ran.
 
 ### Removed
 

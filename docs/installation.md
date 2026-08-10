@@ -2,13 +2,13 @@
 
 ## Requirements
 
-**Use Python 3.12; 3.10 and 3.11 work too, 3.9 and 3.13 do not.**
+**Python 3.10 or newer.**
 
-3.9 is out because `shapely >= 2.1` needs 3.10, and 3.13 is out because
-`compas_occt` and `compas_manifold` ship wheels for cp39-cp312 only - on 3.13
-pip falls back to the source distribution and building the Brep kernel from
-source fails. CI runs the tests on 3.10 (Linux, macOS, Windows); 3.12 is what
-the examples and the published data files are produced with.
+3.9 is out because `shapely >= 2.1` needs 3.10. There is no upper bound:
+`compas_occt` and `compas_manifold` stop at a cp312 wheel, but it is a
+`cp312-abi3` wheel - built against the stable ABI - so it installs on 3.12 and
+every CPython after it. Verified up to 3.14. CI runs the tests on 3.10 (Linux,
+macOS, Windows) and the examples and published data files are produced on 3.12.
 
 Five runtime dependencies, all pulled in by `pip install compas_tf`:
 

@@ -14,7 +14,7 @@ the centre, and the connectors in yellow.
 - the whole project.
 
 [**The model as STEP**](https://github.com/BRG-research/compas_tf/raw/main/data/cantilevers_baked_model.stp)
-- 237 solids, 20 MB, no `compas_tf` needed. Also as
+- when geometry preview is only needed. Also as
 [JSON](https://github.com/BRG-research/compas_tf/raw/main/data/cantilevers_baked_model.json),
 which keeps the names, the tree and the contacts.
 
