@@ -5,6 +5,9 @@ import compas
 from compas_model.elements import Group
 from compas_viewer import Viewer
 
+from compas_tf.connectors import ConnectorElement
+from compas_tf.connectors import DowelCylinderElement
+from compas_tf.connectors import OuterRibConnectorElement
 from compas_tf.model import TFModel
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
@@ -14,22 +17,34 @@ BAY_FILE = data_dir / "bay_model.json"
 model: TFModel = compas.json_load(MODEL_FILE)
 
 # A bay is one column and the one quarter it carries, plus the hardware that
-# bolts the two together.
+# bolts the two together - and nothing else.
 #
-# Only the two structural groups are named, and both in one call - the contacts
+# Only the two structural groups are named, and both in one call: the contacts
 # BETWEEN a column and its quarter survive only if the two come out together.
 #
-# The fasteners are deliberately NOT named: `connectors`, `connector_cylinders`
-# and `outer_rib_connectors` are top-level groups holding the hardware of all
-# four bays, so asking for them by name would drag in the other three.
-# neighbors=True takes only the ones belonging here - first everything with a
-# contact to something already inside, then, for the dowels and cylinders the
-# contact search skipped and which therefore have no edge to follow, everything
-# whose bounding box lands in the bay.
+# The fasteners cannot be named. `connectors`, `connector_cylinders` and
+# `outer_rib_connectors` are top-level groups holding the hardware of all four
+# bays, so asking for them by name would drag in the other three. neighbors=
+# picks out the ones belonging here instead - by contact for the connectors, and
+# by bounding box for the dowels and cylinders, which the contact search skipped
+# and which therefore have no graph edge to follow.
+#
+# Passing the fastener TYPES rather than True is what keeps the bay a bay.
+# neighbors=True admits anything that touches it, and across the seam that is
+# the outer ribs and inner beams of quarters 1 and 3 plus two oculus plates -
+# six elements that touch this bay but are no part of it.
+FASTENERS = (
+    ConnectorElement,
+    ConnectorWedgeElement,
+    ConnectorCylinderElement,
+    DowelCylinderElement,
+    OuterRibConnectorElement,
+)
+
 bay = model.find_groups_with_names(
     ["column_model_0", "quarter_model_0"],
     name="bay_0",
-    neighbors=True,
+    neighbors=FASTENERS,
 )
 
 # What came out, against what the whole building holds. The fastener rows are

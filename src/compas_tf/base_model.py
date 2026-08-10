@@ -782,7 +782,7 @@ class BaseModel(Datastructure):
         self,
         names: list[str],
         name: Optional[str] = None,
-        neighbors: bool = False,
+        neighbors: Union[bool, tuple, Callable] = False,
     ) -> "BaseModel":
         """Extract several named groups at once, as one new independent model.
 
@@ -808,13 +808,24 @@ class BaseModel(Datastructure):
         name
             Name for the new model. Defaults to the names joined by ``+``.
         neighbors
-            Also bring in any element outside the named groups that belongs with
-            one inside - the loose fasteners a bay is bolted together with, which
+            Also bring in elements outside the named groups that belong with one
+            inside - the loose fasteners a bay is bolted together with, which
             live in their own top-level group rather than in the bay's. Two
             passes: every element that interacts with one inside, and then, for
             the elements that have no interaction at all, every one whose
             bounding box lands inside the bay. Their ancestor groups are
             recreated the same way. The second pass reads ``modelgeometry``.
+
+            ``True`` admits anything that touches, which is rarely what an
+            assembly means - the ribs and beams of the quarters next door touch
+            a bay across the seam, and so does the oculus. Pass a tuple of
+            element types (or a predicate taking an element) to admit only the
+            hardware::
+
+                bay = model.find_groups_with_names(
+                    ["column_model_0", "quarter_model_0"],
+                    neighbors=(ConnectorElement, ConnectorWedgeElement, ...),
+                )
 
         Returns
         -------
@@ -855,6 +866,19 @@ class BaseModel(Datastructure):
             _collect(node)
 
         if neighbors:
+            # What may be admitted. Plain True takes anything that touches the
+            # selection, which is rarely what an assembly means: the outer ribs
+            # and inner beams of the quarters next door touch a bay across the
+            # seam, and so does the oculus, but none of them is part of it. Pass
+            # the element types the assembly is bolted together with (or a
+            # predicate) to admit only those.
+            if neighbors is True:
+                accept = lambda element: True  # noqa: E731
+            elif isinstance(neighbors, tuple):
+                accept = lambda element: isinstance(element, neighbors)  # noqa: E731
+            else:
+                accept = neighbors
+
             # Against a snapshot: a neighbour brought in must not itself pull in
             # ITS neighbours, or one edge at a time the whole model comes along.
             inside = set(selected)
@@ -864,7 +888,8 @@ class BaseModel(Datastructure):
                 inside_a, inside_b = str(a.guid) in inside, str(b.guid) in inside
                 if inside_a != inside_b:
                     outsider = b if inside_a else a
-                    selected[str(outsider.guid)] = outsider
+                    if accept(outsider):
+                        selected[str(outsider.guid)] = outsider
 
             # An element the contact search skipped has no edge at all, so the
             # walk above is blind to it - the dowels and connector cylinders are
@@ -881,7 +906,7 @@ class BaseModel(Datastructure):
                 boxes = {str(element.guid): _aabb(element) for element in list(selected.values()) + unlinked}
                 enclosing = [boxes[key] for key in list(selected)]
                 for element in unlinked:
-                    if any(_boxes_overlap(boxes[str(element.guid)], box) for box in enclosing):
+                    if accept(element) and any(_boxes_overlap(boxes[str(element.guid)], box) for box in enclosing):
                         selected[str(element.guid)] = element
 
         new = type(self)(name=name or "+".join(names))

@@ -35,10 +35,10 @@ quarters on four columns, everything cut and bolted.
 
 ## Fabrication
 
-Examples 12 to 17 all read `cantilevers_model.json` and take one part of it
-apart - a column, the oculus, a quarter's beds, a quarter's frame, the formwork,
-the connectors - laying the pieces out flat and writing a `*_fab_model.json`.
-`17_quantities` counts what the building is made of instead of drawing it.
+Examples 12, 13, 14 and 16 read `cantilevers_model.json` and take one part of it
+apart - a column, the oculus, a quarter's beds, a quarter's frame, the
+connectors - laying the pieces out flat. 13, 14 and 16 write a
+`*_fab_model.json`; 12 writes only the Rhino bundle `column_fab_rhino.json`.
 
 ## Writing it out
 
