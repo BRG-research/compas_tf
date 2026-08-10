@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Changed `requirements-dev.txt` to depend on `pytest` directly. It arrived transitively with `sphinx_compas2_theme`, so dropping that for mkdocs left the `build` workflow failing with `pytest: command not found` - lint green, tests never run.
 * Changed `find_groups_with_names(neighbors=True)` to find the elements that have no interactions at all. It was a graph walk only, and the contact search skips the fasteners (`skip=involving(DowelCylinderElement, ConnectorCylinderElement)`, 74% of the contacts for no structural information), which leaves 64 of the 237 elements with no edge for a walk to follow: a bay came out with its connectors but without the 32 dowels and 32 cylinders that bolt them on. Geometry is the only signal left for those, so an unlinked element is now included when its bounding box lands inside the bay - applied to the unlinked only, because on elements the graph does describe a box test is far too loose, one diagonal rib's box swallowing half the floor. Bay 0 goes from 49 elements to 77 (+16 cylinders, +12 dowels).
 * Changed `example_model_21_extract_bay.py` back to `neighbors=True`, which is now worth passing.
 

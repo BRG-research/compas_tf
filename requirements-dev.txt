@@ -3,6 +3,9 @@ build
 bump-my-version
 compas_invocations2
 invoke >=0.14
+# Direct, not transitive: it used to arrive with sphinx_compas2_theme, and
+# dropping that for mkdocs left CI running `invoke test` with no pytest on PATH.
+pytest
 ruff
 twine
 wheel
