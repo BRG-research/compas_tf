@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Changed `PlateElement` to build its loft on first use instead of in `__init__`. `compute_elementgeometry` is the only reader and it is `@baked`, so a baked plate returned its stored mesh and the loft was thrown away unused - yet all 145 plates paid for it on every load. `compas.json_load` of the cantilevers model drops from 3.3 s to 0.60 s (the raw `json.loads` of the same 3.9 MB file is 0.09 s).
+
 ### Removed
 
 ## [0.1.7] 2026-08-10

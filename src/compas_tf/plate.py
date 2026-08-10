@@ -205,9 +205,8 @@ class PlateElement(TFElement):
             self.top = Polygon(top_polyline.points[:-1]) if top_polyline.is_closed else None
             self.bottom = Polygon(bottom_polyline.points[:-1]) if bottom_polyline.is_closed else None
             self.polygon = self.bottom
-            # Auto-generate mesh from polylines if not provided
-            if self._mesh is None:
-                self._mesh = PolylineLoft.to_mesh(bottom_polyline, top_polyline)
+            # The loft is NOT built here - see _lazy_mesh().
+            self._loft_from_polygons = False
         else:
             self._top_polyline = None
             self._bottom_polyline = None
@@ -238,11 +237,27 @@ class PlateElement(TFElement):
                 for point in self.top.points:
                     point += up
 
-            # Auto-loft mesh from top/bottom if both were provided by the caller.
-            if self._mesh is None and top is not None and bottom is not None:
+            # Auto-loft from top/bottom if both were provided - but on demand.
+            self._loft_from_polygons = top is not None and bottom is not None
+
+    def _lazy_mesh(self) -> Optional[Mesh]:
+        """The plate's own loft, built on first use and cached.
+
+        Deliberately not built in ``__init__``. ``compute_elementgeometry`` is
+        the only reader and it is :func:`compas_tf.element.baked`, so a baked
+        plate returns its stored mesh and never needs this at all - while
+        lofting eagerly cost 2.3 s of a 4.3 s ``compas.json_load`` on the
+        cantilevers model (145 plates, earclip + unify_cycles), every bit of it
+        thrown away.
+        """
+        if self._mesh is None:
+            if self._top_polyline is not None and self._bottom_polyline is not None:
+                self._mesh = PolylineLoft.to_mesh(self._bottom_polyline, self._top_polyline)
+            elif self._loft_from_polygons:
                 bottom_pl = Polyline(list(self.bottom.points) + [self.bottom.points[0]])
                 top_pl = Polyline(list(self.top.points) + [self.top.points[0]])
                 self._mesh = PlateElement.loft(bottom_pl, top_pl, cap=True, close=True)
+        return self._mesh
 
     @property
     def _placement(self) -> Transformation:
@@ -532,8 +547,9 @@ class PlateElement(TFElement):
         :class:`compas.datastructures.Mesh`
 
         """
-        if self._mesh is not None:
-            mesh = self._mesh
+        lofted = self._lazy_mesh()
+        if lofted is not None:
+            mesh = lofted
         else:
             bottom_pts = list(self.bottom.points)
             top_pts = list(self.top.points)
