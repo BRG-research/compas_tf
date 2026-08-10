@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Changed the `release` workflow's build matrix to Python 3.10-3.12. It still ran 3.9, which `requires-python = ">=3.10"` now rejects, and the `publish` job needs the build - so the tag went up and nothing was published.
+
 ### Removed
 
 ## [0.1.11] 2026-08-10

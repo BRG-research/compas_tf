@@ -20,3 +20,10 @@ which keeps the names, the tree and the contacts.
 
 Reading a finished model needs nothing but `compas_tf` - start with the
 [examples](examples/010_read_model.md).
+
+Built on [compas](https://compas.dev),
+[compas_model](https://github.com/blockresearchgroup/compas_model),
+[compas_occt](https://github.com/petrasvestartas/compas_occt),
+[compas_manifold](https://github.com/petrasvestartas/compas_manifold) and
+[shapely](https://shapely.readthedocs.io), with
+[compas_viewer](https://github.com/compas-dev/compas_viewer) for the pictures.
