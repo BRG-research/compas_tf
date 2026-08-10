@@ -1,3 +1,12 @@
+"""example_model_19_read_model.py
+
+Open the baked model and draw it with its group tree intact.
+
+Reads cantilevers_baked_model.json (example_model_18): 237 elements and 733
+contacts. The geometry was baked before it was written, so nothing is recomputed
+- no boolean, no boolean backend.
+"""
+
 import pathlib
 
 import compas

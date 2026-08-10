@@ -1,3 +1,13 @@
+"""example_model_21_extract_bay.py
+
+Lift one bay - a column and the cantilever it carries - out of the building as a
+model in its own right.
+
+Reads cantilevers_baked_model.json (example_model_18) and writes bay_model.json:
+46 of the 237 elements, being the two named groups plus the hardware that mounts
+one on the other. Every group keeps its place in the tree.
+"""
+
 import pathlib
 from collections import Counter
 

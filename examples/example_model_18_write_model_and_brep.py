@@ -1,3 +1,15 @@
+"""example_model_18_write_model_and_brep.py
+
+Bake the parametric model and write the four files every reading example opens.
+
+Reads cantilevers_model.json (example_model_8), evaluates every boolean once and
+stores the result on the elements, then searches all 237 elements for contacts on
+their Brep faces. Writes the model as JSON, the solids as STEP, the contact faces
+as a second STEP, and a JSON sidecar naming the two elements each face joins.
+
+The only example here that runs a boolean, and the only one needing a backend.
+"""
+
 import pathlib
 
 import compas
