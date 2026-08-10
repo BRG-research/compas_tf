@@ -1,6 +1,6 @@
 # Installation
 
-## Use it
+## Install it
 
 ```bash
 pip install compas_tf
@@ -15,7 +15,7 @@ Did it work?
 python -c "import compas_tf; print(compas_tf.__version__)"
 ```
 
-## See it
+## Add the viewer
 
 ```bash
 pip install compas_viewer
@@ -23,21 +23,47 @@ pip install compas_viewer
 
 Optional. Only the drawing needs it - every example ends in `viewer.show()`.
 
-## Work on it
+## Start a project with uv
+
+`uv` builds and manages the environment for you. No activating, no `pip`.
+
+```bash
+uv init my-project
+cd my-project
+uv add compas_tf
+uv run my_script.py
+```
+
+`uv add` writes the dependency into `pyproject.toml` and installs it; `uv run`
+runs your script in that environment, creating it on the first call.
+[Set up a project](examples/040_project_setup.md) is a complete one, file by
+file.
+
+## Work on this repository
+
+Here you want an environment you stay inside, so make one and activate it:
 
 ```bash
 git clone https://github.com/BRG-research/compas_tf.git
 cd compas_tf
+
 uv venv .venv --python 3.12
 source .venv/Scripts/activate      # Linux / macOS: source .venv/bin/activate
+
 uv pip install -r requirements.txt -r requirements-dev.txt -r requirements-viewer.txt
 uv pip install -e .
 ```
 
-!!! warning "Type `uv pip`, not `pip`"
+!!! warning "Inside a `uv venv`, type `uv pip`, never `pip`"
 
-    A `uv venv` has no `pip` inside it. Plain `pip install` puts the packages in
-    some other Python, and then nothing works.
+    A `uv venv` has no `pip` in it - `which pip` finds nothing, and `python -m
+    pip` says `No module named pip`. A bare `pip install` therefore falls
+    through to some *other* Python on your `PATH` and installs there, where this
+    project will never see it. `uv pip install` always targets the activated
+    environment.
+
+`-e` means editable: the package resolves to `src/compas_tf`, so your edits take
+effect with no reinstall.
 
 Did it work?
 
@@ -74,9 +100,13 @@ zoom_to(viewer, [element.aabb for element in model.geometry_elements()])
 
 ## Build the docs
 
+With the environment above activated:
+
 ```bash
 uv pip install -r requirements-docs.txt
-invoke serve      # live at http://127.0.0.1:8000
+
+invoke serve      # live at http://127.0.0.1:8000, reloads as you edit
+invoke docs       # one-off build into site/, fails on a broken link
 ```
 
 ??? info "What gets installed, and why"
