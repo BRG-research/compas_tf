@@ -3,6 +3,7 @@ import pathlib
 import compas
 from compas_model.elements import Group
 from compas_viewer import Viewer
+from compas.colors import Color
 
 from compas_tf.model import TFModel
 
@@ -34,6 +35,6 @@ add_tree(model.tree.root)
 
 group = viewer.scene.add_group("contacts")
 for contact in contacts:
-    viewer.scene.add(contact.polygon, parent=group, facecolor=(1, 0, 0), linecolor=(1, 0, 0), show_points=False)
+    viewer.scene.add(contact.polygon, parent=group, facecolor=Color(1, 0, 0), linecolor=(1, 0, 0), show_points=False)
 
 viewer.show()

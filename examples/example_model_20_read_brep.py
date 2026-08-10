@@ -3,6 +3,7 @@ import pathlib
 from compas.tolerance import TOL
 from compas_occt.brep import OCCBrep
 from compas_viewer import Viewer
+from compas.colors import Color
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 STEP_FILE = data_dir / "cantilevers_baked_model.stp"
@@ -23,6 +24,10 @@ for brep in breps:
 
 group = viewer.scene.add_group("contacts")
 for face in contacts:
-    viewer.scene.add(face.to_polygon(), parent=group, facecolor=(1, 0, 0), linecolor=(1, 0, 0), show_points=False)
+    viewer.scene.add(
+        face.to_polygon(),
+        facecolor=Color(1.0, 0.0, 0.0),
+        parent=group,
+    )
 
 viewer.show()

@@ -1,0 +1,162 @@
+site_name: COMPAS TF
+site_url: https://brg-research.github.io/compas_tf/
+site_description: Timber floor development.
+
+repo_name: BRG-research/compas_tf
+repo_url: https://github.com/BRG-research/compas_tf/
+
+copyright: Copyright &copy; ETH Zurich - Block Research Group
+
+extra:
+  homepage: https://brg-research.github.io/compas_tf/
+  version:
+    provider: mike
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  logo: assets/logos/compas_icon_white.png
+  favicon: public/favicon.ico
+  features:
+    - content.code.copy
+    - content.footnote.tooltips
+    - navigation.expand
+    - navigation.footer
+    - navigation.sections
+    - navigation.top
+    - navigation.tabs
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+markdown_extensions:
+  - abbr
+  - attr_list
+  - admonition
+  - callouts:
+      strip_period: no
+  - footnotes
+  - md_in_html
+  - pymdownx.blocks.caption
+  - pymdownx.caret
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences
+  - toc:
+      permalink: "¤"
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src] # search packages in the src folder
+          inventories:
+            - https://docs.python.org/3/objects.inv
+            - https://compas.dev/compas/latest/objects.inv
+          options:
+            allow_inspection: true
+            backlinks: tree
+            docstring_options:
+              ignore_init_summary: true
+              trim_doctest_flags: true
+            docstring_style: numpy
+            docstring_section_style: table
+            filters: public
+            group_by_category: true
+            heading_level: 1
+            inheritance_diagram_direction: TD
+            inherited_members: false
+            line_length: 88
+            merge_init_into_class: true
+            modernize_annotations: true
+            parameter_headings: false
+            preload_modules: [mkdocstrings, compas]
+            relative_crossrefs: true
+            scoped_crossrefs: true
+            separate_signature: true
+            show_bases: false
+            show_category_heading: true
+            show_docstring_attributes: true
+            show_docstring_functions: true
+            show_docstring_modules: false
+            show_if_no_docstring: false
+            show_inheritance_diagram: false
+            show_root_heading: true
+            show_root_full_path: true
+            show_signature: true
+            show_signature_annotations: true
+            show_signature_type_parameters: true
+            show_source: false
+            show_submodules: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
+            summary:
+              modules: false
+            type_parameter_headings: true
+            unwrap_annotated: true
+
+nav:
+  - Getting Started:
+      - Introduction: index.md
+      - Installation: installation.md
+      - Tutorial: tutorial.md
+      - License: license.md
+      - Changelog: changelog.md
+  - Examples:
+      - Read a model: examples/010_read_model.md
+      - Read a STEP file: examples/020_read_brep.md
+      - Contact adjacency: examples/025_read_brep_adjacency.md
+      - Extract a bay: examples/030_extract_bay.md
+      - Set up a project: examples/040_project_setup.md
+      - The full pipeline: examples/050_pipeline.md
+  - API Reference:
+      - compas_tf.model: api/compas_tf.model.md
+      - compas_tf.element: api/compas_tf.element.md
+      - compas_tf.contacts: api/compas_tf.contacts.md
+      - compas_tf.brep: api/compas_tf.brep.md
+      - compas_tf.floor_guide: api/compas_tf.floor_guide.md
+      - compas_tf.plate: api/compas_tf.plate.md
+      - compas_tf.column: api/compas_tf.column.md
+      - compas_tf.connectors: api/compas_tf.connectors.md
+      - compas_tf.support: api/compas_tf.support.md
+      - compas_tf.schoring_element: api/compas_tf.schoring_element.md
+      - compas_tf.tower_element: api/compas_tf.tower_element.md
+      - compas_tf.geometry: api/compas_tf.geometry.md
+      - compas_tf.base_model: api/compas_tf.base_model.md
