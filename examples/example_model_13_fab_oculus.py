@@ -6,13 +6,13 @@ from compas.geometry import Point
 from compas.geometry import Transformation
 from compas.geometry import Vector
 
+from compas_viewer import Viewer
+
 from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle
 from compas_tf.viewer import frame_rectangle
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -69,7 +69,7 @@ def draw_plate(plate, parent):
     Everything is named after the plate, so the scene tree groups by plate.
     """
     group = parent.add_group(plate.name)
-    group.add(triangulated(plate.modelgeometry), name=plate.name, hide_coplanaredges=True, color=GREY)
+    group.add(plate, name=plate.name, color=GREY)
 
     bottom, top = plate.fabrication_polylines()  # co-wound (same winding)
     group.add(bottom, name=f"{plate.name}_bottom", linecolor=BLACK, linewidth=3)
@@ -84,14 +84,14 @@ def draw_plate(plate, parent):
     # transformed, so they follow the plate whether assembled or laid flat.
     for feature in plate.get_features():
         for mesh in getattr(feature, "meshes", None) or []:
-            group.add(triangulated(mesh), name=f"{plate.name}__{feature.name or 'cut'}", color=CUT, hide_coplanaredges=True)
+            group.add(mesh, name=f"{plate.name}__{feature.name or 'cut'}", color=CUT)
 
     # The dowel center lines (parametric minimal geometry; the box has none).
     for index, geometry in enumerate(plate.get_features(minimal=True)):
         group.add(geometry, name=f"{plate.name}_cutline_{index}", linecolor=CUTMIN, linewidth=3)
 
 
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
 
 # 1) The oculus as assembled (before laying flat).

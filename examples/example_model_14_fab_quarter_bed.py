@@ -10,13 +10,13 @@ from compas.geometry import Vector
 from compas.geometry import angle_vectors_signed
 from compas_model.elements.group import Group
 
+from compas_viewer import Viewer
+
 from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle
 from compas_tf.viewer import frame_rectangle
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -225,7 +225,7 @@ def draw_plate(plate, parent):
     plane + normal (orange), and its minimal cut geometry (blue).
     """
     group = parent.add_group(plate.name)
-    group.add(triangulated(plate.modelgeometry), name=plate.name, hide_coplanaredges=True, color=GREY)
+    group.add(plate, name=plate.name, color=GREY)
 
     bottom, top = plate.fabrication_polylines()  # co-wound (same winding)
     group.add(bottom, name=f"{plate.name}_bottom", linecolor=BLACK, linewidth=3)
@@ -239,7 +239,7 @@ def draw_plate(plate, parent):
         group.add(geometry, name=f"{plate.name}_cut_{index}", linecolor=CUTMIN, linewidth=3)
 
 
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
 
 # 1) The three bed strips as assembled (before unrolling).

@@ -18,13 +18,13 @@ from compas.geometry import Translation
 from compas.geometry import Vector
 from compas_model.elements import Group
 
+from compas_viewer import Viewer
+
 from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.schoring_element import Dataset
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.tower_element import TowerElement
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 SchoringElement.clear_cache()
 
@@ -121,13 +121,12 @@ def add_tree(node, viewer_parent):
     for child in node.children:
         element = child.element
         if isinstance(element, Group):
-            add_tree(child, viewer_parent.add_group(element.name))
+            add_tree(child, viewer.scene.add_group(element.name, parent=viewer_parent))
         else:
-            mesh = element.modelgeometry
-            if mesh is not None:
-                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.85, 0.85, 0.85))
+            if element.modelgeometry is not None:
+                viewer.scene.add(element, name=element.name, parent=viewer_parent, color=(0.85, 0.85, 0.85))
 
 
-viewer = make_viewer(data_dir)
-add_tree(shoring_model.tree.root, viewer.scene)
+viewer = Viewer()
+add_tree(shoring_model.tree.root, None)
 viewer.show()

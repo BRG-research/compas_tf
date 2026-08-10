@@ -1,41 +1,40 @@
-import os
+"""Rhino-bundle recording, and small drawing helpers.
+
+There is deliberately no viewer wrapper here any more. Examples use
+``compas_viewer`` directly::
+
+    from compas_viewer import Viewer
+
+    viewer = Viewer()
+    viewer.scene.add(element, name=element.name)
+    viewer.show()
+
+and a compas_tf element draws itself, because :mod:`compas_tf.scene` registers a
+scene object for it through the standard compas plugin mechanism.
+
+What used to be here and why it is gone
+---------------------------------------
+- ``make_viewer()`` returned either a real ``Viewer`` or a recorder stand-in, so
+  a persistent ``watch_viewer.py`` could live-reload the scene from JSON. That
+  workflow, its example and the compas_viewer fork it needed are all dropped in
+  favour of the stock viewer API.
+- ``triangulated()`` copied every mesh, ear-clipping it, because
+  ``MeshObject`` fans an n-gon from its centroid and gets concave faces wrong.
+  :class:`compas_tf.scene.TFElementObject` ear-clips straight into the shader
+  buffer instead, so there is no copy - and it is exact, where the centroid fan
+  overstated the most carved plate's surface by 1.3%.
+- ``_apply_edgecolor()`` monkeypatched core ``MeshObject.contrastcolor`` to fix
+  washed-out wireframes. The scene object emits its own edge colour now.
+
+What is left is the Rhino bundle: a recorder that captures ``add``/``add_group``
+calls to a flat node list, so a fabrication example can draw into the viewer and
+write a Rhino-loadable JSON at the same time.
+"""
+
 import pathlib
-import time
 
 import compas
 from compas.geometry import Line
-
-# ------------------------------------------------------------------ #
-#  watch_viewer.py handoff: write-only mode + scene recorder
-# ------------------------------------------------------------------ #
-# When watch_viewer.py is running it drops a lock file and watches SCENE_FILE.
-# In that case make_viewer() returns a SceneRecorder stand-in so an example's
-# existing ``viewer.scene.add(...)`` calls are captured instead of drawn, and
-# viewer.show() writes them to SCENE_FILE for the persistent viewer to reload.
-
-LOCK_FILE = ".watch_viewer.lock"
-SCENE_FILE = "_viewer_scene.json"
-
-
-def headless() -> bool:
-    """True when ``COMPAS_TF_HEADLESS`` is set, so ``show()`` must not block.
-
-    Every example ends in ``viewer.show()``, which opens a window and holds the
-    process until it is closed by hand. That is right when running one example,
-    and impossible when regenerating the whole ``data/`` chain, so the examples
-    are left untouched and the viewer closes itself instead.
-    """
-    return os.environ.get("COMPAS_TF_HEADLESS", "").strip() not in ("", "0", "false", "False")
-
-
-# Default data directory (repo ``data/``). viewer.py lives at
-# src/compas_tf/viewer.py, so three parents up is the repo root.
-DATA_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "data"
-
-# A watcher is considered live only if its lock file was touched within this
-# many seconds (the watcher heartbeats it every tick). This way a crashed
-# watcher's stale lock is ignored and examples open their own viewer again.
-LOCK_FRESH_SECONDS = 5.0
 
 # Style kwargs preserved through the record -> JSON -> redraw round-trip.
 _STYLE_KEYS = (
@@ -62,6 +61,29 @@ def _coerce_color(value):
         return None
 
 
+def _patch_group_nesting():
+    """Give compas_viewer's ``Group`` an ``add_group`` method.
+
+    A live ``Group`` cannot create sub-groups itself - only the scene can, via
+    ``scene.add_group(name, parent=group)``. :class:`_TeeNode` mirrors a live
+    group handle and a recorder group handle behind one object, and the recorder
+    side does support ``add_group``, so without this the two sides diverge and a
+    nested group blows up on the live one. Idempotent.
+
+    Only :class:`TeeScene` needs this. Code using the viewer directly should
+    call ``scene.add_group(name, parent=group)``, which is the native API.
+    """
+    from compas_viewer.scene import Group
+
+    if hasattr(Group, "add_group"):
+        return
+
+    def add_group(self, name=None, **kwargs):
+        return self.scene.add_group(name, parent=self, **kwargs)
+
+    Group.add_group = add_group
+
+
 class _RecorderNode:
     """A group handle returned by the recorder. Supports ``add``/``add_group``
     so geometry and nested groups are recorded under the right parent, keeping
@@ -82,8 +104,7 @@ class _RecorderNode:
 class SceneRecorder:
     """Quacks like ``viewer.scene`` (and a scene group): ``add``/``add_group``
     record drawable geometry and group structure to a flat node list (each node
-    carries its parent id) instead of drawing. The watcher rebuilds the same
-    group hierarchy from these nodes so the sidebar scene-tree is preserved.
+    carries its parent id) instead of drawing.
     """
 
     def __init__(self):
@@ -158,6 +179,7 @@ class TeeScene:
     """
 
     def __init__(self, live_scene):
+        _patch_group_nesting()
         self._live = live_scene
         self._rec = SceneRecorder()
 
@@ -186,140 +208,6 @@ def dump_bundle(scene, path):
     return path
 
 
-class _Stub:
-    """Absorbs any attribute access/call (e.g. ``viewer.renderer.x = ...``)."""
-
-    def __getattr__(self, name):
-        return _Stub()
-
-    def __setattr__(self, name, value):
-        pass
-
-    def __call__(self, *args, **kwargs):
-        return _Stub()
-
-
-class _RecorderViewer:
-    """Drop-in for ``Viewer`` whose ``.scene`` records instead of drawing."""
-
-    def __init__(self, data_dir):
-        self.scene = SceneRecorder()
-        self.renderer = _Stub()
-        self._data_dir = data_dir
-
-    def show(self):
-        path = pathlib.Path(self._data_dir) / SCENE_FILE
-        tmp = path.with_name(path.name + ".tmp")
-        compas.json_dump({"nodes": self.scene.nodes}, tmp)
-        for _ in range(40):
-            try:
-                os.replace(tmp, path)
-                break
-            except PermissionError:
-                time.sleep(0.05)
-        else:
-            os.replace(tmp, path)
-        n_geo = sum(1 for node in self.scene.nodes if node.get("kind") == "geometry")
-        print(f"[viewer] watch_viewer running -> wrote {path.name} ({n_geo} objects), skipping local viewer.")
-
-
-def watcher_running(data_dir) -> bool:
-    """True if watch_viewer.py is live, i.e. its lock file exists and was
-    heartbeated within ``LOCK_FRESH_SECONDS``. A stale lock from a crashed
-    watcher is ignored (and cleaned up) so examples open their own viewer.
-    """
-    lock = pathlib.Path(data_dir) / LOCK_FILE
-    try:
-        age = time.time() - lock.stat().st_mtime
-    except FileNotFoundError:
-        return False
-    if age <= LOCK_FRESH_SECONDS:
-        return True
-    # Stale lock -> remove it so we don't keep going write-only forever.
-    try:
-        lock.unlink()
-    except OSError:
-        pass
-    return False
-
-
-# Default mesh wireframe (edge) colour. compas_viewer draws a mesh's edges in its
-# "contrast" colour - the face ``color`` DARKENED BY 50% - so the examples' grey
-# (0.85) meshes get a medium-grey wireframe (~0.42). Override that with a single,
-# darker grey so the edges read clearly. Set to ``None`` to keep the default.
-EDGECOLOR = (0.08, 0.08, 0.08)
-
-
-def _apply_edgecolor():
-    """Force every mesh's edge colour to :data:`EDGECOLOR` (face colours and line
-    objects are left untouched).
-
-    compas core ``MeshObject`` resolves its edge colour as
-    ``edgecolor = edgecolor or self.contrastcolor``, so overriding
-    ``contrastcolor`` on that one class is the single, targeted hook that
-    recolours every mesh wireframe - no need to pass a colour per ``scene.add``.
-    Idempotent; a no-op when ``EDGECOLOR`` is ``None``.
-    """
-    if EDGECOLOR is None:
-        return
-    from compas.colors import Color
-    from compas.scene.meshobject import MeshObject
-
-    color = Color(*EDGECOLOR)
-    MeshObject.contrastcolor = property(lambda self: color, lambda self, _value: None)
-
-
-def _patch_group_nesting():
-    """Give compas_viewer's ``Group`` an ``add_group`` method.
-
-    A live ``Group`` cannot create sub-groups itself - only the scene can, via
-    ``scene.add_group(name, parent=group)``. The recorder nodes and
-    :class:`_TeeNode` both expose ``add_group`` on group handles, and every
-    example mirrors nested model trees through exactly that call, so a LIVE
-    viewer run crashed on the first nested group. Patching the one method onto
-    ``Group`` makes live and recorded scenes interchangeable. Idempotent.
-    """
-    from compas_viewer.scene import Group
-
-    if hasattr(Group, "add_group"):
-        return
-
-    def add_group(self, name=None, **kwargs):
-        return self.scene.add_group(name, parent=self, **kwargs)
-
-    Group.add_group = add_group
-
-
-def make_viewer(data_dir):
-    """Return a live ``Viewer`` (lighted, mm units), or a recording stand-in
-    when watch_viewer.py is running, so the example becomes write-only.
-
-    Breps need nothing extra here: ``compas_viewer`` registers a Brep scene
-    object only for ``compas_occ``, but ``compas_occt`` ships its own
-    ``register_scene_objects`` plugin (``compas_occt/scene.py``) that compas
-    collects alongside it, so ``scene.add(brep)`` already works.
-    """
-    _apply_edgecolor()
-    if watcher_running(data_dir):
-        return _RecorderViewer(data_dir)
-    from compas_viewer.config import Config
-    from compas_viewer.viewer import Viewer
-
-    _patch_group_nesting()
-    config = Config()
-    config.unit = "mm"
-    viewer = Viewer(config)
-    viewer.renderer.rendermode = "lighted"
-
-    if headless():
-        # Everything up to here still runs - the scene is built for real, so a
-        # bad geometry or an unregistered scene object still raises. Only the
-        # blocking Qt event loop is skipped, which is what lets the whole
-        # example chain be run end to end (see tools/run_examples.py).
-        viewer.show = lambda *args, **kwargs: print("[viewer] COMPAS_TF_HEADLESS -> window skipped")
-    return viewer
-
-
 def frame_rectangle(frame, scale=100):
     """Create a rectangle polygon and normal line from a frame."""
     from compas.geometry import Polygon as GeomPolygon
@@ -331,37 +219,3 @@ def frame_rectangle(frame, scale=100):
     polygon = GeomPolygon([p0, p1, p2, p3])
     normal_line = Line(frame.point, frame.point + frame.zaxis * scale)
     return polygon, normal_line
-
-
-def triangulated(mesh):
-    """Return a copy of ``mesh`` with every face ear-clipped into triangles.
-
-    compas_viewer triangulates an n-gon face with a *centroid fan*
-    (``meshobject.py``), which is only correct for convex faces. A concave face
-    — e.g. the L-shaped column sides produced by the capitel/cutter booleans —
-    fans into overlapping triangles and renders wrong. Ear-clipping each face up
-    front hands the viewer correct triangles. The added diagonals are coplanar
-    with their original face, so ``hide_coplanaredges`` hides them and the
-    visible wireframe is unchanged.
-    """
-    from compas.datastructures import Mesh
-    from compas.geometry import Polygon
-    from compas.geometry import earclip_polygon
-
-    out = Mesh()
-    vmap = {v: out.add_vertex(x=p[0], y=p[1], z=p[2]) for v, p in ((v, mesh.vertex_coordinates(v)) for v in mesh.vertices())}
-    for face in mesh.faces():
-        fv = mesh.face_vertices(face)
-        if len(fv) <= 3:
-            out.add_face([vmap[v] for v in fv])
-            continue
-        try:
-            tris = earclip_polygon(Polygon([mesh.vertex_coordinates(v) for v in fv]))
-        except Exception:
-            tris = None
-        if not tris:  # earclip raised or returned None/empty for a degenerate face
-            out.add_face([vmap[v] for v in fv])  # fall back to the original face
-            continue
-        for tri in tris:
-            out.add_face([vmap[fv[i]] for i in tri])
-    return out

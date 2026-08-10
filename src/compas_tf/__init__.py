@@ -4,6 +4,14 @@ __license__ = "MIT License"
 __email__ = "petrasvestartas@gmail.com"
 __version__ = "0.1.4"
 
+# Collected by compas' plugin system: it imports every installed top-level
+# package named compas*, then imports the modules listed here and registers the
+# plugins it finds in them. This is what makes viewer.scene.add(element) resolve
+# to a compas_tf scene object. Same mechanism compas_occt uses for OCCBrep.
+__all_plugins__ = [
+    "compas_tf.scene",
+]
+
 from compas_tf.geometry import (
     PolylineOffset,
     PolylineCut,

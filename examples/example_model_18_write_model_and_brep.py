@@ -4,9 +4,9 @@ import time
 import compas
 from compas_model.elements import Group
 
+from compas_viewer import Viewer
+
 from compas_tf.model import TFModel
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -86,15 +86,14 @@ def add_tree(node, parent):
     for child in node.children:
         element = child.element
         if isinstance(element, Group):
-            add_tree(child, parent.add_group(element.name))
+            add_tree(child, viewer.scene.add_group(element.name, parent=parent))
             continue
-        mesh = element.modelgeometry
-        if mesh is not None:
-            parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=GREY)
+        if element.modelgeometry is not None:
+            viewer.scene.add(element, name=element.name, parent=parent, color=GREY)
 
 
 start = time.perf_counter()
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 add_tree(model.tree.root, viewer.scene.add_group(f"{model.name}__model"))
 print(f"[draw]  {time.perf_counter() - start:.1f}s")
 

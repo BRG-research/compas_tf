@@ -1,12 +1,15 @@
-# compas_viewer fork: group-visibility cascade + signal-safe live scene reload
-# (used by examples/example_0_watch_viewer.py). Installed from GitHub so it
-# works on any machine regardless of local paths.
+# Optional: the viewer used by the examples. compas_tf itself never imports it
+# at module level, so the library works without it - only the drawing does not.
 #
-# Kept out of requirements.txt on purpose: pyproject.toml feeds that file into
-# the package metadata, and PyPI rejects any distribution whose Requires-Dist
-# contains a direct URL - which would make `invoke release` fail at upload.
-# compas_tf imports compas_viewer lazily (src/compas_tf/viewer.py), so the
-# library works without it.
+# Kept out of requirements.txt because pyproject feeds that file into the
+# package metadata, and an optional GUI dependency has no business being a hard
+# requirement of a geometry library.
+#
+# This used to be a git URL pointing at a fork, for a group-visibility cascade
+# and a signal-safe live scene reload that a persistent watch_viewer process
+# needed. That workflow is gone - the examples use the stock Viewer API and
+# compas_tf ships its own scene objects - so the fork is gone with it, and a
+# direct URL here would have blocked publishing to PyPI anyway.
 #
 #   pip install -r requirements-viewer.txt
-compas_viewer @ git+https://github.com/petrasvestartas/compas_viewer.git@main
+compas_viewer

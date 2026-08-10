@@ -4,12 +4,12 @@ import compas
 from compas.geometry import Frame
 from compas.geometry import Transformation
 
+from compas_viewer import Viewer
+
 from compas_tf.model import TFModel
 from compas_tf.column import ColumnElement
 from compas_tf.viewer import TeeScene
 from compas_tf.viewer import dump_bundle
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -47,15 +47,15 @@ print(f"column {column.name}: {len(cuts)} cut solids")
 #  View - the uncut stock (grey) with the cut solids (red) that carve it.
 # ------------------------------------------------------------------ #
 
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
 
 stock = scene.add_group(f"{column.name}__stock_and_cuts")
-stock.add(triangulated(uncut), name=f"{column.name}_uncut", hide_coplanaredges=True, color=GREY)
+stock.add(uncut, name=f"{column.name}_uncut", color=GREY)
 
 cutters = stock.add_group("cut_solids")
 for index, solid in enumerate(cuts):
-    cutters.add(triangulated(solid), name=f"cut_{index}", color=RED, hide_coplanaredges=True)
+    cutters.add(solid, name=f"cut_{index}", color=RED)
 
 # Write the Rhino bundle (plain, already-computed geometry) next to the viewer
 # scene, so it can be loaded into Rhino with no recompute - see RHINO block below.

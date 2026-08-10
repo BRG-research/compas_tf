@@ -6,10 +6,10 @@ from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Vector
 
+from compas_viewer import Viewer
+
 from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -48,11 +48,10 @@ compas.json_dump(columns_model, data_dir / "columns_model.json")
 #  View
 # ------------------------------------------------------------------ #
 
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 for cm in column_models:
     g = viewer.scene.add_group(cm.name)
     for element in cm.elements():
-        mesh = element.modelgeometry
-        if mesh is not None:
-            g.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.9, 0.9, 0.9))
+        if element.modelgeometry is not None:
+            g.add(element, name=element.name, color=(0.9, 0.9, 0.9))
 viewer.show()

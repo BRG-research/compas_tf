@@ -3,8 +3,8 @@ import sys
 import time
 
 from compas_occt.brep import OCCBrep
+from compas_viewer import Viewer
 
-from compas_tf.viewer import make_viewer
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -51,7 +51,7 @@ print(f"{STEP_FILE.stem}: {solids}/{len(breps)} closed solids, {faces} faces, {v
 # ------------------------------------------------------------------ #
 
 start = time.perf_counter()
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 group = viewer.scene.add_group(STEP_FILE.stem)
 for index, brep in enumerate(breps):
     group.add(brep, name=brep.name or f"brep_{index}", color=GREY)

@@ -16,9 +16,9 @@ import pathlib
 from compas.geometry import Point
 from compas.geometry import Vector
 
+from compas_viewer import Viewer
+
 from compas_tf.connectors import ConnectorWedgeElement
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -62,13 +62,13 @@ dowel_cutters = [cyl.boolean_geometry for cyl in wedge.create_cylinders()]
 #  View - all in model space, no transforms.
 # ------------------------------------------------------------------ #
 
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 
 connector = viewer.scene.add_group("wedge_connector")
-connector.add(triangulated(wedge.boolean_geometry), name="wedge_solid", color=GREY, hide_coplanaredges=True)
+connector.add(wedge.boolean_geometry, name="wedge_solid", color=GREY)
 for i, box in enumerate(face_boxes):
-    connector.add(triangulated(box), name=f"box_cutter_{i}", hide_coplanaredges=True)
+    connector.add(box, name=f"box_cutter_{i}")
 for i, dowel in enumerate(dowel_cutters):
-    connector.add(triangulated(dowel), name=f"dowel_{i}", hide_coplanaredges=True)
+    connector.add(dowel, name=f"dowel_{i}")
 
 viewer.show()

@@ -6,11 +6,11 @@ from compas.geometry import Point
 from compas.geometry import Transformation
 from compas.geometry import Vector
 
+from compas_viewer import Viewer
+
 from compas_tf.model import TFModel
 from compas_tf.connectors import ConnectorElement
 from compas_tf.connectors import ConnectorWedgeElement
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -99,20 +99,20 @@ def draw_connector(part, parent):
     solid (grey), plus - for a wedge - its dowel cylinders (green), or - for a box
     connector - its dowel drill-hole cutters (red), placed in the part's current
     frame so they follow it whether assembled or laid flat."""
-    group = parent.add_group(part.name)
-    group.add(triangulated(part.modelgeometry), name=part.name, hide_coplanaredges=True, color=GREY)
+    group = viewer.scene.add_group(part.name, parent=parent)
+    group.add(part, name=part.name, color=GREY)
 
     if isinstance(part, ConnectorWedgeElement):
         for index, cylinder in enumerate(part.create_cylinders()):
-            group.add(triangulated(cylinder.boolean_geometry), name=f"{part.name}_dowel_{index}", color=GREEN, hide_coplanaredges=True)
+            group.add(cylinder.boolean_geometry, name=f"{part.name}_dowel_{index}", color=GREEN)
     elif isinstance(part, ConnectorElement):
         for feature in part._features:
             for index, mesh in enumerate(getattr(feature, "meshes", None) or []):
                 placed = mesh.transformed(part.modeltransformation)
-                group.add(triangulated(placed), name=f"{part.name}_drill_{index}", color=RED, hide_coplanaredges=True)
+                group.add(placed, name=f"{part.name}_drill_{index}", color=RED)
 
 
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 
 # 1) The connectors as assembled (before orienting to 2D).
 assembled = viewer.scene.add_group("connectors_assembled")

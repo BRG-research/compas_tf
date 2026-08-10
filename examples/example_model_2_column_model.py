@@ -5,12 +5,12 @@ from compas.geometry import Frame  # noqa: F401
 from compas.geometry import Transformation  # noqa: F401
 from compas.geometry import Translation
 
+from compas_viewer import Viewer
+
 from compas_tf.model import TFModel
 from compas_tf.column import ColumnElement
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.support import SupportElement
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -67,8 +67,8 @@ compas.json_dump(column_model, data_dir / "column_model.json")
 #  View
 # ------------------------------------------------------------------ #
 
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 group = viewer.scene.add_group("column_model")
-group.add(triangulated(support.modelgeometry), name="support", hide_coplanaredges=True, color=(0.9, 0.9, 0.9))
-group.add(triangulated(column.modelgeometry), name="column", hide_coplanaredges=True, color=(0.9, 0.9, 0.9))
+group.add(support, name="support", color=(0.9, 0.9, 0.9))
+group.add(column, name="column", color=(0.9, 0.9, 0.9))
 viewer.show()

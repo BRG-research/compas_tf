@@ -8,10 +8,10 @@ from compas.geometry import Translation
 from compas.geometry import Vector
 from compas_model.elements import Group
 
+from compas_viewer import Viewer
+
 from compas_tf.model import TFModel
 from compas_tf.floor_guide import FloorGuide
-from compas_tf.viewer import make_viewer
-from compas_tf.viewer import triangulated
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -84,7 +84,7 @@ compas.json_dump(quarters_model, data_dir / "quarters_model.json")
 #  View
 # ------------------------------------------------------------------ #
 
-viewer = make_viewer(data_dir)
+viewer = Viewer()
 root_group = viewer.scene.add_group(quarters_model.name)
 
 
@@ -94,11 +94,10 @@ def add_tree(node, viewer_parent):
     for child in node.children:
         element = child.element
         if isinstance(element, Group):
-            add_tree(child, viewer_parent.add_group(element.name))
+            add_tree(child, viewer.scene.add_group(element.name, parent=viewer_parent))
         else:
-            mesh = element.modelgeometry
-            if mesh is not None:
-                viewer_parent.add(triangulated(mesh), name=element.name, hide_coplanaredges=True, color=(0.85, 0.85, 0.85))
+            if element.modelgeometry is not None:
+                viewer.scene.add(element, name=element.name, parent=viewer_parent, color=(0.85, 0.85, 0.85))
 
 
 add_tree(quarters_model.tree.root, root_group)

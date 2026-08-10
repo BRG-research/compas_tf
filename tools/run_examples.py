@@ -21,6 +21,18 @@ import time
 HERE = pathlib.Path(__file__).parent.parent
 EXAMPLES = HERE / "examples"
 
+# Run each example with Viewer.show() neutered. This lives HERE, not in
+# compas_tf, so the examples stay stock compas_viewer - they build the scene for
+# real (a bad geometry or an unregistered scene object still raises) and only
+# the blocking Qt event loop is skipped.
+PREAMBLE = """
+import runpy, sys
+from compas_viewer import Viewer
+Viewer.show = lambda self, *a, **k: print("[viewer] headless -> window skipped")
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+"""
+
 # Pipeline order. 14_bed and 14_frame both read what 8 wrote, hence the tie.
 ORDER = [
     "example_model_1_floorguide.py",
@@ -65,7 +77,7 @@ def main(argv: list) -> int:
         path = EXAMPLES / name
         start = time.perf_counter()
         proc = subprocess.run(
-            [sys.executable, str(path)],
+            [sys.executable, "-c", PREAMBLE, str(path)],
             cwd=str(HERE),
             env=env,
             capture_output=True,
