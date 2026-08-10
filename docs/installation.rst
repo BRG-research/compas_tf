@@ -5,32 +5,98 @@ Installation
 Stable
 ======
 
-Stable releases are available on PyPI and can be installed with pip.
+Stable releases are on PyPI.
 
 .. code-block:: bash
 
     pip install compas_tf
 
+That is all a *reader* needs. Loading a model, walking its groups, extracting a
+bay and writing STEP all work off this one install - the geometry in a written
+model is baked, so no boolean backend is involved. The requirements pull in
+``compas``, ``compas_model``, ``shapely``, ``compas_manifold`` (mesh booleans)
+and ``compas_occt`` (the Brep/STEP kernel).
+
+Python 3.10 or newer. The package declares ``>=3.9``, but the wheels of the
+Brep kernel start at 3.10.
+
+
+Viewer
+======
+
+The viewer is optional and deliberately not a dependency: ``compas_tf`` never
+imports it, so the library works without it and only the drawing does not.
+
+.. code-block:: bash
+
+    pip install compas_viewer
+
+If you draw **Breps** - anything read back from STEP - set the deflection first:
+
+.. code-block:: python
+
+    from compas.tolerance import TOL
+
+    TOL.lineardeflection = 1.0
+
+COMPAS defaults to ``0.001``, a 1 micron chord tolerance on a building. The
+twisted loft quads of the ribs and t-sections then tessellate to 2.93M triangles
+in 67 s; at ``1.0`` it is 19.8k triangles in 2.0 s for the same picture - about
+the 17.0k of the source mesh, i.e. only the flat faces get retriangulated. The
+angular deflection changes neither.
+
+
+In a project of your own
+========================
+
+The usual case: a project that *consumes* a model rather than developing this
+package. With `uv <https://docs.astral.sh/uv/>`_:
+
+.. code-block:: bash
+
+    uv init my-project
+    cd my-project
+    uv add compas_tf
+    uv run my_script.py
+
+:doc:`examples/040_project_setup` walks through a complete one, file by file.
+
 
 Latest
 ======
 
-The latest version can be installed from local source.
-
 .. code-block:: bash
 
     git clone https://github.com/BRG-research/compas_tf.git
-    cd compas_tna
+    cd compas_tf
     pip install -e .
 
 
 Development
 ===========
 
-To install `compas_tf` for development, install from local source with the "dev" requirements.
-
 .. code-block:: bash
 
     git clone https://github.com/BRG-research/compas_tf.git
-    cd compas_tna
-    pip install -e ".[dev]"
+    cd compas_tf
+    uv venv .venv --python 3.12
+    source .venv/Scripts/activate      # macOS / Linux: source .venv/bin/activate
+    uv pip install -r requirements.txt -r requirements-dev.txt -r requirements-viewer.txt
+    uv pip install -e .
+
+Use ``uv pip``, not plain ``pip``: a ``uv venv`` has no pip of its own, so a bare
+``pip install`` lands in the wrong environment.
+
+Then:
+
+.. code-block:: bash
+
+    invoke lint
+    invoke test
+    invoke docs
+    python tools/run_examples.py
+
+``run_examples.py`` runs the whole example chain with the viewer window
+suppressed, and regenerates everything in ``data/``. It is the closest thing to
+an integration test this package has - the scenes are built for real, so a
+broken geometry or an unregistered scene object still raises.

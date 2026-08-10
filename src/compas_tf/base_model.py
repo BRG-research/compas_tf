@@ -15,6 +15,9 @@ node types) does ship in 0.9.3, so only the model class itself is copied.
 Kept as a verbatim copy rather than a patch so it can be diffed against
 upstream. :class:`compas_tf.model.TFModel` subclasses it. Delete this module and
 go back to inheriting from compas_model once that branch is released.
+
+``find_groups_with_names`` is the one method here that is compas_tf's own rather
+than the branch's, and belongs upstream with the other four.
 """
 
 from collections.abc import Callable
@@ -749,6 +752,135 @@ class BaseModel(Datastructure):
             b = self.graph.node_element(edge[1])
             if str(a.guid) in elements and str(b.guid) in elements:
                 new_edge = new.add_interaction(elements[str(a.guid)], elements[str(b.guid)])
+                for attr in ("modifiers", "contacts"):
+                    values = self.graph.edge_attribute(edge, name=attr)
+                    if values:
+                        new.graph.edge_attribute(new_edge, name=attr, value=[v.copy() for v in values])
+
+        return new
+
+    def find_groups_with_names(
+        self,
+        names: list[str],
+        name: Optional[str] = None,
+        neighbors: bool = False,
+    ) -> "BaseModel":
+        """Extract several named groups at once, as one new independent model.
+
+        The multi-group counterpart of :meth:`find_group_with_name`, for lifting
+        an assembly out of a big model - one column plus the quarter it carries,
+        say. Because the groups are extracted together, the interactions BETWEEN
+        them survive; extracting them one at a time and merging the results
+        would lose exactly those, which is the joint you wanted.
+
+        Where :meth:`find_group_with_name` drops the group node and folds its
+        placement into the new model's transformation, this keeps each group's
+        chain of ancestors - pruned to the groups asked for. So a
+        ``quarter_model_0`` under ``floor_model/quarters_model`` comes back at
+        the same path, and every group transformation on the way down still
+        applies. The elements are re-cloned with fresh guids and the source
+        model is left untouched.
+
+        Parameters
+        ----------
+        names
+            The names of the groups to extract. The first group matching each
+            name is used.
+        name
+            Name for the new model. Defaults to the names joined by ``+``.
+        neighbors
+            Also bring in any element outside the named groups that interacts
+            with one inside - the loose fasteners a bay is bolted together with,
+            which live in their own top-level group rather than in the bay's.
+            Their ancestor groups are recreated the same way.
+
+        Returns
+        -------
+        BaseModel
+            A new model holding an independent copy of those groups.
+
+        Raises
+        ------
+        ModelElementNotFound
+            If any of the names does not match a group.
+
+        """
+        nodes: list[ElementNode] = []
+        missing: list[str] = []
+        for groupname in names:
+            for element in self.elements():
+                if isinstance(element, Group) and element.name == groupname:
+                    nodes.append(element.treenode)
+                    break
+            else:
+                missing.append(groupname)
+        if missing:
+            raise ModelElementNotFound(f"no group named {', '.join(missing)}")
+
+        # The elements to carry over, keyed by source guid so the graph can be
+        # rewired below. Groups are not collected: they come back only as the
+        # ancestors of the elements that need them.
+        selected: dict[str, Element] = {}
+
+        def _collect(node: ElementNode) -> None:
+            for child in node.children:
+                if isinstance(child.element, Group):
+                    _collect(child)
+                else:
+                    selected[str(child.element.guid)] = child.element
+
+        for node in nodes:
+            _collect(node)
+
+        if neighbors:
+            # Against a snapshot: a neighbour brought in must not itself pull in
+            # ITS neighbours, or one edge at a time the whole model comes along.
+            inside = set(selected)
+            for edge in self.graph.edges():
+                a = self.graph.node_element(edge[0])
+                b = self.graph.node_element(edge[1])
+                inside_a, inside_b = str(a.guid) in inside, str(b.guid) in inside
+                if inside_a != inside_b:
+                    outsider = b if inside_a else a
+                    selected[str(outsider.guid)] = outsider
+
+        new = type(self)(name=name or "+".join(names))
+        new.transformation = self.transformation
+
+        materials: dict[str, Material] = {}
+        clones: dict[str, Element] = {}
+
+        def _clone(source: Element, parent: Optional[Element]) -> Element:
+            element = source.copy()  # fresh guid -> independent
+            new.add_element(element, parent=parent)
+            clones[str(source.guid)] = element
+            if source._material:
+                if source._material not in materials:
+                    materials[source._material] = new.add_or_get_material(self._materials[source._material].copy())
+                new.assign_material(materials[source._material], element=element)
+            return element
+
+        def _ancestor(node: ElementNode) -> Optional[Element]:
+            """The clone of ``node``'s parent group, creating the chain up to the root."""
+            parent: Optional[ElementNode] = node.parent
+            # The tree root is a plain TreeNode - it holds no element.
+            group = getattr(parent, "element", None) if parent is not None else None
+            if group is None:
+                return None
+            key = str(group.guid)
+            if key not in clones:
+                _clone(group, _ancestor(parent))
+            return clones[key]
+
+        for source in selected.values():
+            _clone(source, _ancestor(source.treenode))
+
+        # Interactions whose endpoints both came along.
+        for edge in self.graph.edges():
+            a = self.graph.node_element(edge[0])
+            b = self.graph.node_element(edge[1])
+            if str(a.guid) in clones and str(b.guid) in clones:
+                new_edge = new.add_interaction(clones[str(a.guid)], clones[str(b.guid)])
                 for attr in ("modifiers", "contacts"):
                     values = self.graph.edge_attribute(edge, name=attr)
                     if values:

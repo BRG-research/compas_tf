@@ -56,6 +56,7 @@ ORDER = [
     "example_model_18_write_model_and_brep.py",
     "example_model_19_read_model.py",
     "example_model_20_read_brep.py",
+    "example_model_21_extract_bay.py",
 ]
 
 
