@@ -14,8 +14,6 @@ SOURCE_FILE = data_dir / "cantilevers_model.json"  # written by example_model_8
 MODEL_FILE = data_dir / "cantilevers_baked_model.json"
 STEP_FILE = data_dir / "cantilevers_baked_model.stp"
 
-GREY = (0.85, 0.85, 0.85)
-
 # ------------------------------------------------------------------ #
 # Load the full model written by example_model_8 and BAKE it.
 #
@@ -89,7 +87,7 @@ def add_tree(node, parent):
             add_tree(child, viewer.scene.add_group(element.name, parent=parent))
             continue
         if element.modelgeometry is not None:
-            viewer.scene.add(element, name=element.name, parent=parent, color=GREY)
+            viewer.scene.add(element, name=element.name, parent=parent)
 
 
 start = time.perf_counter()
