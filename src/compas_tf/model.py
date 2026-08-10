@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Iterator
 from typing import Optional
 
@@ -6,6 +7,7 @@ from compas_model.interactions import Contact
 from compas_model.models.bvh import ElementBVH
 
 from compas_tf.base_model import BaseModel
+from compas_tf.base_model import _element_contacts
 from compas_tf.brep import BrepMixin
 from compas_tf.element import TFElement
 
@@ -85,7 +87,7 @@ class TFModel(BaseModel, BrepMixin):
     # Brep
     # ==========================================================================
 
-    def element_breps(self, variant: Optional[str] = None, **kwargs) -> list:
+    def element_breps(self, variant: Optional[str] = None, cache: Optional[dict] = None, **kwargs) -> list:
         """One solid, coplanar-merged Brep per element, named after the element.
 
         Parameters
@@ -95,6 +97,13 @@ class TFModel(BaseModel, BrepMixin):
             geometry. Elements that do not carry it are skipped - including any
             element that is not a compas_tf element, since only those can hold
             variants.
+        cache : dict[int, :class:`compas_occt.brep.OCCBrep`], optional
+            Already-converted Breps keyed by ``id(element)``, reused instead of
+            being rebuilt. This is the ``.breps`` of a
+            :class:`compas_tf.contacts.BrepContacts`, so a model that has just
+            had its contacts computed on Breps does not pay for the conversion
+            twice. Ignored when ``variant`` is given, since the cache holds the
+            finished geometry.
         **kwargs
             Forwarded to :meth:`compas_tf.brep.BrepMixin.get_brep`.
 
@@ -104,9 +113,17 @@ class TFModel(BaseModel, BrepMixin):
         """
         from compas_tf.brep import mesh_to_brep
 
+        if variant is not None:
+            cache = None
+
         breps = []
         for element in self.geometry_elements():
             name = element.name or type(element).__name__
+            cached = cache.get(id(element)) if cache else None
+            if cached is not None:
+                cached.name = name
+                breps.append(cached)
+                continue
             if isinstance(element, TFElement):
                 if variant is not None and variant not in element.baked_variants():
                     continue
@@ -150,7 +167,7 @@ class TFModel(BaseModel, BrepMixin):
                 meshes.append(geometry)
         return meshes
 
-    def to_step(self, path: str, author: str = "compas_tf", variant: Optional[str] = None, **kwargs) -> str:
+    def to_step(self, path: str, author: str = "compas_tf", variant: Optional[str] = None, cache: Optional[dict] = None, **kwargs) -> str:
         """Write the whole model to a STEP file, one solid per element.
 
         Parameters
@@ -162,6 +179,8 @@ class TFModel(BaseModel, BrepMixin):
         variant : str, optional
             A baked variant key to write instead of the finished geometry (see
             :meth:`element_breps`).
+        cache : dict[int, :class:`compas_occt.brep.OCCBrep`], optional
+            Already-converted Breps to reuse - see :meth:`element_breps`.
         **kwargs
             Forwarded to :meth:`compas_tf.brep.BrepMixin.get_brep`.
 
@@ -172,9 +191,39 @@ class TFModel(BaseModel, BrepMixin):
         """
         from compas_occt.brep import OCCBrep
 
-        breps = self.element_breps(variant=variant, **kwargs)
+        breps = self.element_breps(variant=variant, cache=cache, **kwargs)
         compound = OCCBrep.from_breps(breps)
         compound.to_step(str(path), name=self.name or "compas_tf_model", author=author)
+        return str(path)
+
+    def contact_breps(self) -> list:
+        """One planar-face Brep per contact, named ``contact_<i>``.
+
+        Boundary loop only - holes are dropped, since a contact written this way
+        is a surface for inspection, not a solid.
+        """
+        from compas_occt.brep import OCCBrep
+
+        breps = []
+        for index, contact in enumerate(self.contacts()):
+            brep = OCCBrep.from_polygons([contact.polygon], solid=False)
+            brep.name = f"contact_{index}"
+            breps.append(brep)
+        return breps
+
+    def contacts_to_step(self, path: str, author: str = "compas_tf") -> str:
+        """Write the contacts to their own STEP file, one face each.
+
+        Separate from :meth:`to_step` on purpose: that file is the shop's, and a
+        reader splits it with ``.solids``, which would drop loose faces.
+        """
+        from compas_occt.brep import OCCBrep
+
+        breps = self.contact_breps()
+        if not breps:
+            raise ValueError("contacts_to_step: the model has no contacts; run a contact search first.")
+        compound = OCCBrep.from_breps(breps)
+        compound.to_step(str(path), name=f"{self.name or 'compas_tf_model'}_contacts", author=author)
         return str(path)
 
     # ==========================================================================
@@ -205,7 +254,13 @@ class TFModel(BaseModel, BrepMixin):
         )
         return self._bvh
 
-    def compute_contacts(self, tolerance: float = 1e-6, minimum_area: float = 1e-2, contacttype: type[Contact] = Contact) -> None:
+    def compute_contacts(
+        self,
+        tolerance: float = 1e-6,
+        minimum_area: float = 1e-2,
+        contacttype: type[Contact] = Contact,
+        contactmethod: Optional[Callable] = None,
+    ) -> None:
         """Compute the contacts between the geometry elements of this model.
 
         Overridden only to iterate :meth:`geometry_elements` instead of
@@ -230,9 +285,18 @@ class TFModel(BaseModel, BrepMixin):
             The minimum contact size.
         contacttype
             The contact class to use for the generated contacts.
+        contactmethod
+            What detects the contacts of one candidate pair, called as
+            ``contactmethod(a, b, tolerance=, minimum_area=, contacttype=)``.
+            Default is ``a.compute_contacts(b, ...)``, i.e. mesh faces. Pass a
+            :class:`compas_tf.contacts.BrepContacts` to run on Brep faces
+            instead, or use :meth:`compute_contacts_brep`.
 
         """
         # somehow this should not take into account past calculations.
+
+        if contactmethod is None:
+            contactmethod = _element_contacts
 
         for element in self.geometry_elements():
             u = element.graphnode
@@ -242,7 +306,8 @@ class TFModel(BaseModel, BrepMixin):
 
                 if not self.graph.has_edge((u, v), directed=False):
                     # there is no interaction edge between the two elements
-                    contacts = element.compute_contacts(
+                    contacts = contactmethod(
+                        element,
                         nbr,
                         tolerance=tolerance,
                         minimum_area=minimum_area,
@@ -256,7 +321,8 @@ class TFModel(BaseModel, BrepMixin):
                     edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
                     contacts = self.graph.edge_attribute(edge, name="contacts")
                     if not contacts:
-                        contacts = element.compute_contacts(
+                        contacts = contactmethod(
+                            element,
                             nbr,
                             tolerance=tolerance,
                             minimum_area=minimum_area,
@@ -264,6 +330,99 @@ class TFModel(BaseModel, BrepMixin):
                         )
                         if contacts:
                             self.graph.edge_attribute(edge, name="contacts", value=contacts)
+
+    def clear_contacts(self) -> "TFModel":
+        """Drop every contact stored on the interaction graph, keeping the edges.
+
+        Contact searches never remove a contact - they only fill in edges that
+        have none (see :meth:`compute_contacts`). So a model loaded from file
+        keeps whatever contacts were computed when it was written, and a fresh
+        search has to start from a clean graph to report only its own result.
+        """
+        for edge in list(self.graph.edges()):
+            self.graph.edge_attribute(edge, name="contacts", value=[])
+        return self
+
+    def compute_contacts_brep(
+        self,
+        tolerance: float = 1e-6,
+        minimum_area: float = 1e-1,
+        groups: Optional[list[str]] = None,
+        groups_b: Optional[list[str]] = None,
+        contacttype: type[Contact] = Contact,
+        clear: bool = False,
+        **kwargs,
+    ):
+        """Contacts on Brep faces rather than mesh faces - one polygon per interface.
+
+        The same spatial search as :meth:`compute_contacts`, with
+        :class:`compas_tf.contacts.BrepContacts` doing the detection: the BVH
+        still prunes on the mesh AABBs, but each surviving pair is converted to a
+        solid Brep with its coplanar faces merged (``element.get_brep()``) and
+        intersected face against face. A boolean-triangulated interface therefore
+        comes back as ONE contact carrying its hole loops, instead of one contact
+        per triangle - see :mod:`compas_tf.contacts` for the numbers.
+
+        Parameters
+        ----------
+        tolerance : float, optional
+            The distance tolerance.
+        minimum_area : float, optional
+            The minimum contact size. The 1e-2 default of the mesh search is
+            below the noise of a merged Brep face; 1.0 mm2 is a sane floor for
+            this model.
+        groups : list[str], optional
+            Restrict the search to these named groups, as in
+            :meth:`compas_tf.base_model.BaseModel.compute_contacts_between_groups`.
+            Default searches every pair of geometry elements.
+        groups_b : list[str], optional
+            The second side of a two-sided group query. Requires ``groups``.
+        contacttype : type[:class:`compas_model.interactions.Contact`], optional
+            The contact class to instantiate.
+        clear : bool, optional
+            Clear the contacts already on the graph first, so the result holds
+            only what this search found. See :meth:`clear_contacts`.
+        **kwargs
+            Forwarded to :class:`compas_tf.contacts.BrepContacts` - ``holes``,
+            ``strict``, ``skip``, and any ``get_brep()`` keyword.
+            ``skip=involving(DowelCylinderElement, ConnectorCylinderElement)``
+            drops the fastener contacts, which on this model are 74% of the
+            total and are all a shaft touching its own hole.
+
+        Returns
+        -------
+        :class:`compas_tf.contacts.BrepContacts`
+            The detector, holding the Brep cache it built (``.breps``) and the
+            face pairs that failed (``.errors``).
+        """
+        from compas_tf.contacts import BrepContacts
+
+        if groups_b and not groups:
+            raise ValueError("compute_contacts_brep: groups_b needs groups; it is the second side of a two-sided query.")
+
+        if clear:
+            self.clear_contacts()
+
+        method = BrepContacts(**kwargs)
+
+        if groups:
+            self.compute_contacts_between_groups(
+                groups,
+                groups_b=groups_b,
+                tolerance=tolerance,
+                minimum_area=minimum_area,
+                contacttype=contacttype,
+                contactmethod=method,
+            )
+        else:
+            self.compute_contacts(
+                tolerance=tolerance,
+                minimum_area=minimum_area,
+                contacttype=contacttype,
+                contactmethod=method,
+            )
+
+        return method
 
     # ==========================================================================
     # Construction

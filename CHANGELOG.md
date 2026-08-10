@@ -9,7 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added `compas_tf.contacts` - contact detection on Brep faces instead of mesh faces: `brep_brep_contacts`, `prepare_faces`, the `BrepContacts` element-pair detector (with a per-element Brep and face cache), the `involving` / `between` skip predicates, and the `contact_holes` accessor. The face pairs are prefiltered on opposite normals and boundary AABBs rather than by `Brep.overlap`, which would tessellate every Brep first - identical results, 3.8x faster, and no dependence on `TOL.lineardeflection`.
+* Added `TFModel.compute_contacts_brep`, the one-call Brep version of the contact search, all-pairs or restricted to named groups.
+* Added `TFModel.clear_contacts`, `TFModel.contact_breps` and `TFModel.contacts_to_step`.
+* Added a `contactmethod` hook to `TFModel.compute_contacts` and `BaseModel.compute_contacts_between_groups`, so the spatial search can be driven by something other than `element.compute_contacts`.
+* Added a `cache` argument to `TFModel.element_breps` and `TFModel.to_step`, to reuse Breps already built by a contact search.
+
 ### Changed
+
+* Changed `example_model_18_write_model_and_brep.py` to compute contacts between all elements on the Brep faces, skipping the fasteners, and to write them to both the model JSON and their own STEP file.
+* Changed `example_model_19_read_model.py` and `example_model_20_read_brep.py` to read the contacts instead of recomputing them.
+* Changed `example_model_20_read_brep.py` to set `TOL.lineardeflection = 1.0`: at the 0.001 default the Breps tessellate to 2.93M triangles in 67 s, at 1.0 to 19.8k in 2.0 s, for the same picture. The old comment claiming the count was independent of the deflection was wrong.
 
 ### Removed
 

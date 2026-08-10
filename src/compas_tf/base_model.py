@@ -17,6 +17,7 @@ upstream. :class:`compas_tf.model.TFModel` subclasses it. Delete this module and
 go back to inheriting from compas_model once that branch is released.
 """
 
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from typing import Optional
@@ -40,6 +41,16 @@ from compas_model.models.interactiongraph import InteractionGraph
 from compas_model.modifiers import Modifier
 
 ElementType = TypeVar("ElementType", bound=Element)
+
+
+def _element_contacts(a: Element, b: Element, **kwargs) -> list[Contact]:
+    """The default ``contactmethod``: whatever the element itself implements.
+
+    For a plain compas_model element that is mesh-face detection; for a
+    :class:`compas_tf.plate.PlateElement` it is the plate's own untriangulated
+    polygon-face version.
+    """
+    return a.compute_contacts(b, **kwargs)
 
 
 class ModelError(Exception):
@@ -752,6 +763,7 @@ class BaseModel(Datastructure):
         tolerance: float = 1e-6,
         minimum_area: float = 1e-2,
         contacttype: type[Contact] = Contact,
+        contactmethod: Optional[Callable] = None,
     ) -> None:
         """Compute contacts only between elements of *different* named groups.
 
@@ -791,6 +803,11 @@ class BaseModel(Datastructure):
             The minimum contact size.
         contacttype
             The contact class to use for the generated contacts.
+        contactmethod
+            What actually detects the contacts of one accepted pair, called as
+            ``contactmethod(a, b, tolerance=, minimum_area=, contacttype=)``.
+            Default is ``a.compute_contacts(b, ...)``, i.e. mesh faces. Pass a
+            :class:`compas_tf.contacts.BrepContacts` to run on Brep faces instead.
 
         Raises
         ------
@@ -799,6 +816,9 @@ class BaseModel(Datastructure):
             Two-sided: if either side has no elements.
 
         """
+        if contactmethod is None:
+            contactmethod = _element_contacts
+
         groupset_a = set(groups)
         groupset_b = set(groups_b) if groups_b else None
         all_names = groupset_a | (groupset_b or set())
@@ -861,7 +881,8 @@ class BaseModel(Datastructure):
                 v = nbr.graphnode
 
                 if not self.graph.has_edge((u, v), directed=False):
-                    contacts = element.compute_contacts(
+                    contacts = contactmethod(
+                        element,
                         nbr,
                         tolerance=tolerance,
                         minimum_area=minimum_area,
@@ -874,7 +895,8 @@ class BaseModel(Datastructure):
                     edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
                     contacts = self.graph.edge_attribute(edge, name="contacts")
                     if not contacts:
-                        contacts = element.compute_contacts(
+                        contacts = contactmethod(
+                            element,
                             nbr,
                             tolerance=tolerance,
                             minimum_area=minimum_area,

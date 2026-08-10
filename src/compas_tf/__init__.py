@@ -24,6 +24,9 @@ from compas_tf.brep import BrepMixin, mesh_to_brep, meshes_to_brep
 from compas_tf.element import TFElement, TFFeature, baked, bakekey
 from compas_tf.model import TFModel
 
+# Contact detection on Brep faces instead of mesh faces (TFModel.compute_contacts_brep).
+from compas_tf.contacts import BrepContacts, brep_brep_contacts, contact_holes, between, involving
+
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.column import ColumnElement, ColumnAddFeature, ColumnCutFeature, ColumnFeature
 
@@ -54,6 +57,11 @@ __all__ = [
     "TFElement",
     "TFFeature",
     "TFModel",
+    "BrepContacts",
+    "brep_brep_contacts",
+    "contact_holes",
+    "between",
+    "involving",
     "baked",
     "bakekey",
     "FloorGuide",
