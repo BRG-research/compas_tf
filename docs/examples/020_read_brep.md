@@ -5,10 +5,11 @@ elements, no tree, no features. Solids, the way a shop gets them.
 
 ![The same building read back from STEP](../_images/example_model_20_read_brep.png)
 /// caption
-The same building as the page before, and the same picture - but compare the
-scene tree: two flat entries, `model` and `contacts`. STEP carries no names and
-no hierarchy, so there is nothing to mirror. That is the trade for a file any
-CAD system can open.
+The model as STEP - 237 solids, 19.5 MB, no compas_tf needed to open it. The
+same building as the page before, and the same picture, but compare the scene
+tree: two flat entries, `model` and `contacts`. STEP carries no names and no
+hierarchy, so there is nothing to mirror. The 3.9 MB JSON keeps all three - the
+names, the tree and the contacts.
 ///
 
 ```python

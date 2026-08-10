@@ -6,6 +6,7 @@ from compas_model.elements import Group
 from compas_viewer import Viewer
 
 from compas_tf.model import TFModel
+from compas_tf.viewer import zoom_to
 
 MODEL_FILE = pathlib.Path(__file__).parent.parent / "data" / "cantilevers_baked_model.json"
 
@@ -19,8 +20,7 @@ print(f"{len(elements)} elements, {len(contacts)} contacts")
 viewer = Viewer()
 
 
-# Mirror the element tree instead of flattening it, so floor_model /
-# quarters_model / quarter_model_0 / ... stays browsable in the scene.
+# Mirrored, not flattened, so the groups stay browsable in the scene.
 def add_tree(node, parent=None):
     for child in node.children:
         element = child.element
@@ -35,5 +35,8 @@ add_tree(model.tree.root)
 group = viewer.scene.add_group("contacts")
 for contact in contacts:
     viewer.scene.add(contact.polygon, parent=group, facecolor=Color(1, 0, 0), linecolor=Color(1, 0, 0), show_points=False)
+
+# The camera's far plane is 1000 mm, so without this the building starts clipped.
+zoom_to(viewer, [element.aabb for element in elements])
 
 viewer.show()

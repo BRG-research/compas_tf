@@ -36,7 +36,7 @@ because reading a model needs nothing but `compas_tf`:
 [project]
 name = "my-project"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "compas_tf>=0.1.9",
 ]

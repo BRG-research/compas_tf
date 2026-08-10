@@ -12,19 +12,26 @@ The tree is the building's table of contents. Nothing structural is implied by
 it - it is how you find things and how transformations accumulate:
 
 ```text
-floor_model
-  quarters_model
-    quarter_model_0 .. quarter_model_3
-      beds_0 / tsections_0 / outer_ribs_0 / inner_ribs_0 /
-      wedges_inner_beams_0 / inner_beams_0
-  oculus_model
-  connectors
-columns_model
-  column_model_0 .. column_model_3
-connectors
-connector_cylinders
-outer_rib_connectors
+floor_model                                185 parts
+  quarters_model                           136
+    quarter_model_0 .. quarter_model_3      34 each
+      beds_0                                18   3 rows of 6
+      tsections_0                            6
+      outer_ribs_0                           2
+      inner_ribs_0                           2
+      inner_beams_0                          3
+      wedges_inner_beams_0                   3
+  oculus_model                               9
+  connectors                                40
+columns_model                                8   4 x (column + support)
+  column_model_0 .. column_model_3           2 each
+connectors                                   8
+connector_cylinders                         32
+outer_rib_connectors                         4
 ```
+
+237 elements in all, joined by 733 contacts. A quarter is 34 of them and a bay -
+a quarter with the column it stands on and the hardware between them - is 46.
 
 The interior nodes are `Group` elements; the leaves carry geometry.
 `model.elements()` yields both, `model.geometry_elements()` only the leaves.

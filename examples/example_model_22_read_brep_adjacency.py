@@ -7,29 +7,29 @@ from compas.tolerance import TOL
 from compas_occt.brep import OCCBrep
 from compas_viewer import Viewer
 
+from compas_tf.viewer import zoom_to
+
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 STEP_FILE = data_dir / "cantilevers_baked_model.stp"
 CONTACTS_STEP_FILE = data_dir / "cantilevers_baked_contacts.stp"
 CONTACTS_JSON_FILE = data_dir / "cantilevers_baked_contacts.json"
 
-# The 0.001 default is a 1 micron chord tolerance on a building: 2.93M triangles.
+# The 0.001 default is 1 micron on a building: 2.93M triangles against 19.8k.
 TOL.lineardeflection = 1.0
 
 solids = OCCBrep.from_step(STEP_FILE).solids
 faces = OCCBrep.from_step(CONTACTS_STEP_FILE).faces
 records = json.loads(CONTACTS_JSON_FILE.read_text())["contacts"]
 
-# STEP drops per-shape names but keeps their ORDER, so record i describes face i.
-# That index is the only thing tying the two files together - if the counts
-# disagree they came from different runs and every pairing below is wrong.
+# STEP drops names but keeps ORDER, so record i describes face i. Equal counts is
+# the only check there is that the two files came from the same run.
 if len(records) != len(faces):
     raise SystemExit(f"{len(faces)} faces against {len(records)} records: the STEP and its sidecar are out of sync.")
 
 print(f"{len(solids)} solids, {len(faces)} contact faces, {len(records)} adjacency records")
 
-# The sidecar is a graph over element NAMES. Nothing here can say which of the
-# 237 solids is "beds_0_0_0" - for geometry attached to a name, read the JSON
-# model instead (example_model_19).
+# A graph over element NAMES: the solids themselves stay anonymous. For geometry
+# with a name on it, read the JSON model instead (example_model_19).
 neighbours = defaultdict(set)
 joints = defaultdict(list)  # (a, b) -> the face indices they share
 for record in records:
@@ -40,8 +40,8 @@ for record in records:
 area = sum(record["area"] for record in records)
 print(f"{len(neighbours)} elements over {len(joints)} pairs, {area / 1e6:.2f} m2 of interface")
 
-# A pair with several faces is one joint the boolean left in pieces, or two
-# elements that genuinely touch in more than one place. Group before ranking.
+# Several faces on one pair is one joint the boolean left in pieces, so group by
+# pair before ranking or it sorts below a single big face.
 print("\nbiggest joints:")
 for (a, b), indices in sorted(joints.items(), key=lambda kv: -sum(records[i]["area"] for i in kv[1]))[:5]:
     print(f"  {sum(records[i]['area'] for i in indices) / 1e6:6.3f} m2  {a} - {b}  ({len(indices)} faces)")
@@ -53,8 +53,8 @@ print("\nby type:")
 for (a, b), value in sorted(by_type.items(), key=lambda kv: -kv[1]):
     print(f"  {value / 1e6:6.3f} m2  {a} - {b}")
 
-# One element's joints picked out of the 733. The model is transparent because
-# the contacts sit BETWEEN solids.
+# One element's joints out of the 733, drawn over a transparent model - every
+# contact sits BETWEEN two solids.
 focus = max(neighbours, key=lambda n: len(neighbours[n]))
 selected = {record["index"] for record in records if focus in (record["a"], record["b"])}
 print(f"\n{len(selected)} contacts on {focus}, the most connected element")
@@ -78,5 +78,8 @@ for record, face in zip(records, faces):
         linecolor=Color(1, 0, 0) if hit else Color(0.4, 0.4, 0.4),
         show_points=False,
     )
+
+# The camera's far plane is 1000 mm, so without this the building starts clipped.
+zoom_to(viewer, [solid.aabb for solid in solids])
 
 viewer.show()

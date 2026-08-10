@@ -219,3 +219,50 @@ def frame_rectangle(frame, scale=100):
     polygon = GeomPolygon([p0, p1, p2, p3])
     normal_line = Line(frame.point, frame.point + frame.zaxis * scale)
     return polygon, normal_line
+
+
+def zoom_to(viewer, boxes, tightness=10.0):
+    """Aim the camera at the geometry, before ``viewer.show()``.
+
+    What the ``F`` key does - compas_viewer's ``zoom_selected`` - but computed
+    from geometry rather than from the scene objects, whose bounding boxes do
+    not exist until the renderer has run, so ``F`` cannot be pressed for you.
+
+    Needed on a model in millimetres. The camera starts at ``position``
+    ``[-10, -10, 10]`` with a ``far`` plane of ``1000``, and ``far`` is scaled by
+    ``camera.scale``, which starts at 1 - so on a 6015 mm building the whole
+    thing sits behind the far plane until something sets the scale.
+
+    Parameters
+    ----------
+    viewer : :class:`compas_viewer.Viewer`
+    boxes : sequence[:class:`compas.geometry.Box`]
+        The bounding boxes to frame - ``element.aabb`` for model elements,
+        ``brep.aabb`` for Breps. Empty leaves the camera alone.
+    tightness : float, optional
+        Divisor for the camera scale, as in ``zoom_selected``. Larger fills
+        more of the window.
+    """
+    corners = [point for box in boxes if box is not None for point in box.points]
+    if not corners:
+        return
+
+    low = [min(point[i] for point in corners) for i in range(3)]
+    high = [max(point[i] for point in corners) for i in range(3)]
+    diagonal = max(sum((high[i] - low[i]) ** 2 for i in range(3)) ** 0.5, 1.0)
+    center = [(low[i] + high[i]) / 2 for i in range(3)]
+
+    camera = viewer.renderer.camera
+    # scale drives near/far as well as pan speed, so it is what stops the model
+    # being clipped away.
+    camera.scale = diagonal / tightness
+
+    # Keep the direction the camera is already looking from and only move it -
+    # the view vector is position MINUS target, not target minus position. Using
+    # the latter is degenerate here: the default position sits almost on the
+    # origin, so on a model whose centre is 1.5 m up it points nearly straight
+    # down and the camera ends up underneath the building.
+    view = [camera.position[i] - camera.target[i] for i in range(3)]
+    length = sum(value**2 for value in view) ** 0.5 or 1.0
+    camera.target = center
+    camera.position = [center[i] + view[i] / length * diagonal for i in range(3)]

@@ -5,11 +5,26 @@ the element tree, and the interaction graph with the contacts on it.
 
 ![The model loaded from JSON, with its group tree in the viewer](../_images/example_model_19_read_model.png)
 /// caption
-The scene tree on the right is the model's own tree, mirrored: `floor_model` →
-`quarters_model` → `quarter_model_0..3`, `oculus_model`, `columns_model` and the
-connector groups, with `contacts` beside them. Every group can be switched off
-on its own.
+The whole building: 237 elements and 733 contacts. The scene tree on the right
+is the model's own tree, mirrored - `floor_model` → `quarters_model` →
+`quarter_model_0..3`, `oculus_model`, `columns_model` and the connector groups,
+with `contacts` beside them. Every group can be switched off on its own.
 ///
+
+What the 237 are made of:
+
+```text
+floor_model              185    quarters_model 136 = 4 x 34
+                                oculus_model     9
+                                connectors      40
+columns_model              8    4 x (column + support)
+connectors                 8
+connector_cylinders       32
+outer_rib_connectors       4
+```
+
+One quarter is 34: 18 beds (3 rows of 6), 6 t-sections, 2 outer ribs, 2 inner
+ribs, 3 inner beams and 3 wedges.
 
 ```python
 --8<-- "examples/example_model_19_read_model.py"
