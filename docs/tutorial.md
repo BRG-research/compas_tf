@@ -127,10 +127,15 @@ do the surgery:
     it. This is how the big model is assembled in the first place.
 
 `neighbors=True` on the multi-group version also brings in the elements that
-touch the extracted groups from outside - the connectors and outer-rib
-connectors live in their own top-level groups, so a bay extracted without them
-has no fasteners. It walks one step out only; following the graph from what it
-just pulled in would drag the whole model along one edge at a time.
+belong with the extracted groups but sit outside them - the connectors, the
+outer-rib connectors and the dowels all live in their own top-level groups, so a
+bay extracted without them has no fasteners. Two passes: every element that
+interacts with one inside, walking one step out only (following the graph from
+what it just pulled in would drag the whole model along one edge at a time), and
+then, for elements with no interaction at all, every one whose bounding box
+lands inside the bay. The second pass exists because the contact search skips
+the dowels and connector cylinders, which leaves them with no graph edge for the
+first pass to follow.
 
 ```python
 bay = model.find_groups_with_names(
@@ -140,10 +145,10 @@ bay = model.find_groups_with_names(
 )
 ```
 
-That is 49 elements and 208 contacts out of 237 and 733; without `neighbors` it
-is 36 and 125, the difference being the fasteners. The source model is untouched
-and the copy is independent - fresh guids, so it can be placed and merged back
-alongside the original.
+That is 77 elements and 208 contacts out of 237 and 733; without `neighbors` it
+is 36 and 125, the difference being the fasteners - 28 of which are cylinders
+found by the box pass. The source model is untouched and the copy is independent
+- fresh guids, so it can be placed and merged back alongside the original.
 
 ## What comes out
 

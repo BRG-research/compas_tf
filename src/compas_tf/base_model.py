@@ -56,6 +56,25 @@ def _element_contacts(a: Element, b: Element, **kwargs) -> list[Contact]:
     return a.compute_contacts(b, **kwargs)
 
 
+def _aabb(element: Element) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """The element's model-space bounding box, as (min, max).
+
+    Not ``Element.aabb``, which is element space and raises on the base class.
+    """
+    geometry = element.modelgeometry
+    if hasattr(geometry, "vertices_attributes"):  # Mesh
+        points = geometry.vertices_attributes("xyz")
+    else:  # Brep
+        points = [vertex.point for vertex in geometry.vertices]
+    xs, ys, zs = zip(*points)
+    return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
+
+
+def _boxes_overlap(a: tuple, b: tuple) -> bool:
+    (amin, amax), (bmin, bmax) = a, b
+    return all(amin[i] <= bmax[i] and bmin[i] <= amax[i] for i in range(3))
+
+
 class ModelError(Exception):
     pass
 
@@ -789,10 +808,13 @@ class BaseModel(Datastructure):
         name
             Name for the new model. Defaults to the names joined by ``+``.
         neighbors
-            Also bring in any element outside the named groups that interacts
-            with one inside - the loose fasteners a bay is bolted together with,
-            which live in their own top-level group rather than in the bay's.
-            Their ancestor groups are recreated the same way.
+            Also bring in any element outside the named groups that belongs with
+            one inside - the loose fasteners a bay is bolted together with, which
+            live in their own top-level group rather than in the bay's. Two
+            passes: every element that interacts with one inside, and then, for
+            the elements that have no interaction at all, every one whose
+            bounding box lands inside the bay. Their ancestor groups are
+            recreated the same way. The second pass reads ``modelgeometry``.
 
         Returns
         -------
@@ -843,6 +865,24 @@ class BaseModel(Datastructure):
                 if inside_a != inside_b:
                     outsider = b if inside_a else a
                     selected[str(outsider.guid)] = outsider
+
+            # An element the contact search skipped has no edge at all, so the
+            # walk above is blind to it - the dowels and connector cylinders are
+            # 64 such in the cantilevers model, because a faceted shaft touches
+            # its own hole once per facet and searching those pairs is 74% of
+            # the contacts for no structural information. Geometry is the only
+            # signal left for them, so the boxes decide. Restricted to the
+            # unlinked, because on elements the graph does describe a box test
+            # is far too loose: one diagonal rib's box swallows half the floor.
+            unlinked = [
+                element for element in self.elements() if not isinstance(element, Group) and str(element.guid) not in selected and self.graph.degree(element.graphnode) == 0
+            ]
+            if unlinked:
+                boxes = {str(element.guid): _aabb(element) for element in list(selected.values()) + unlinked}
+                enclosing = [boxes[key] for key in list(selected)]
+                for element in unlinked:
+                    if any(_boxes_overlap(boxes[str(element.guid)], box) for box in enclosing):
+                        selected[str(element.guid)] = element
 
         new = type(self)(name=name or "+".join(names))
         new.transformation = self.transformation

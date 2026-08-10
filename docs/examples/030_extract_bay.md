@@ -9,11 +9,11 @@ is the unit that gets assembled on site.
 ```
 
 ```text
-36 of 237 elements, 125 contacts
+77 of 237 elements, 208 contacts
 columns_model  (2 parts)
   column_model_0  (2 parts)
-floor_model  (34 parts)
-  quarters_model  (34 parts)
+floor_model  (59 parts)
+  quarters_model  (38 parts)
     quarter_model_0  (34 parts)
       beds_0  (18 parts)
         beds_0_0  (6 parts)
@@ -24,6 +24,13 @@ floor_model  (34 parts)
       inner_ribs_0  (2 parts)
       wedges_inner_beams_0  (3 parts)
       inner_beams_0  (3 parts)
+    quarter_model_1  (2 parts)
+    quarter_model_3  (2 parts)
+  connectors  (19 parts)
+  oculus_model  (2 parts)
+connectors  (2 parts)
+outer_rib_connectors  (2 parts)
+connector_cylinders  (12 parts)
 ```
 
 The result is a model like any other: it writes to JSON, exports to STEP, and
@@ -55,27 +62,41 @@ quarter a column touches rather than assuming the indices line up.
 
 ## `neighbors`
 
-The fasteners live in their own top-level groups, not inside the bay, so the 36
-elements above are the column, its support and the cantilever - and no
-connectors. `neighbors=True` adds every element that interacts with one inside,
-walking **one step out only** - following the graph again from what it just
-pulled in would drag the whole model along one edge at a time:
+The two named groups hold the column, its support and the cantilever - 36
+elements and no fasteners at all, because the connectors, the outer-rib
+connectors and the dowels each live in their own top-level group. `neighbors=True`
+brings them in:
 
 ```text
 neighbors=False    36 elements, 125 contacts
-neighbors=True     49 elements, 208 contacts
+neighbors=True     77 elements, 208 contacts
 ```
 
-It is a *graph* walk, and that is the thing to know before using it here. The
-contact search that built this graph was told to skip the fasteners' dowels
-(`skip=involving(DowelCylinderElement, ConnectorCylinderElement)`), so no edge
-in the model touches a cylinder. `neighbors=True` therefore brings in
-`connector_wedge_0`, `connector_0` and the outer-rib connectors *without* the 21
-cylinders that belong to them, and it brings in the 4 plates of
-`quarter_model_1` / `quarter_model_3` that reach across the seam - whole groups
-in the tree, 2-part fragments in the bay. Both are right for "what interacts
-with this bay" and wrong for "what this bay is made of", which is why the
-example asks for the hierarchy units and nothing else.
+The 41 it adds arrive by two different routes, and the difference matters.
+
+**By the graph** - every element that interacts with one inside, walking **one
+step out only**, since following the graph again from what it just pulled in
+would drag the whole model along one edge at a time. That is 2 `connector_*`, 3
+`connector_wedge_*`, 2 `outer_rib_connector_*`, and 6 plates of
+`quarter_model_1` / `quarter_model_3` and the oculus that reach across the seam.
+Those last are whole groups in the tree and 2-part fragments in the bay: right
+for "what touches this bay", not for "what this bay is made of".
+
+**By their boxes** - 16 `ConnectorCylinderElement` and 12 `DowelCylinderElement`.
+These have no graph edge at all, so no walk can reach them: the contact search
+that built the graph was told to skip them
+(`skip=involving(DowelCylinderElement, ConnectorCylinderElement)`) because a
+faceted shaft touches its own hole once per facet, which was 74% of the contacts
+and no structural information. Geometry is the only signal left for them, so an
+element with no interactions is included when its bounding box lands inside the
+bay. That test is applied to those elements *only* - on elements the graph does
+describe it would be far too loose, one diagonal rib's box swallowing half the
+floor.
+
+One consequence to know: a cylinder is included when it sits in the bay's
+timber, not when its parent connector does. `connector_wedge_7` is outside the
+bay but its pockets are cut into `inner_beams_0`, so its cylinders come along.
+For the pocket that is correct; for a parts list, filter by the parent.
 
 ## The groups you can name
 

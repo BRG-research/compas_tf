@@ -15,10 +15,14 @@ BAY_FILE = data_dir / "bay_model.json"
 model: TFModel = compas.json_load(MODEL_FILE)
 
 # One column and the one cantilever it carries - columns_model/column_model_0
-# and floor_model/quarters_model/quarter_model_0, whole groups, nothing else.
-# Both at once: the contacts BETWEEN them survive only if the two come out
-# together.
-bay = model.find_groups_with_names(["column_model_0", "quarter_model_0"], name="bay_0")
+# and floor_model/quarters_model/quarter_model_0. Both at once: the contacts
+# BETWEEN them survive only if the two come out together.
+#
+# neighbors= adds what the two groups do not contain but the bay is not a bay
+# without: the connectors, the outer-rib connectors and the wedges, which sit in
+# their own top-level groups, and the dowels and cylinders, which the contact
+# search skipped and which are therefore found by their boxes, not the graph.
+bay = model.find_groups_with_names(["column_model_0", "quarter_model_0"], name="bay_0", neighbors=True)
 
 elements = list(bay.geometry_elements())
 print(f"{len(elements)} of {len(list(model.geometry_elements()))} elements, {len(list(bay.contacts()))} contacts")
