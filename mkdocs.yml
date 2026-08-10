@@ -45,7 +45,6 @@ theme:
     - navigation.footer
     - navigation.sections
     - navigation.top
-    - navigation.tabs
     - search.highlight
     - search.suggest
     - toc.follow
