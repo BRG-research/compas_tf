@@ -9,7 +9,15 @@ is the unit that gets assembled on site.
 ```
 
 ```text
-77 of 237 elements, 208 contacts
+bay_0: 77 of 237 elements, 208 of 733 contacts
+    40 of  145  PlateElement
+    16 of   32  ConnectorCylinderElement
+    12 of   32  DowelCylinderElement
+     3 of    8  ConnectorWedgeElement
+     2 of    8  ConnectorElement
+     2 of    4  OuterRibConnectorElement
+     1 of    4  SupportElement
+     1 of    4  ColumnElement
 columns_model  (2 parts)
   column_model_0  (2 parts)
 floor_model  (59 parts)

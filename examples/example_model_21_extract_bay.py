@@ -1,4 +1,5 @@
 import pathlib
+from collections import Counter
 
 import compas
 from compas_model.elements import Group
@@ -7,31 +8,42 @@ from compas_viewer import Viewer
 from compas_tf.model import TFModel
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
-MODEL_FILE = data_dir / "cantilevers_baked_model.json"
+MODEL_FILE = data_dir / "cantilevers_baked_model.json"  # the file example_model_19 reads
 BAY_FILE = data_dir / "bay_model.json"
 
-# The model example_model_19 reads, with the hierarchy it prints. The bay is
-# lifted out of that hierarchy by name, not rebuilt from geometry.
 model: TFModel = compas.json_load(MODEL_FILE)
 
-# One column and the one cantilever it carries - columns_model/column_model_0
-# and floor_model/quarters_model/quarter_model_0. Both at once: the contacts
-# BETWEEN them survive only if the two come out together.
+# A bay is one column and the one quarter it carries, plus the hardware that
+# bolts the two together.
 #
-# neighbors= adds what the two groups do not contain but the bay is not a bay
-# without: the connectors, the outer-rib connectors and the wedges, which sit in
-# their own top-level groups, and the dowels and cylinders, which the contact
-# search skipped and which are therefore found by their boxes, not the graph.
-bay = model.find_groups_with_names(["column_model_0", "quarter_model_0"], name="bay_0", neighbors=True)
+# Only the two structural groups are named, and both in one call - the contacts
+# BETWEEN a column and its quarter survive only if the two come out together.
+#
+# The fasteners are deliberately NOT named: `connectors`, `connector_cylinders`
+# and `outer_rib_connectors` are top-level groups holding the hardware of all
+# four bays, so asking for them by name would drag in the other three.
+# neighbors=True takes only the ones belonging here - first everything with a
+# contact to something already inside, then, for the dowels and cylinders the
+# contact search skipped and which therefore have no edge to follow, everything
+# whose bounding box lands in the bay.
+bay = model.find_groups_with_names(
+    ["column_model_0", "quarter_model_0"],
+    name="bay_0",
+    neighbors=True,
+)
 
-elements = list(bay.geometry_elements())
-print(f"{len(elements)} of {len(list(model.geometry_elements()))} elements, {len(list(bay.contacts()))} contacts")
+# What came out, against what the whole building holds. The fastener rows are
+# the ones to read: the bay takes its own share, not all of them.
+whole = Counter(type(element).__name__ for element in model.geometry_elements())
+part = Counter(type(element).__name__ for element in bay.geometry_elements())
+
+print(f"bay_0: {sum(part.values())} of {sum(whole.values())} elements, {len(list(bay.contacts()))} of {len(list(model.contacts()))} contacts")
+for kind, count in part.most_common():
+    print(f"  {count:4d} of {whole[kind]:4d}  {kind}")
 
 
-# Each group keeps its place in the tree, so the bay is not a bag of parts - it
-# is still floor_model / quarters_model / quarter_model_0 / beds_0 / ..., only
-# pruned to what the bay contains. Printing it is the proof the extraction kept
-# the structure.
+# Every group keeps its place, so the bay is not a bag of parts - it is the same
+# tree pruned to what the bay contains, the fastener groups included.
 def print_tree(node, depth=0):
     for child in node.children:
         element = child.element
@@ -44,6 +56,8 @@ def print_tree(node, depth=0):
 
 print_tree(bay.tree.root)
 
+# The source is untouched and the copy is independent - fresh guids - so the bay
+# is a model in its own right and writes like any other.
 compas.json_dump(bay, BAY_FILE)
 
 viewer = Viewer()
