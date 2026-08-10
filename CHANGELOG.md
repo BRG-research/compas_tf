@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Changed `example_model_21_extract_bay.py` to name only the hardware that mounts the cantilever on its column (`ConnectorElement`, `DowelCylinderElement`). The wedges and their bolts are inner-beam hardware and `OuterRibConnectorElement` joins one quarter to the next, so the bay is 46 elements and 143 contacts rather than 64 and 168. `docs/examples/030_extract_bay` gets the viewer screenshot of it.
+* Changed `example_model_18` to `_22` to drop the timing scaffolding and the comment blocks the documentation now carries.
+
 ### Removed
 
 ## [0.1.10] 2026-08-10

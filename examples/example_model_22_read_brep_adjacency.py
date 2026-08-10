@@ -1,8 +1,8 @@
 import json
 import pathlib
 from collections import defaultdict
-from compas.colors import Color
 
+from compas.colors import Color
 from compas.tolerance import TOL
 from compas_occt.brep import OCCBrep
 from compas_viewer import Viewer
@@ -27,40 +27,25 @@ if len(records) != len(faces):
 
 print(f"{len(solids)} solids, {len(faces)} contact faces, {len(records)} adjacency records")
 
-# ------------------------------------------------------------------ #
-# The adjacency.
-#
-# Names, not solids: the model STEP is anonymous too, so nothing here can say
-# which of the 237 solids is "beds_0_0_0". Load the JSON model instead when you
-# need geometry attached to a name (example_model_19). What the sidecar gives is
-# the connectivity - which element meets which, over how much area, on which
-# face of the contact file.
-# ------------------------------------------------------------------ #
-
+# The sidecar is a graph over element NAMES. Nothing here can say which of the
+# 237 solids is "beds_0_0_0" - for geometry attached to a name, read the JSON
+# model instead (example_model_19).
 neighbours = defaultdict(set)
 joints = defaultdict(list)  # (a, b) -> the face indices they share
 for record in records:
-    pair = (record["a"], record["b"])
     neighbours[record["a"]].add(record["b"])
     neighbours[record["b"]].add(record["a"])
-    joints[pair].append(record["index"])
+    joints[record["a"], record["b"]].append(record["index"])
 
 area = sum(record["area"] for record in records)
 print(f"{len(neighbours)} elements over {len(joints)} pairs, {area / 1e6:.2f} m2 of interface")
 
 # A pair with several faces is one joint the boolean left in pieces, or two
-# elements that genuinely touch in more than one place.
+# elements that genuinely touch in more than one place. Group before ranking.
 print("\nbiggest joints:")
-by_area = sorted(joints.items(), key=lambda kv: -sum(records[i]["area"] for i in kv[1]))
-for (a, b), indices in by_area[:5]:
+for (a, b), indices in sorted(joints.items(), key=lambda kv: -sum(records[i]["area"] for i in kv[1]))[:5]:
     print(f"  {sum(records[i]['area'] for i in indices) / 1e6:6.3f} m2  {a} - {b}  ({len(indices)} faces)")
 
-print("\nmost connected:")
-for name in sorted(neighbours, key=lambda n: -len(neighbours[n]))[:5]:
-    print(f"  {len(neighbours[name]):3d} neighbours  {name}")
-
-# Which TYPE meets which - the same table one level up, and the quickest read on
-# what the structure is made of.
 by_type = defaultdict(float)
 for record in records:
     by_type[tuple(sorted((record["a_type"], record["b_type"])))] += record["area"]
@@ -68,16 +53,11 @@ print("\nby type:")
 for (a, b), value in sorted(by_type.items(), key=lambda kv: -kv[1]):
     print(f"  {value / 1e6:6.3f} m2  {a} - {b}")
 
-# ------------------------------------------------------------------ #
-# View - the whole model, with one element's joints picked out of the 733.
-#
-# The contacts sit BETWEEN solids, so the model is drawn transparent or none of
-# this is visible.
-# ------------------------------------------------------------------ #
-
+# One element's joints picked out of the 733. The model is transparent because
+# the contacts sit BETWEEN solids.
 focus = max(neighbours, key=lambda n: len(neighbours[n]))
 selected = {record["index"] for record in records if focus in (record["a"], record["b"])}
-print(f"\nhighlighting {len(selected)} contacts on {focus}")
+print(f"\n{len(selected)} contacts on {focus}, the most connected element")
 
 viewer = Viewer()
 

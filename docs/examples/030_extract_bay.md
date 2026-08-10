@@ -4,23 +4,29 @@ The model read on the first page is a nest of named groups, and any of them can
 be lifted out as a model of its own. One column plus the cantilever it carries
 is the unit that gets assembled on site.
 
+![One bay lifted out of the building: a column carrying one quarter](../_images/example_model_21_extract_bay.png)
+/// caption
+The 46 elements that make a bay, and nothing else - the quarter fans out from
+the column it stands on, cut off along the seams where the next quarters would
+begin. Four groups in the scene tree: `columns_model` and `floor_model` are the
+two that were asked for by name, `connectors` and `connector_cylinders` are the
+hardware `neighbors=` found.
+///
+
 ```python
 --8<-- "examples/example_model_21_extract_bay.py"
 ```
 
 ```text
-bay_0: 64 of 237 elements, 168 of 733 contacts
+bay_0: 46 of 237 elements, 143 of 733 contacts
     34 of  145  PlateElement
-    13 of   32  ConnectorCylinderElement
      8 of   32  DowelCylinderElement
-     3 of    8  ConnectorWedgeElement
      2 of    8  ConnectorElement
-     2 of    4  OuterRibConnectorElement
      1 of    4  SupportElement
      1 of    4  ColumnElement
 columns_model  (2 parts)
   column_model_0  (2 parts)
-floor_model  (50 parts)
+floor_model  (34 parts)
   quarters_model  (34 parts)
     quarter_model_0  (34 parts)
       beds_0  (18 parts)
@@ -32,9 +38,7 @@ floor_model  (50 parts)
       inner_ribs_0  (2 parts)
       wedges_inner_beams_0  (3 parts)
       inner_beams_0  (3 parts)
-  connectors  (16 parts)
 connectors  (2 parts)
-outer_rib_connectors  (2 parts)
 connector_cylinders  (8 parts)
 ```
 
@@ -78,27 +82,35 @@ brings them in:
 
 ```text
 neighbors=False        36 elements, 125 contacts
-neighbors=FASTENERS    64 elements, 168 contacts
+neighbors=FASTENERS    46 elements, 143 contacts
 neighbors=True         77 elements, 208 contacts
 ```
 
 **Pass the types, not `True`.** `True` admits anything that touches the
 selection, and across the seam that is `outer_ribs_1_1`, `outer_ribs_0_3`,
-`inner_beams_2_1`, `inner_beams_0_3` and two oculus plates - 13 extra elements
-that touch this bay but are no part of it. They arrive as 2-part fragments of
+`inner_beams_2_1`, `inner_beams_0_3` and two oculus plates - elements that touch
+this bay but are no part of it. They arrive as 2-part fragments of
 `quarter_model_1`, `quarter_model_3` and `oculus_model`: right for "what touches
 this bay", wrong for "what this bay is made of". A tuple of element types (or a
 predicate) admits only the hardware, and the bay comes out as exactly its two
-groups plus 28 fasteners.
+groups plus 10 fasteners.
 
-Either way the 28 arrive by two different routes, and the difference matters.
+The list is also where you say what *kind* of hardware the bay means. Only the
+column connectors and their dowels are named here, which is what mounts this
+cantilever on its column. The wedges and their bolts (`ConnectorWedgeElement`,
+`ConnectorCylinderElement`) are inner-beam hardware and `OuterRibConnectorElement`
+joins this quarter's ribs to the next quarter's, so all three stay out - 18
+elements' worth: 3 wedges, their 13 bolts, 2 rib connectors. Put a type back in
+the tuple and it comes back with it.
+
+The 10 that stay arrive by two different routes, and the difference matters.
 
 **By the graph** - every element that interacts with one inside, walking **one
 step out only**, since following the graph again from what it just pulled in
-would drag the whole model along one edge at a time. That is 2 `connector_*`, 3
-`connector_wedge_*` and 2 `outer_rib_connector_*`.
+would drag the whole model along one edge at a time. That is the 2
+`connector_*`.
 
-**By their boxes** - 13 `ConnectorCylinderElement` and 8 `DowelCylinderElement`.
+**By their boxes** - the 8 `DowelCylinderElement`, 4 to a connector.
 These have no graph edge at all, so no walk can reach them: the contact search
 that built the graph was told to skip them
 (`skip=involving(DowelCylinderElement, ConnectorCylinderElement)`) because a
@@ -113,9 +125,7 @@ The two passes compound, which is the other reason to filter. Under `True` the
 oculus plates arrive by contact, and `connector_wedge_7`'s three cylinders then
 arrive because their boxes overlap `oculus_3` - a wedge outside the bay
 contributing cylinders to it, one admission having widened what the box pass
-tests against. With the types given, the oculus never enters and neither do
-they: the 13 cylinders in the bay are the ones belonging to
-`connector_wedge_0`, `_1` and `_2`, complete.
+tests against. Naming the types stops the cascade at the first step.
 
 ## The groups you can name
 

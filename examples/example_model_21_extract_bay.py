@@ -7,7 +7,6 @@ from compas_viewer import Viewer
 
 from compas_tf.connectors import ConnectorElement
 from compas_tf.connectors import DowelCylinderElement
-from compas_tf.connectors import OuterRibConnectorElement
 from compas_tf.model import TFModel
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
@@ -16,39 +15,30 @@ BAY_FILE = data_dir / "bay_model.json"
 
 model: TFModel = compas.json_load(MODEL_FILE)
 
-# A bay is one column and the one quarter it carries, plus the hardware that
-# bolts the two together - and nothing else.
-#
-# Only the two structural groups are named, and both in one call: the contacts
-# BETWEEN a column and its quarter survive only if the two come out together.
-#
-# The fasteners cannot be named. `connectors`, `connector_cylinders` and
-# `outer_rib_connectors` are top-level groups holding the hardware of all four
-# bays, so asking for them by name would drag in the other three. neighbors=
-# picks out the ones belonging here instead - by contact for the connectors, and
-# by bounding box for the dowels and cylinders, which the contact search skipped
-# and which therefore have no graph edge to follow.
-#
-# Passing the fastener TYPES rather than True is what keeps the bay a bay.
-# neighbors=True admits anything that touches it, and across the seam that is
-# the outer ribs and inner beams of quarters 1 and 3 plus two oculus plates -
-# six elements that touch this bay but are no part of it.
+# The hardware that mounts this cantilever on its column. The wedges and their
+# bolts are inner-beam hardware and OuterRibConnectorElement joins one quarter
+# to the next, so neither belongs to the bay - put a type back and it returns.
 FASTENERS = (
     ConnectorElement,
-    ConnectorWedgeElement,
-    ConnectorCylinderElement,
     DowelCylinderElement,
-    OuterRibConnectorElement,
 )
 
+# Both groups in one call: the contacts BETWEEN a column and its quarter survive
+# only if the two come out together.
+#
+# The fasteners cannot be named - `connectors`, `connector_cylinders` and
+# `outer_rib_connectors` hold the hardware of all four bays - so neighbors=
+# picks out the ones belonging here, by contact for the connectors and by
+# bounding box for the dowels, which the contact search skipped and which
+# therefore have no graph edge to follow. Types rather than True is what keeps
+# the bay a bay: True also admits the ribs and beams of the quarters next door
+# and two oculus plates, which touch this bay but are no part of it.
 bay = model.find_groups_with_names(
     ["column_model_0", "quarter_model_0"],
     name="bay_0",
     neighbors=FASTENERS,
 )
 
-# What came out, against what the whole building holds. The fastener rows are
-# the ones to read: the bay takes its own share, not all of them.
 whole = Counter(type(element).__name__ for element in model.geometry_elements())
 part = Counter(type(element).__name__ for element in bay.geometry_elements())
 
@@ -57,8 +47,8 @@ for kind, count in part.most_common():
     print(f"  {count:4d} of {whole[kind]:4d}  {kind}")
 
 
-# Every group keeps its place, so the bay is not a bag of parts - it is the same
-# tree pruned to what the bay contains, the fastener groups included.
+# Every group keeps its place, so the bay is the same tree pruned to what it
+# contains, not a bag of parts.
 def print_tree(node, depth=0):
     for child in node.children:
         element = child.element
@@ -71,8 +61,7 @@ def print_tree(node, depth=0):
 
 print_tree(bay.tree.root)
 
-# The source is untouched and the copy is independent - fresh guids - so the bay
-# is a model in its own right and writes like any other.
+# Fresh guids, source untouched: a model in its own right.
 compas.json_dump(bay, BAY_FILE)
 
 viewer = Viewer()
