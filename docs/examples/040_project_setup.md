@@ -1,28 +1,25 @@
 # Set up a project of your own
 
-The pages before this run inside the compas_tf repository. This is the same code
-from a project that only *consumes* the model: installed from PyPI, no clone, no
-build step. A complete one is
+Reading a model needs no clone and no build step - `pip install compas_tf` is
+the whole setup. A complete example project is
 [compas_tf_example](https://github.com/BRG-research/compas_tf_example).
+
+With [uv](https://docs.astral.sh/uv/getting-started/installation/) (install it
+with `winget install --id=astral-sh.uv` on Windows, or
+`curl -LsSf https://astral.sh/uv/install.sh | sh` on macOS and Linux):
 
 ```bash
 uv init my-project
 cd my-project
 uv add compas_tf
+uv add compas_viewer   # only to look at the geometry
 ```
 
-With pip instead: `python -m venv .venv`, activate it, `pip install compas_tf`.
-Either way it needs Python 3.10 or newer.
+Or with pip: `python -m venv .venv`, activate it, `pip install compas_tf`.
+Either way, Python 3.10 or newer.
 
-`compas_viewer` is not a dependency - add it only to look at the geometry:
-
-```bash
-uv add --optional viewer compas_viewer
-uv sync --extra viewer
-```
-
-Then copy the data files out of the compas_tf repository - or point at them
-wherever they are, nothing depends on the layout:
+Then copy the data files out of the compas_tf repository - anywhere you like,
+nothing depends on the layout:
 
 ```text
 my-project/
@@ -34,6 +31,4 @@ my-project/
     cantilevers_baked_contacts.json   # which elements each face joins
 ```
 
-The code is what the three pages before this show - `compas.json_load` for the
-model, `OCCBrep.from_step` for the solids, `find_groups_with_names` for a bay.
-Nothing changes outside the repository.
+The code is what the pages before this show, unchanged outside the repository.

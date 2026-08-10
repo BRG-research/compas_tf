@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Changed the example pages to the minimum that is not already in the script beside them - 445 lines to 287. What is left per page is the screenshot, the script, its output, and only the facts the code does not show: the deflection numbers, why the contacts need a second STEP, why `neighbors=` takes types. `040_project_setup` gets the uv install link back and drops the `--optional viewer` / `uv sync --extra` pair for a plain `uv add compas_viewer`, both verified by running them into a scratch project.
 * Changed the `release` workflow's build matrix to Python 3.10-3.12. It still ran 3.9, which `requires-python = ">=3.10"` now rejects, and the `publish` job needs the build - so the tag went up and nothing was published.
 
 ### Removed

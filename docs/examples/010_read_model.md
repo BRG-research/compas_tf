@@ -1,17 +1,26 @@
 # Read the model
 
 `compas.json_load` gives back the whole thing: elements, features, materials,
-the element tree, and the interaction graph with the contacts on it.
+the tree, and the graph with the contacts on it.
 
 ![The model loaded from JSON, with its group tree in the viewer](../_images/example_model_19_read_model.png)
 /// caption
-The whole building: 237 elements and 733 contacts. The scene tree on the right
-is the model's own tree, mirrored - `floor_model` → `quarters_model` →
-`quarter_model_0..3`, `oculus_model`, `columns_model` and the connector groups,
-with `contacts` beside them. Every group can be switched off on its own.
+237 elements, 733 contacts. The scene tree on the right is the model's own tree,
+mirrored, so every group can be switched off on its own.
 ///
 
-What the 237 are made of:
+```python
+--8<-- "examples/example_model_19_read_model.py"
+```
+
+```text
+237 elements, 733 contacts
+```
+
+The geometry is **baked** - every boolean already evaluated and stored - so this
+runs none and needs no boolean backend: 0.60 s for 3.9 MB.
+
+What the 237 are:
 
 ```text
 floor_model              185    quarters_model 136 = 4 x 34
@@ -23,39 +32,9 @@ connector_cylinders       32
 outer_rib_connectors       4
 ```
 
-One quarter is 34: 18 beds (3 rows of 6), 6 t-sections, 2 outer ribs, 2 inner
-ribs, 3 inner beams and 3 wedges.
+A quarter is 34: 18 beds, 6 t-sections, 2 outer ribs, 2 inner ribs, 3 inner
+beams, 3 wedges. 145 of the 237 are `PlateElement`; the rest are the columns,
+their supports, and the fasteners.
 
-The element types behind those names:
-
-| Element | What it is |
-| --- | --- |
-| `PlateElement` | A plate lofted between two outlines - ribs, beds, t-sections, inner beams and the oculus, 145 of the 237. |
-| `ColumnElement`, `SupportElement` | The column with its capitel, and the steel base under it. |
-| `ConnectorElement`, `ConnectorWedgeElement`, `ConnectorCylinderElement`, `DowelCylinderElement` | The fasteners and their dowels. |
-| `Group` | The interior nodes of the tree. They carry no geometry. |
-
-```python
---8<-- "examples/example_model_19_read_model.py"
-```
-
-```text
-237 elements, 733 contacts
-```
-
-The geometry was **baked** before the file was written - every boolean already
-evaluated and stored on the element - so this runs no boolean, needs no boolean
-backend, and takes 0.60 s for 3.9 MB. A raw `json.loads` of the same bytes is
-0.09 s, so nearly all of it is deserialization.
-
-`model.elements()` yields the groups too; `geometry_elements()` is the leaves
-only. `model.contacts()` reads what the contact search stored - it does not
-search again. To redo it:
-
-```python
-model.compute_contacts_brep(minimum_area=1.0, clear=True)
-```
-
-Contacts come back whole - polygon, frame, size and holes. `contact_holes(contact)`
-gets the hole loops, and `model.contact_pairs()` hands back the two elements
-joined as objects rather than names.
+`model.elements()` yields the groups too, `geometry_elements()` only the leaves.
+`model.contacts()` reads what the search stored rather than searching again.

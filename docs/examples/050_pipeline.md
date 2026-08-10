@@ -1,20 +1,15 @@
 # The full pipeline
 
-The other pages read a finished model. This is where it comes from.
-
-The examples in `examples/` are a chain: each reads the JSON the one before it
-wrote, so they only make sense in order. Run the whole thing with
+The other pages read a finished model. This is where it comes from: a chain of
+examples, each reading the JSON the one before it wrote.
 
 ```bash
 python tools/run_examples.py            # all of them
 python tools/run_examples.py 8 9 10     # only those, by number
 ```
 
-which regenerates everything in `data/`. Every example ends in `viewer.show()`;
-the runner suppresses the window but still builds the scene, so a broken
-geometry or an unregistered scene object raises.
-
-## Building up
+The runner suppresses the viewer window but still builds the scene, so broken
+geometry still raises, and it rewrites everything in `data/`.
 
 | Example | Reads | Writes |
 | --- | --- | --- |
@@ -29,23 +24,14 @@ geometry or an unregistered scene object raises.
 | `9_wedge_connector` | - | the wedge connector on its own |
 | `10_shoring` | `floorguide` | `shoring_model.json` |
 | `11_full` | `cantilever_model`, `shoring_model` | `full_model.json` |
+| `12`, `13`, `14`, `16` | `cantilevers_model` | the parts laid out flat for fabrication |
 
-`cantilevers_model.json` at step 8 is the whole building: 237 elements, four
-quarters on four columns, everything cut and bolted.
+Step 8 is the whole building: 237 elements, four quarters on four columns,
+everything cut and bolted.
 
-## Fabrication
-
-Examples 12, 13, 14 and 16 read `cantilevers_model.json` and take one part of it
-apart - a column, the oculus, a quarter's beds, a quarter's frame, the
-connectors - laying the pieces out flat. 13, 14 and 16 write a
-`*_fab_model.json`; 12 writes only the Rhino bundle `column_fab_rhino.json`.
-
-## Writing it out
-
-`18_write_model_and_brep` is the hinge. It reads `cantilevers_model.json`,
-bakes it - every boolean evaluated once and stored on the element - searches
-every element pair for contacts on the Brep faces, and writes the four files the
-reading examples open:
+`18_write_model_and_brep` is the hinge. It bakes that model - every boolean
+evaluated once and stored - searches every element pair for contacts on the Brep
+faces, and writes the four files the reading pages open:
 
 ```text
 cantilevers_baked_model.json      3.9 MB
@@ -54,7 +40,5 @@ cantilevers_baked_contacts.stp    4.7 MB
 cantilevers_baked_contacts.json   201 KB
 ```
 
-This is the only step here that runs a boolean, and the only one that needs a
-boolean backend. Everything downstream - [Read the model](010_read_model.md),
-[Read the Breps](020_read_brep.md), [Extract a bay](030_extract_bay.md) - just
-opens files.
+It is the only step that runs a boolean, and the only one that needs a boolean
+backend. Everything downstream just opens files.
