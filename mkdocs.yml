@@ -140,6 +140,8 @@ nav:
       - Installation: installation.md
       - License: license.md
       - Changelog: changelog.md
+  - Fabrication:
+      - Part list: fabrication.md
   - Examples:
       - Read a model: examples/010_read_model.md
       - Read a STEP file: examples/020_read_brep.md

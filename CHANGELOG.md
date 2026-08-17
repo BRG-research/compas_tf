@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added `docs/fabrication.md`, the part list for the shop, and a `Fabrication` section in `mkdocs.yml` holding it. One row per part family in `data/cantilevers_baked_model.json` - all 237 elements - with quantity, the oriented bounding box of the finished part in millimetres (longest side first, a range where the family varies), material, and empty `Image` and `3D model` cells to fill in as the per-part files come out of the scripts. Material is only filled where the code states it: the column is glulam, the base is the Sherpa Power Base `150402_PB_L-140-C` named in `SupportElement`.
+
 ### Changed
 
 ### Removed
