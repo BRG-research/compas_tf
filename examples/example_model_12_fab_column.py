@@ -1,19 +1,19 @@
 import pathlib
 
 import compas
+from compas.colors import Color
 from compas.geometry import Frame
 from compas.geometry import Transformation
 from compas_viewer import Viewer
 
 from compas_tf.column import ColumnElement
 from compas_tf.model import TFModel
-from compas_tf.viewer import TeeScene
-from compas_tf.viewer import dump_bundle
+from compas_tf.viewer import dump_scene
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
-GREY = (0.85, 0.85, 0.85)
-RED = (0.9, 0.2, 0.2)
+GREY = Color(0.85, 0.85, 0.85)
+RED = Color(0.9, 0.2, 0.2)
 
 # ------------------------------------------------------------------ #
 # Deserialize the cantilevers model written by example_model_8, pick a column.
@@ -47,18 +47,17 @@ print(f"column {column.name}: {len(cuts)} cut solids")
 # ------------------------------------------------------------------ #
 
 viewer = Viewer()
-scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
 
-stock = scene.add_group(f"{column.name}__stock_and_cuts")
-stock.add(uncut, name=f"{column.name}_uncut", color=GREY)
+stock = viewer.scene.add_group(f"{column.name}__stock_and_cuts")
+viewer.scene.add(uncut, name=f"{column.name}_uncut", parent=stock, facecolor=GREY)
 
-cutters = stock.add_group("cut_solids")
+cutters = viewer.scene.add_group("cut_solids", parent=stock)
 for index, solid in enumerate(cuts):
-    cutters.add(solid, name=f"cut_{index}", color=RED)
+    viewer.scene.add(solid, name=f"cut_{index}", parent=cutters, facecolor=RED)
 
-# Write the Rhino bundle (plain, already-computed geometry) next to the viewer
+# Write the Rhino bundle (plain, already-computed geometry) from the finished
 # scene, so it can be loaded into Rhino with no recompute - see RHINO block below.
-dump_bundle(scene, data_dir / "column_fab_rhino.json")
+dump_scene(viewer.scene, data_dir / "column_fab_rhino.json")
 
 viewer.show()
 

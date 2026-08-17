@@ -13,8 +13,7 @@ from compas_viewer import Viewer
 
 from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
-from compas_tf.viewer import TeeScene
-from compas_tf.viewer import dump_bundle
+from compas_tf.viewer import dump_scene
 from compas_tf.viewer import frame_rectangle
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
@@ -223,29 +222,28 @@ def draw_plate(plate, parent):
     the carved mesh (grey), its bottom/top boundary polylines (black), its base
     plane + normal (orange), and its minimal cut geometry (blue).
     """
-    group = parent.add_group(plate.name)
-    group.add(plate, name=plate.name, color=GREY)
+    group = viewer.scene.add_group(plate.name, parent=parent)
+    viewer.scene.add(plate, name=plate.name, parent=group, facecolor=GREY)
 
     bottom, top = plate.fabrication_polylines()  # co-wound (same winding)
-    group.add(bottom, name=f"{plate.name}_bottom", linecolor=BLACK, linewidth=3)
-    group.add(top, name=f"{plate.name}_top", linecolor=BLACK, linewidth=3)
+    viewer.scene.add(bottom, name=f"{plate.name}_bottom", parent=group, linecolor=BLACK, linewidth=3)
+    viewer.scene.add(top, name=f"{plate.name}_top", parent=group, linecolor=BLACK, linewidth=3)
 
     rectangle, normal = frame_rectangle(plate.base_frame, scale=150)
-    group.add(rectangle, name=f"{plate.name}_base_plane", facecolor=PLANE, opacity=0.3)
-    group.add(normal, name=f"{plate.name}_base_normal", linecolor=PLANE, linewidth=2)
+    viewer.scene.add(rectangle, name=f"{plate.name}_base_plane", parent=group, facecolor=PLANE, opacity=0.3)
+    viewer.scene.add(normal, name=f"{plate.name}_base_normal", parent=group, linecolor=PLANE, linewidth=2)
 
     for index, geometry in enumerate(plate.get_features(minimal=True)):
-        group.add(geometry, name=f"{plate.name}_cut_{index}", linecolor=CUTMIN, linewidth=3)
+        viewer.scene.add(geometry, name=f"{plate.name}_cut_{index}", parent=group, linecolor=CUTMIN, linewidth=3)
 
 
 viewer = Viewer()
-scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
 
 # 1) The three bed strips as assembled (before unrolling).
-assembled = scene.add_group("beds_assembled")
+assembled = viewer.scene.add_group("beds_assembled")
 strips = [bed_strip(name) for name in BED_GROUPS]
 for name, plates in zip(BED_GROUPS, strips):
-    group = assembled.add_group(name)
+    group = viewer.scene.add_group(name, parent=assembled)
     for plate in plates:
         draw_plate(plate, group)
 
@@ -261,14 +259,14 @@ explode_from_centre(strips, SPREAD)
 compas.json_dump(quarter, data_dir / "quarter_fab_model.json")
 
 # 3) Draw the unrolled layout.
-flat = scene.add_group("beds_unrolled")
+flat = viewer.scene.add_group("beds_unrolled")
 for name, plates in zip(BED_GROUPS, strips):
-    group = flat.add_group(name)
+    group = viewer.scene.add_group(name, parent=flat)
     for plate in plates:
         draw_plate(plate, group)
 
 # Plain, already-computed geometry for Rhino (no recompute on load) - see RHINO below.
-dump_bundle(scene, data_dir / "quarter_bed_fab_rhino.json")
+dump_scene(viewer.scene, data_dir / "quarter_bed_fab_rhino.json")
 
 viewer.show()
 

@@ -99,16 +99,16 @@ def draw_connector(part, parent):
     connector - its dowel drill-hole cutters (red), placed in the part's current
     frame so they follow it whether assembled or laid flat."""
     group = viewer.scene.add_group(part.name, parent=parent)
-    group.add(part, name=part.name, color=GREY)
+    viewer.scene.add(part, name=part.name, parent=group, facecolor=GREY)
 
     if isinstance(part, ConnectorWedgeElement):
         for index, cylinder in enumerate(part.create_cylinders()):
-            group.add(cylinder.boolean_geometry, name=f"{part.name}_dowel_{index}", color=GREEN)
+            viewer.scene.add(cylinder.boolean_geometry, name=f"{part.name}_dowel_{index}", parent=group, facecolor=GREEN)
     elif isinstance(part, ConnectorElement):
         for feature in part._features:
             for index, mesh in enumerate(getattr(feature, "meshes", None) or []):
                 placed = mesh.transformed(part.modeltransformation)
-                group.add(placed, name=f"{part.name}_drill_{index}", color=RED)
+                viewer.scene.add(placed, name=f"{part.name}_drill_{index}", parent=group, facecolor=RED)
 
 
 viewer = Viewer()

@@ -40,24 +40,24 @@ viewer = Viewer()
 
 # Plan polygons (2D): the quarter boundary, the column-head polygon, and the oculus points.
 plan = viewer.scene.add_group("plan")
-plan.add(guide.quarter_polygon, name="quarter_polygon", linewidth=3)
-plan.add(guide.quarter_column_polygon, name="quarter_column_polygon", linewidth=3)
+viewer.scene.add(guide.quarter_polygon, name="quarter_polygon", parent=plan, linewidth=3)
+viewer.scene.add(guide.quarter_column_polygon, name="quarter_column_polygon", parent=plan, linewidth=3)
 for i, point in enumerate(guide.oculus_points):
-    plan.add(point, name=f"oculus_point_{i}", pointsize=10)
+    viewer.scene.add(point, name=f"oculus_point_{i}", parent=plan, pointsize=10)
 
 # Construction quads (2D): one rectangle per rib / beam / wedge / t-section.
 quads = viewer.scene.add_group("construction_quads")
 for key, polygons in guide.construction_quads.items():
     group = viewer.scene.add_group(key, parent=quads)
     for i, polygon in enumerate(polygons):
-        group.add(polygon, name=f"{key}_{i}", linewidth=2)
+        viewer.scene.add(polygon, name=f"{key}_{i}", parent=group, linewidth=2)
 
 # Boundary parabolas plus its two# t-section offsets.
 parabolas = viewer.scene.add_group("parabolas")
 for i, offsets in enumerate(guide.boundary_parabolas):
     group = viewer.scene.add_group(f"parabola_{i}", parent=parabolas)
     for j, polyline in enumerate(offsets):
-        group.add(polyline, name=f"offset_{j}", linewidth=2)
+        viewer.scene.add(polyline, name=f"offset_{j}", parent=group, linewidth=2)
 
 # Construction planes: shown as a small rectangle + normal line per plane.
 planes = viewer.scene.add_group("planes")
@@ -66,7 +66,7 @@ for key, plane_pairs in guide.construction_planes.items():
     for i, pair in enumerate(plane_pairs):
         for j, plane in enumerate(pair):
             rectangle, normal = frame_rectangle(Frame.from_plane(plane), scale=150)
-            group.add(rectangle, name=f"{key}_{i}_{j}", facecolor=(0.2, 0.6, 0.9), opacity=0.3)
-            group.add(normal, name=f"{key}_{i}_{j}_normal", linewidth=2, linecolor=(0.9, 0.2, 0.2))
+            viewer.scene.add(rectangle, name=f"{key}_{i}_{j}", parent=group, facecolor=(0.2, 0.6, 0.9), opacity=0.3)
+            viewer.scene.add(normal, name=f"{key}_{i}_{j}_normal", parent=group, linewidth=2, linecolor=(0.9, 0.2, 0.2))
 
 viewer.show()

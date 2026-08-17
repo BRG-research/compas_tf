@@ -11,9 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Added `docs/fabrication.md`, the part list for the shop, and a `Fabrication` section in `mkdocs.yml` holding it. One row per part family in `data/cantilevers_baked_model.json` - all 237 elements - with quantity, the oriented bounding box of the finished part in millimetres (longest side first, a range where the family varies), material, and empty `Image` and `3D model` cells to fill in as the per-part files come out of the scripts. Material is only filled where the code states it: the column is glulam, the base is the Sherpa Power Base `150402_PB_L-140-C` named in `SupportElement`.
 
+* Added `compas_tf.viewer.dump_scene`, which writes the Rhino bundle by walking the finished viewer scene, and `scene_nodes`, the flattening behind it. Each object contributes the one colour Rhino can show - an explicit `color=`, else the colour of the buffer its geometry is drawn in, so a polyline keeps its `linecolor` instead of inheriting a surface grey.
+
 ### Changed
 
+* Changed every example to draw through `viewer.scene` - `viewer.scene.add(item, parent=group, ...)` and `viewer.scene.add_group(name, parent=group)` - instead of a group handle's own `add`. A group handle's `add` is core compas' `Group.add`, which goes straight to `SceneObject.add` and never sees `compas_viewer.Scene.add`'s `facecolor` -> `surfacecolor` translation, so `facecolor=` on a group was silently dropped (`example_model_1`'s construction planes drew grey, not blue).
+* Changed the examples' `color=(0.85, 0.85, 0.85)` to `facecolor=`. `compas.scene.GeometryObject.__init__` fills `pointcolor`, `linecolor` AND `surfacecolor` from `color`, so one `color=` painted the edges the same grey as the faces and the wireframe disappeared. The viewer's own defaults - `linecolor` 0.2 grey, `surfacecolor` 0.9 grey - only survive when `color` is left unset. Examples 4, 5, 6, 7, 10 and 11 were drawing flat because of it.
+
 ### Removed
+
+* Removed `compas_tf.viewer.TeeScene`, `SceneRecorder`, `dump_bundle` and the `_patch_group_nesting` monkeypatch that gave `compas_viewer`'s `Group` an `add_group`. The fab examples drew through the tee so the Rhino bundle could be recorded alongside; `dump_scene` reads the scene itself, so the examples use the stock viewer API and the bundle is what the viewer actually shows. The tee also dropped a group's style kwargs on the live side and kept only a fixed list of style keys.
 
 ## [0.1.12] 2026-08-10
 

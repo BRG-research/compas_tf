@@ -51,10 +51,10 @@ dowel_cutters = [cyl.boolean_geometry for cyl in wedge.create_cylinders()]
 viewer = Viewer()
 
 connector = viewer.scene.add_group("wedge_connector")
-connector.add(wedge.boolean_geometry, name="wedge_solid", color=GREY)
+viewer.scene.add(wedge.boolean_geometry, name="wedge_solid", parent=connector, facecolor=GREY)
 for i, box in enumerate(face_boxes):
-    connector.add(box, name=f"box_cutter_{i}")
+    viewer.scene.add(box, name=f"box_cutter_{i}", parent=connector)
 for i, dowel in enumerate(dowel_cutters):
-    connector.add(dowel, name=f"dowel_{i}")
+    viewer.scene.add(dowel, name=f"dowel_{i}", parent=connector)
 
 viewer.show()

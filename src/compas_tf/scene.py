@@ -38,13 +38,6 @@ def register_scene_objects():
     from compas_viewer.scene.geometryobject import GeometryObject as ViewerGeometryObject
 
     from compas_tf.element import TFElement
-    from compas_tf.viewer import _patch_group_nesting
-
-    # compas_viewer's Group has no add_group: only the scene can nest, via
-    # scene.add_group(name, parent=group). Every example mirrors a model tree
-    # with `parent.add_group(child_name)`, which is the natural way to write it,
-    # so give Group that method. Idempotent, and the only patch left.
-    _patch_group_nesting()
 
     # Two face normals are treated as the same plane below this angle, so the
     # edge between them is a boolean artefact rather than a real edge. Compared
