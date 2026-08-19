@@ -21,6 +21,7 @@ from compas_tf.geometry import (
 # Shared bases: baked-geometry serialization (TFElement/TFFeature/TFModel) and
 # the mesh -> solid Brep conversion (BrepMixin.get_brep) every class exposes.
 from compas_tf.brep import BrepMixin, mesh_to_brep, meshes_to_brep
+from compas_tf.writer import write_parts, write_step, write_mesh
 from compas_tf.element import TFElement, TFFeature, baked, bakekey
 from compas_tf.model import TFModel
 
@@ -54,6 +55,9 @@ __all__ = [
     "BrepMixin",
     "mesh_to_brep",
     "meshes_to_brep",
+    "write_parts",
+    "write_step",
+    "write_mesh",
     "TFElement",
     "TFFeature",
     "TFModel",

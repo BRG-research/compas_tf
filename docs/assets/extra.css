@@ -1,0 +1,34 @@
+/* Material caps every page at 61rem. The part list has eight columns and needs
+   more room than that, so widen the grid project-wide. */
+.md-grid {
+  max-width: 80rem;
+}
+
+/* Part-list thumbnails: keep table images small and let the row stay readable. */
+.md-typeset table img {
+  max-width: 110px;
+  height: auto;
+  display: block;
+  border-radius: 2px;
+}
+
+/* Dense tables: smaller type and tighter cells so wide part lists fit.
+   Tables still scroll horizontally if they outgrow the page. */
+.md-typeset table:not([class]) {
+  font-size: 0.68rem;
+}
+
+.md-typeset table:not([class]) th,
+.md-typeset table:not([class]) td {
+  padding: 0.4em 0.6em;
+}
+
+/* 3D part previews (docs/fabrication.md). The viewer needs an explicit size;
+   its colours are set in assets/o3dv-init.js from the active palette. */
+.md-typeset .model-preview .online_3d_viewer {
+  width: 100%;
+  height: 480px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 4px;
+  overflow: hidden;
+}

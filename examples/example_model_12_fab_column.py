@@ -9,27 +9,30 @@ from compas_viewer import Viewer
 from compas_tf.column import ColumnElement
 from compas_tf.model import TFModel
 from compas_tf.viewer import dump_scene
+from compas_tf.writer import write_parts
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
+fab_dir = data_dir / "fabrication"
+fab_dir.mkdir(parents=True, exist_ok=True)
 
 GREY = Color(0.85, 0.85, 0.85)
 RED = Color(0.9, 0.2, 0.2)
 
 # ------------------------------------------------------------------ #
-# Deserialize the cantilevers model written by example_model_8, pick a column.
+# Deserialize the cantilevers model written by example_model_8
+# Then pick a column by element name.
 # ------------------------------------------------------------------ #
 
 model: TFModel = compas.json_load(data_dir / "cantilevers_model.json")
 column: ColumnElement = model.find_element_with_name("column_0")
 xform = Transformation.from_frame_to_frame(Frame.worldXY().translated((-column.width * 0.5, -column.depth * 0.5, 0)), Frame.worldYZ())
 
-# column.transformation = xform
-
 # ------------------------------------------------------------------ #
 # Uncut stock: apply ONLY the additive capitel, skip the cuts.
 # ------------------------------------------------------------------ #
 
 uncut = column.compute_elementgeometry(types=["ColumnAddFeature"]).transformed(xform)
+cut = column.elementgeometry.transformed(xform)
 
 # ------------------------------------------------------------------ #
 # The cut solids that carve it, recovered by type for fabrication.
@@ -40,35 +43,32 @@ for feature in column.get_features(["ColumnCutFeature"]):
     for mesh in feature.meshes:
         cuts.append(mesh.transformed(xform))
 
-print(f"column {column.name}: {len(cuts)} cut solids")
+# ------------------------------------------------------------------ #
+# Export
+#
+#   STEP     the meshes go through compas_occt's coplanar-face merge.
+#   OBJ      the mesh the part already is.
+#   PREVIEW  the carved part on its own
+# ------------------------------------------------------------------ #
+
+uncut.name = f"{column.name}_uncut"
+cut.name = f"{column.name}_cut"
+for index, solid in enumerate(cuts):
+    solid.name = f"{column.name}_cutter_{index}"
+
+written = write_parts([uncut, cut] + cuts, fab_dir, column.name, preview=cut)
 
 # ------------------------------------------------------------------ #
-#  View - the uncut stock (grey) with the cut solids (red) that carve it.
+#  Viewer
 # ------------------------------------------------------------------ #
 
 viewer = Viewer()
 
 stock = viewer.scene.add_group(f"{column.name}__stock_and_cuts")
 viewer.scene.add(uncut, name=f"{column.name}_uncut", parent=stock, facecolor=GREY)
-
+viewer.scene.add(cut, name=f"{column.name}_cut", parent=stock)
 cutters = viewer.scene.add_group("cut_solids", parent=stock)
 for index, solid in enumerate(cuts):
     viewer.scene.add(solid, name=f"cut_{index}", parent=cutters, facecolor=RED)
 
-# Write the Rhino bundle (plain, already-computed geometry) from the finished
-# scene, so it can be loaded into Rhino with no recompute - see RHINO block below.
-dump_scene(viewer.scene, data_dir / "column_fab_rhino.json")
-
 viewer.show()
-
-
-# ====================================================================== #
-#  RHINO  -  copy the code between the triple quotes into the Rhino 8
-#  ScriptEditor (Python 3) and Run it to add THIS example's geometry to the
-#  active Rhino document (named layers, per-object colour). Needs only the
-#  installed compas_tf (see install steps); recomputes nothing.
-# ====================================================================== #
-RHINO = r"""
-from compas_tf.rhino import draw_bundle
-draw_bundle(r"C:\brg\compas_tf\data\column_fab_rhino.json")
-"""

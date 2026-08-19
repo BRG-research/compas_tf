@@ -11,11 +11,11 @@ from compas.geometry import Line
 from compas.geometry import Point
 from compas.geometry import Transformation
 from compas.geometry import Vector
-from compas_model.models import Model
 
 from compas_tf.element import TFElement
 from compas_tf.element import TFFeature
 from compas_tf.element import baked
+from compas_tf.model import TFModel
 
 # from compas_occ import brep
 
@@ -411,7 +411,7 @@ class SchoringElement(TFElement):
         # =============================================================================
         # Model
         # =============================================================================
-        model = Model("scaffolding")
+        model = TFModel("scaffolding")
         scaffolding = model.add_group("scaffolding")
         model.add_element(foot0, scaffolding)
         model.add_element(foot1, scaffolding)
@@ -473,7 +473,7 @@ class SchoringElement(TFElement):
         # =============================================================================
         # Model
         # =============================================================================
-        model = Model("scaffolding")
+        model = TFModel("scaffolding")
         scaffolding = model.add_group("scaffolding")
         model.add_element(body0, scaffolding)
         model.add_element(body1, scaffolding)
@@ -511,7 +511,7 @@ class SchoringElement(TFElement):
                 yaxis = Vector.Zaxis().cross(xaxis)
 
         # SchoringElement prop parts - without transformation
-        model = Model("scaffolding")
+        model = TFModel("scaffolding")
 
         groups = []
         for i in range(len(lines)):
