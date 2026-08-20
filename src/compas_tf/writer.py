@@ -1,7 +1,7 @@
 """Write element geometry to the files a shop and the docs need.
 
 One place for the export half of a fabrication example, so every element does
-it the same way. Three formats, each for a different reader:
+it the same way. Four formats, each for a different reader:
 
 - **STEP** is the CAD hand-off. The booleans that carve an element leave
   triangle soup, so the meshes go through :func:`compas_tf.brep.meshes_to_brep`
@@ -10,6 +10,9 @@ it the same way. Three formats, each for a different reader:
 - **OBJ** (or PLY/STL/OFF) is the mesh the element already is, no kernel
   involved. Every solid keeps its name, so the file lands as identifiable
   pieces rather than one blob.
+- **IFC** is the BIM hand-off, written with ``compas_ifc``: one
+  ``IfcBuildingElementProxy`` per solid inside a minimal
+  project/site/building/storey template, millimetres, IFC4.
 - **A preview** is one mesh on its own, for the viewer embedded in the docs.
   Same mesh formats; the viewer reads them directly, which is why nothing here
   needs glTF.
@@ -29,11 +32,36 @@ from compas.datastructures import Mesh
 # so a caller picks a format by naming the file.
 MESH_SUFFIXES = (".obj", ".ply", ".stl", ".off")
 STEP_SUFFIXES = (".stp", ".step")
+IFC_SUFFIXES = (".ifc",)
 
 # What the docs viewer loads. Kept as a constant so the writer, the mkdocs hook
 # and the <div class="online_3d_viewer"> in fabrication.md agree.
 PREVIEW_SUFFIX = ".obj"
 PREVIEW_TAG = "preview"
+
+
+def triangulated(mesh: Mesh) -> Mesh:
+    """A copy of ``mesh`` with every ngon face ear-clipped to triangles.
+
+    The coplanar-face merge leaves concave polygon faces; web viewers
+    fan-triangulate ngons and smear triangles across the concavities, so a
+    mesh meant for the docs viewer goes through this first. Reuses the
+    ear-clipping the plate caps already use.
+    """
+    from compas.geometry import Polygon
+
+    from compas_tf.plate import PlateElement
+
+    result = mesh.copy()
+    for face in list(result.faces()):
+        vertices = result.face_vertices(face)
+        if len(vertices) <= 3:
+            continue
+        polygon = Polygon([result.vertex_coordinates(vertex) for vertex in vertices])
+        result.delete_face(face)
+        for tri in PlateElement._earclip_polygon(polygon):
+            result.add_face([vertices[index] for index in tri])
+    return result
 
 
 def _named(meshes: Iterable[Mesh], name: str) -> list:
@@ -96,6 +124,51 @@ def write_step(
     return filepath
 
 
+def write_ifc(
+    meshes: Iterable[Mesh],
+    filepath: Union[str, pathlib.Path],
+    schema: str = "IFC4",
+) -> pathlib.Path:
+    """Write meshes to one IFC file via ``compas_ifc``.
+
+    Every mesh becomes one ``IfcBuildingElementProxy`` (named after the mesh)
+    on the single storey of a minimal template project, in millimetres.
+
+    Parameters
+    ----------
+    meshes : iterable[:class:`compas.datastructures.Mesh`]
+        The solids to write.
+    filepath : str | :class:`pathlib.Path`
+        Destination ``.ifc`` file.
+    schema : str, optional
+        IFC schema version.
+
+    Returns
+    -------
+    :class:`pathlib.Path`
+        The file written.
+
+    Raises
+    ------
+    ValueError
+        If no mesh survives (nothing to write).
+    """
+    from compas_ifc.bim import BuildingInformationModel
+
+    filepath = pathlib.Path(filepath)
+    parts = _named(meshes, filepath.stem)
+    if not parts:
+        raise ValueError(f"write_ifc: nothing to write to {filepath.name}")
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+
+    bim = BuildingInformationModel.template(schema=schema, unit="mm", name=filepath.stem)
+    storey = bim.storeys[0]
+    for mesh in parts:
+        bim.create_element(geometry=mesh, name=mesh.name, parent=storey)
+    bim.save(str(filepath))
+    return filepath
+
+
 def write_mesh(meshes: Iterable[Mesh], filepath: Union[str, pathlib.Path]) -> pathlib.Path:
     """Write meshes to one mesh file, format chosen by the suffix.
 
@@ -143,7 +216,7 @@ def write_parts(
     meshes: Iterable[Mesh],
     directory: Union[str, pathlib.Path],
     name: str,
-    formats: Iterable[str] = ("stp", "obj"),
+    formats: Iterable[str] = ("stp", "obj", "ifc"),
     preview: Optional[Mesh] = None,
     **kwargs,
 ) -> dict:
@@ -162,12 +235,14 @@ def write_parts(
         Stem for the files, e.g. ``"column_0"`` gives ``column_0_fab.stp``.
     formats : iterable[str], optional
         Suffixes, with or without the dot. ``"stp"``/``"step"`` go through the
-        Brep merge; the mesh formats are written as-is.
+        Brep merge, ``"ifc"`` goes through :func:`write_ifc`; the mesh formats
+        are written as-is.
     preview : :class:`compas.datastructures.Mesh`, optional
         One mesh to write on its own as ``<name>_preview.obj``, for the viewer
         in the docs. Usually the finished part: the stock encloses it and the
         cutters pass through it, so all the solids at once would show nothing.
-        ``None`` writes no preview.
+        Triangulated on the way out - web viewers fan-triangulate the merged
+        concave faces and draw garbage. ``None`` writes no preview.
     **kwargs
         Forwarded to :func:`write_step`.
 
@@ -192,10 +267,13 @@ def write_parts(
         filepath = directory / f"{name}_fab{suffix}"
         if suffix in STEP_SUFFIXES:
             written[suffix.lstrip(".")] = write_step(parts, filepath, **kwargs)
+        elif suffix in IFC_SUFFIXES:
+            written[suffix.lstrip(".")] = write_ifc(parts, filepath)
         else:
             written[suffix.lstrip(".")] = write_mesh(parts, filepath)
 
     if preview is not None:
+        preview = triangulated(preview)
         preview.name = f"{name}_{PREVIEW_TAG}"
         written[PREVIEW_TAG] = write_mesh([preview], directory / f"{name}_{PREVIEW_TAG}{PREVIEW_SUFFIX}")
 

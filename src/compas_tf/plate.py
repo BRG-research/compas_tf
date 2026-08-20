@@ -434,6 +434,34 @@ class PlateElement(TFElement):
         frame.transform(self._placement)
         return frame
 
+    def lay_flat_transform(self, point: Optional[Point] = None) -> Transformation:
+        """Transformation that lays the plate flat on worldXY, resting on its TOP face, body up.
+
+        Frame beams are fabricated lying on their top face, so the reference is
+        :attr:`top_frame` (not :attr:`base_frame`): its z-axis runs bottom->top,
+        so the target frame's z-axis points DOWN and the body extrudes UP. The
+        x-axis is the plate's long edge projected to the ground.
+
+        Parameters
+        ----------
+        point : :class:`compas.geometry.Point`, optional
+            Where the top frame's origin lands on the ground. Defaults to the
+            world origin.
+
+        Returns
+        -------
+        :class:`compas.geometry.Transformation`
+            A world-space move; compose onto the plate's transformation or
+            apply it to already-placed geometry.
+        """
+        top = self.top_frame
+        x2d = Vector(top.xaxis[0], top.xaxis[1], 0.0)
+        if x2d.length < 1e-9:  # long edge runs vertical - use the top y
+            x2d = Vector(top.yaxis[0], top.yaxis[1], 0.0)
+        xaxis = x2d.unitized()
+        yaxis = Vector(0, 0, -1).cross(xaxis)  # target z down -> body up
+        return Transformation.from_frame_to_frame(top, Frame(point or Point(0, 0, 0), xaxis, yaxis))
+
     @staticmethod
     def _remove_duplicate_points(points, tolerance=1e-6):
         """Remove consecutive duplicate points and closing point if it matches first."""
