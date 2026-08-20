@@ -12,8 +12,7 @@ from compas_viewer import Viewer
 
 from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
-from compas_tf.viewer import TeeScene
-from compas_tf.viewer import dump_bundle
+from compas_tf.viewer import dump_scene
 from compas_tf.viewer import frame_rectangle
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
@@ -253,12 +252,12 @@ def draw_plate(plate, parent):
     top plane + normal (orange, the face laid on the ground), cut feature SOLIDS
     (red: box slot + dowels) and the cut feature outlines + dowel center lines
     (blue, minimal geometry)."""
-    group = parent.add_group(plate.name)
-    group.add(plate, name=plate.name, color=GREY)
+    group = viewer.scene.add_group(plate.name, parent=parent)
+    viewer.scene.add(plate, name=plate.name, parent=group, facecolor=GREY)
 
     bottom, top = plate.fabrication_polylines()  # co-wound (same winding)
-    group.add(bottom, name=f"{plate.name}_bottom", linecolor=BLACK, linewidth=3)
-    group.add(top, name=f"{plate.name}_top", linecolor=BLACK, linewidth=3)
+    viewer.scene.add(bottom, name=f"{plate.name}_bottom", parent=group, linecolor=BLACK, linewidth=3)
+    viewer.scene.add(top, name=f"{plate.name}_top", parent=group, linecolor=BLACK, linewidth=3)
 
     # Draw the top plane with its normal flipped to point INTO the plate body (the
     # mesh), not outward: top_frame.zaxis runs bottom->top, so at the top face it
@@ -267,24 +266,23 @@ def draw_plate(plate, parent):
     top = plate.top_frame
     inward = Frame(top.point, top.xaxis, top.yaxis * -1)
     rectangle, normal = frame_rectangle(inward, scale=150)
-    group.add(rectangle, name=f"{plate.name}_top_plane", facecolor=PLANE, opacity=0.3)
-    group.add(normal, name=f"{plate.name}_top_normal", linecolor=PLANE, linewidth=2)
+    viewer.scene.add(rectangle, name=f"{plate.name}_top_plane", parent=group, facecolor=PLANE, opacity=0.3)
+    viewer.scene.add(normal, name=f"{plate.name}_top_normal", parent=group, linecolor=PLANE, linewidth=2)
 
     # Cut feature solids (box slot + dowels), placed in the plate's current frame.
     for feature in plate.get_features():
         for mesh in getattr(feature, "meshes", None) or []:
-            group.add(mesh, name=f"{plate.name}__{feature.name or 'cut'}", color=CUT)
+            viewer.scene.add(mesh, name=f"{plate.name}__{feature.name or 'cut'}", parent=group, facecolor=CUT)
 
     # Minimal drilling geometry: box (bottom, top) outlines + dowel center lines.
     for index, geometry in enumerate(plate.get_features(minimal=True)):
-        group.add(geometry, name=f"{plate.name}_cutline_{index}", linecolor=CUTMIN, linewidth=3)
+        viewer.scene.add(geometry, name=f"{plate.name}_cutline_{index}", parent=group, linecolor=CUTMIN, linewidth=3)
 
 
 viewer = Viewer()
-scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
 
 # 1) The frame beams as assembled (before laying flat).
-assembled = scene.add_group("frame_assembled")
+assembled = viewer.scene.add_group("frame_assembled")
 for plate in beams:
     draw_plate(plate, assembled)
 
@@ -301,12 +299,12 @@ deoverlap(beams, MARGIN)
 
 compas.json_dump(quarter, data_dir / "quarter_frame_fab_model.json")
 
-flat = scene.add_group("frame_flat")
+flat = viewer.scene.add_group("frame_flat")
 for plate in beams:
     draw_plate(plate, flat)
 
 # Plain, already-computed geometry for Rhino (no recompute on load) - see RHINO below.
-dump_bundle(scene, data_dir / "quarter_frame_fab_rhino.json")
+dump_scene(viewer.scene, data_dir / "quarter_frame_fab_rhino.json")
 
 viewer.show()
 

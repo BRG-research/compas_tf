@@ -1,0 +1,139 @@
+/* Material caps every page at 61rem. The part list has eight columns and needs
+   more room than that, so widen the grid project-wide. */
+.md-grid {
+  max-width: 80rem;
+}
+
+/* Part-list thumbnails: keep table images small and let the row stay readable. */
+.md-typeset table img {
+  max-width: 110px;
+  height: auto;
+  display: block;
+  border-radius: 2px;
+}
+
+/* Dense tables: smaller type and tighter cells so wide part lists fit.
+   Tables still scroll horizontally if they outgrow the page. */
+.md-typeset table:not([class]) {
+  font-size: 0.68rem;
+}
+
+.md-typeset table:not([class]) th,
+.md-typeset table:not([class]) td {
+  padding: 0.4em 0.6em;
+}
+
+/* Every part-list table spans the full page at the SAME fixed column grid,
+   so the four tables (Column / Floor quarter / Oculus / Connectors) line up
+   as one list instead of each sizing itself to its own content. Material
+   wraps tables in an inline-block .md-typeset__table - stretch that too. */
+.part-list .md-typeset__scrollwrap,
+.part-list .md-typeset__table {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.5em;
+  padding: 0;
+}
+
+/* Tight section rhythm: the heading sits close to its table, not floating in
+   a band of empty space between two tables. */
+.part-list h3 {
+  margin: 0.9em 0 0.4em;
+}
+
+/* Part list (docs/fabrication.md): fixed column widths so the long
+   Dimensions/Material specs wrap instead of squeezing the previews, and
+   every table gets the SAME grid. */
+.part-list table {
+  table-layout: fixed;
+  width: 100%;
+  font-size: 0.7rem;
+}
+
+.part-list th:nth-child(1) { width: 9%; }  /* Part - just a name */
+.part-list th:nth-child(2) { width: 30%; } /* Image */
+.part-list th:nth-child(3) { width: 8%; }  /* Files */
+.part-list th:nth-child(4) { width: 13%; } /* Script */
+.part-list th:nth-child(5) { width: 16%; } /* Dimensions */
+.part-list th:nth-child(6) { width: 4%; }  /* Qty */
+.part-list th:nth-child(7) { width: 20%; } /* Material */
+
+.part-list td:nth-child(5),
+.part-list td:nth-child(7) {
+  overflow-wrap: anywhere;
+}
+
+.part-list td {
+  vertical-align: middle;
+}
+
+/* The part name reads as the row's label. */
+.part-list td:nth-child(1) {
+  font-weight: 700;
+}
+
+/* The Image column embeds a live 3D preview per row (built lazily by
+   assets/o3dv-init.js). Give it a fixed height - the viewer canvas fills its
+   parent - and the same card look as the big previews. */
+.part-list td:nth-child(2) {
+  text-align: center;
+  padding: 0.3em;
+}
+
+.part-list .online_3d_viewer {
+  display: block; /* the cells hold <span>s - a <div> breaks md table parsing */
+  width: 100%;
+  height: 200px;
+  overflow: hidden;
+  background: #fff;
+  cursor: zoom-in; /* a clean click expands into the lightbox */
+}
+
+/* Download / script links as small pills instead of bare inline links. */
+.part-list td:nth-child(3) a,
+.part-list td:nth-child(4) a {
+  display: inline-block;
+  padding: 0.15em 0.7em;
+  margin: 0.1em 0;
+  border: 1px solid var(--md-accent-fg-color);
+  border-radius: 1em;
+  font-weight: 600;
+}
+
+.part-list td:nth-child(3) a:hover,
+.part-list td:nth-child(4) a:hover {
+  background: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+}
+
+/* Lightbox: a clean click on a table preview opens the same model big
+   (assets/o3dv-init.js builds and destroys the viewer). */
+.o3dv-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.o3dv-lightbox .online_3d_viewer {
+  width: min(92vw, 1400px);
+  height: min(88vh, 1000px);
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.o3dv-lightbox-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 1rem;
+  border: none;
+  background: none;
+  color: #fff;
+  font-size: 2.5rem;
+  line-height: 1;
+  cursor: pointer;
+}

@@ -68,6 +68,6 @@ compas.json_dump(column_model, data_dir / "column_model.json")
 
 viewer = Viewer()
 group = viewer.scene.add_group("column_model")
-group.add(support, name="support", color=(0.9, 0.9, 0.9))
-group.add(column, name="column", color=(0.9, 0.9, 0.9))
+viewer.scene.add(support, name="support", parent=group, facecolor=(0.9, 0.9, 0.9))
+viewer.scene.add(column, name="column", parent=group, facecolor=(0.9, 0.9, 0.9))
 viewer.show()

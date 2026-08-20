@@ -96,7 +96,7 @@ def add_tree(node, viewer_parent):
             add_tree(child, viewer.scene.add_group(element.name, parent=viewer_parent))
         else:
             if element.modelgeometry is not None:
-                viewer.scene.add(element, name=element.name, parent=viewer_parent, color=(0.85, 0.85, 0.85))
+                viewer.scene.add(element, name=element.name, parent=viewer_parent, facecolor=(0.85, 0.85, 0.85))
 
 
 add_tree(quarters_model.tree.root, root_group)

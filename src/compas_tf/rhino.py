@@ -1,7 +1,7 @@
 """Load a compas_tf "Rhino bundle" into Rhino via the COMPAS scene.
 
-A *bundle* is the flat node list the fab examples record while they draw
-(:class:`compas_tf.viewer.TeeScene` + :func:`compas_tf.viewer.dump_bundle`)::
+A *bundle* is the flat node list a fab example writes from its finished viewer
+scene (:func:`compas_tf.viewer.dump_scene`)::
 
     {"nodes": [
         {"id": 0, "parent": None, "kind": "group", "name": "oculus_flat"},

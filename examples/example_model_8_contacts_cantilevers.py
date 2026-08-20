@@ -1,6 +1,7 @@
 import pathlib
 
 import compas
+from compas.colors import Color
 from compas.geometry import Point
 from compas_model.elements import Group
 from compas_viewer import Viewer
@@ -9,10 +10,11 @@ from compas_tf.connectors import ConnectorElement
 from compas_tf.connectors import OuterRibConnectorElement
 from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
-from compas_tf.viewer import TeeScene
-from compas_tf.viewer import dump_bundle
+from compas_tf.viewer import dump_scene
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
+
+RED = Color(1.0, 0.0, 0.0)
 
 # ------------------------------------------------------------------ #
 # Deserialize the floor and the columns written by earlier examples
@@ -170,29 +172,28 @@ print(f"[obj] wrote data/cantilevers_model.obj ({len(_meshes)} objects)")
 # ------------------------------------------------------------------ #
 
 
-def add_tree(node, viewer_parent):
+def add_tree(node, viewer_parent=None):
     """Mirror the model tree into the viewer, preserving the group hierarchy so
     floor_model / columns_model (and their subgroups) show up as their own
     groups in the scene tree instead of one flat list."""
     for child in node.children:
         element = child.element
         if isinstance(element, Group):
-            add_tree(child, viewer_parent.add_group(element.name))
+            add_tree(child, viewer.scene.add_group(element.name, parent=viewer_parent))
         else:
             if element.modelgeometry is not None:
-                viewer_parent.add(element, name=element.name)
+                viewer.scene.add(element, name=element.name, parent=viewer_parent)
 
 
 viewer = Viewer()
-scene = TeeScene(viewer.scene)  # draw to the viewer AND record a Rhino bundle
-add_tree(cantilever_model.tree.root, scene)
+add_tree(cantilever_model.tree.root)
 
-contacts_group = scene.add_group("contacts")
+contacts_group = viewer.scene.add_group("contacts")
 for i, contact in enumerate(cantilever_model.contacts()):
-    contacts_group.add(contact.polygon, name=f"contact_{i}", color=(1.0, 0.0, 0.0))
+    viewer.scene.add(contact.polygon, name=f"contact_{i}", parent=contacts_group, facecolor=RED, linecolor=RED)
 
 # Plain, already-computed geometry for Rhino (no recompute on load) - see RHINO below.
-dump_bundle(scene, data_dir / "cantilevers_rhino.json")
+dump_scene(viewer.scene, data_dir / "cantilevers_rhino.json")
 
 viewer.show()
 

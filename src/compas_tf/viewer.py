@@ -1,4 +1,4 @@
-"""Rhino-bundle recording, and small drawing helpers.
+"""Rhino-bundle export, and small drawing helpers.
 
 There is deliberately no viewer wrapper here any more. Examples use
 ``compas_viewer`` directly::
@@ -25,30 +25,27 @@ What used to be here and why it is gone
   overstated the most carved plate's surface by 1.3%.
 - ``_apply_edgecolor()`` monkeypatched core ``MeshObject.contrastcolor`` to fix
   washed-out wireframes. The scene object emits its own edge colour now.
+- ``TeeScene``/``SceneRecorder`` mirrored every ``add``/``add_group`` into a
+  parallel node list, so the examples had to draw through a wrapper instead of
+  ``viewer.scene``. :func:`dump_scene` walks the finished scene instead - the
+  bundle is then whatever the viewer actually shows, and there is one drawing
+  API. It also removed a trap: a group handle's ``add`` is core compas'
+  ``Group.add``, which never sees ``compas_viewer``'s ``facecolor`` ->
+  ``surfacecolor`` translation, so ``facecolor=`` passed to a group was silently
+  dropped.
 
-What is left is the Rhino bundle: a recorder that captures ``add``/``add_group``
-calls to a flat node list, so a fabrication example can draw into the viewer and
-write a Rhino-loadable JSON at the same time.
+What is left is the Rhino bundle: :func:`dump_scene` flattens the viewer scene
+to a node list, so a fabrication example can draw into the viewer and write a
+Rhino-loadable JSON from the same scene.
 """
 
 import pathlib
 
 import compas
 from compas.geometry import Line
-
-# Style kwargs preserved through the record -> JSON -> redraw round-trip.
-_STYLE_KEYS = (
-    "color",
-    "facecolor",
-    "linecolor",
-    "pointcolor",
-    "linewidth",
-    "pointsize",
-    "opacity",
-    "show_lines",
-    "show_points",
-    "hide_coplanaredges",
-)
+from compas.geometry import Point
+from compas.geometry import Pointcloud
+from compas.geometry import Polyline
 
 
 def _coerce_color(value):
@@ -61,148 +58,91 @@ def _coerce_color(value):
         return None
 
 
-def _patch_group_nesting():
-    """Give compas_viewer's ``Group`` an ``add_group`` method.
+def _drawn_color(obj):
+    """The one colour Rhino should give this object.
 
-    A live ``Group`` cannot create sub-groups itself - only the scene can, via
-    ``scene.add_group(name, parent=group)``. :class:`_TeeNode` mirrors a live
-    group handle and a recorder group handle behind one object, and the recorder
-    side does support ``add_group``, so without this the two sides diverge and a
-    nested group blows up on the live one. Idempotent.
-
-    Only :class:`TeeScene` needs this. Code using the viewer directly should
-    call ``scene.add_group(name, parent=group)``, which is the native API.
+    A scene object carries a colour per buffer - point, line, surface - but a
+    Rhino object has a single display colour, so pick the one that is actually
+    seen: an explicit ``color=`` if the example set one, then the colour of the
+    buffer that carries the geometry.
     """
-    from compas_viewer.scene import Group
+    if obj.color is not None:
+        return obj.color
+    if isinstance(obj.item, (Point, Pointcloud)):
+        return getattr(obj, "pointcolor", None)
+    # Curves have no surface, and a solid drawn as a wireframe is its edges.
+    if isinstance(obj.item, (Line, Polyline)) or not getattr(obj, "show_faces", True):
+        return getattr(obj, "linecolor", None)
+    return getattr(obj, "surfacecolor", None)
 
-    if hasattr(Group, "add_group"):
-        return
 
-    def add_group(self, name=None, **kwargs):
-        return self.scene.add_group(name, parent=self, **kwargs)
+def scene_nodes(scene):
+    """Flatten a viewer scene to the Rhino bundle's node list.
 
-    Group.add_group = add_group
+    Walks the scene tree in the order the objects were added, so each group
+    becomes a node its children point back at through ``parent``.
 
+    Parameters
+    ----------
+    scene : :class:`compas_viewer.scene.ViewerScene`
+        The scene to read, i.e. ``viewer.scene``.
 
-class _RecorderNode:
-    """A group handle returned by the recorder. Supports ``add``/``add_group``
-    so geometry and nested groups are recorded under the right parent, keeping
-    the scene-tree hierarchy intact through the JSON round-trip.
+    Returns
+    -------
+    list[dict]
+        ``{"id", "parent", "kind"}`` per node, plus ``name`` / ``geometry`` /
+        ``color`` / ``opacity`` on the geometry ones.
     """
+    from compas.scene import Group as SceneGroup
 
-    def __init__(self, recorder, node_id):
-        self._rec = recorder
-        self._id = node_id
+    nodes = []
 
-    def add(self, item, parent=None, **style):
-        return self._rec._record(item, self._id, style)
+    def walk(objects, parent_id):
+        for obj in objects:
+            node_id = len(nodes)
+            if isinstance(obj, SceneGroup):
+                nodes.append({"id": node_id, "parent": parent_id, "kind": "group", "name": obj.name or "group"})
+                walk(obj.children, node_id)
+                continue
+            node = {"id": node_id, "parent": parent_id, "kind": "geometry", "geometry": obj.item}
+            if obj.name:
+                node["name"] = obj.name
+            color = _coerce_color(_drawn_color(obj))
+            if color is not None:
+                node["color"] = color
+            if obj.opacity is not None and obj.opacity != 1.0:
+                node["opacity"] = obj.opacity
+            nodes.append(node)
+            walk(obj.children, node_id)
 
-    def add_group(self, name=None, parent=None, **kwargs):
-        return self._rec._record_group(name, self._id)
+    walk(scene.root.children, None)
+    return nodes
 
 
-class SceneRecorder:
-    """Quacks like ``viewer.scene`` (and a scene group): ``add``/``add_group``
-    record drawable geometry and group structure to a flat node list (each node
-    carries its parent id) instead of drawing.
+def dump_scene(scene, path):
+    """Write the viewer scene to a Rhino bundle.
+
+    The bundle is ``{"nodes": [...]}`` - :func:`scene_nodes` of the finished
+    scene - serialized with :func:`compas.json_dump`, so the embedded COMPAS
+    geometry round-trips. Load it in Rhino with
+    :func:`compas_tf.rhino.draw_bundle`.
+
+    Call it after everything is drawn and before ``viewer.show()``: the scene is
+    the record, so anything added later is not in the file.
+
+    Parameters
+    ----------
+    scene : :class:`compas_viewer.scene.ViewerScene`
+        The scene to write, i.e. ``viewer.scene``.
+    path : str or :class:`pathlib.Path`
+        Where to write the bundle.
+
+    Returns
+    -------
+    str or :class:`pathlib.Path`
+        The path written.
     """
-
-    def __init__(self):
-        self.nodes = []
-        self._next_id = 0
-
-    def _new_id(self):
-        node_id = self._next_id
-        self._next_id += 1
-        return node_id
-
-    @staticmethod
-    def _parent_id(parent):
-        return parent._id if isinstance(parent, _RecorderNode) else None
-
-    def add_group(self, name=None, parent=None, **kwargs):
-        return self._record_group(name, self._parent_id(parent))
-
-    def _record_group(self, name, parent_id):
-        node_id = self._new_id()
-        self.nodes.append({"id": node_id, "parent": parent_id, "kind": "group", "name": name or "group"})
-        return _RecorderNode(self, node_id)
-
-    def add(self, item, parent=None, **style):
-        return self._record(item, self._parent_id(parent), style)
-
-    def _record(self, item, parent_id, style):
-        from compas.data import Data
-
-        if isinstance(item, Data):
-            record = {"id": self._new_id(), "parent": parent_id, "kind": "geometry", "geometry": item}
-            if style.get("name"):
-                record["name"] = style["name"]
-            for key in _STYLE_KEYS:
-                if style.get(key) is None:
-                    continue
-                record[key] = _coerce_color(style[key]) if key.endswith("color") else style[key]
-            self.nodes.append(record)
-        # Geometry adds are never used as a parent, but return a node anyway so
-        # any chained .add()/.add_group() still works.
-        return _RecorderNode(self, None)
-
-
-class _TeeNode:
-    """A group handle that forwards ``add``/``add_group`` to BOTH a live scene
-    group and a :class:`SceneRecorder` group, so geometry drawn into the viewer
-    is captured into the recorder bundle at the same time.
-    """
-
-    def __init__(self, live, rec_node):
-        self._live = live
-        self._rec = rec_node
-
-    def add(self, item, **style):
-        self._live.add(item, **style)
-        return self._rec.add(item, **style)
-
-    def add_group(self, name=None, **kwargs):
-        return _TeeNode(self._live.add_group(name), self._rec.add_group(name))
-
-
-class TeeScene:
-    """Drop-in for ``viewer.scene`` that draws into the live scene AND records a
-    flat node bundle alongside it.
-
-    Wrap the viewer's scene once (``scene = TeeScene(viewer.scene)``) and use it
-    exactly like ``viewer.scene`` - every ``add``/``add_group`` is mirrored into
-    an internal :class:`SceneRecorder`. Call :func:`dump_bundle` at the end to
-    write the recorded geometry to a JSON "Rhino bundle" (plain COMPAS Mesh /
-    Polyline / Polygon / Line + layer + colour), which the
-    :mod:`compas_tf.rhino` loader replays into Rhino with no recompute.
-    """
-
-    def __init__(self, live_scene):
-        _patch_group_nesting()
-        self._live = live_scene
-        self._rec = SceneRecorder()
-
-    @property
-    def nodes(self):
-        return self._rec.nodes
-
-    def add(self, item, **style):
-        self._live.add(item, **style)
-        return self._rec.add(item, **style)
-
-    def add_group(self, name=None, **kwargs):
-        return _TeeNode(self._live.add_group(name), self._rec.add_group(name))
-
-
-def dump_bundle(scene, path):
-    """Write a :class:`TeeScene` (or :class:`SceneRecorder`) to a Rhino bundle.
-
-    The bundle is ``{"nodes": [...]}`` - the recorded group/geometry node list -
-    serialized with :func:`compas.json_dump`, so the embedded COMPAS geometry
-    round-trips. Load it in Rhino with :func:`compas_tf.rhino.draw_bundle`.
-    """
-    nodes = scene.nodes if hasattr(scene, "nodes") else list(scene)
+    nodes = scene_nodes(scene)
     compas.json_dump({"nodes": nodes}, str(path))
     print(f"[bundle] wrote {pathlib.Path(path).name} ({sum(1 for n in nodes if n.get('kind') == 'geometry')} objects)")
     return path

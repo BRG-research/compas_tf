@@ -126,6 +126,24 @@ examples/obj_export/
 # Dated whole-model OBJ exports (regenerated each run)
 data/floor_model_*.obj
 
+# Example-chain outputs. `python tools/run_examples.py` rewrites every one of
+# these, so committing them means a diff of hundreds of thousands of lines
+# after any run. Regenerate instead of pulling. Only data/ root is matched -
+# the subdirectories (SchoringElement/, OuterRibConnector/, ...) hold hand-made
+# source assets the elements read at construction time, and those stay tracked.
+data/*_model.json
+data/*_model.obj
+data/*_model.stp
+data/*_rhino.json
+data/floorguide.json
+data/cantilevers_baked_contacts.json
+data/cantilevers_baked_contacts.stp
+
+# ...except the two the docs hand out as downloads (see docs/index.md), which
+# have to exist at the raw.githubusercontent URL to stay linkable.
+!data/cantilevers_baked_model.json
+!data/cantilevers_baked_model.stp
+
 # watch_viewer.py live-reload lock + recorded scene
 data/.watch_viewer.lock
 data/_viewer_scene.json

@@ -52,5 +52,5 @@ for cm in column_models:
     g = viewer.scene.add_group(cm.name)
     for element in cm.elements():
         if element.modelgeometry is not None:
-            g.add(element, name=element.name, color=(0.9, 0.9, 0.9))
+            viewer.scene.add(element, name=element.name, parent=g, facecolor=(0.9, 0.9, 0.9))
 viewer.show()

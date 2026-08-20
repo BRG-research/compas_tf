@@ -7,6 +7,18 @@ repo_url: https://github.com/BRG-research/compas_tf/
 
 copyright: Copyright &copy; ETH Zurich - Block Research Group
 
+hooks:
+  - hooks/fabrication_assets.py
+
+extra_css:
+  - assets/extra.css
+
+# Online 3D Viewer for the part previews in fabrication.md - picked over
+# <model-viewer> because it can draw feature edges without the triangulation.
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/online-3d-viewer@0.18.0/build/engine/o3dv.min.js
+  - assets/o3dv-init.js
+
 extra:
   homepage: https://brg-research.github.io/compas_tf/
   version:
@@ -140,6 +152,8 @@ nav:
       - Installation: installation.md
       - License: license.md
       - Changelog: changelog.md
+  - Fabrication:
+      - Part list: fabrication.md
   - Examples:
       - Read a model: examples/010_read_model.md
       - Read a STEP file: examples/020_read_brep.md
@@ -152,6 +166,7 @@ nav:
       - compas_tf.element: api/compas_tf.element.md
       - compas_tf.contacts: api/compas_tf.contacts.md
       - compas_tf.brep: api/compas_tf.brep.md
+      - compas_tf.writer: api/compas_tf.writer.md
       - compas_tf.floor_guide: api/compas_tf.floor_guide.md
       - compas_tf.plate: api/compas_tf.plate.md
       - compas_tf.column: api/compas_tf.column.md

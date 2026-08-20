@@ -5,3 +5,6 @@ compas_manifold >= 0.1.0
 # Brep kernel: compas_tf.brep.get_brep / TFModel.to_step, and the STEP exports
 # in the examples. Also ships the Brep scene object compas_viewer needs.
 compas_occt >= 0.1.18
+# IFC hand-off: compas_tf.writer.write_ifc (the "ifc" default in write_parts).
+compas_ifc >= 2
+
