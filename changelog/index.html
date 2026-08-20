@@ -1,0 +1,2867 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Timber floor development.">
+      
+      
+      
+        <link rel="canonical" href="https://brg-research.github.io/compas_tf/changelog/">
+      
+      
+        <link rel="prev" href="../license/">
+      
+      
+        <link rel="next" href="../fabrication/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../public/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Changelog - COMPAS TF</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../assets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="https://brg-research.github.io/compas_tf/" title="COMPAS TF" class="md-header__button md-logo" aria-label="COMPAS TF" data-md-component="logo">
+      
+  <img src="../assets/logos/compas_icon_white.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            COMPAS TF
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="blue" data-md-color-accent="light-blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="blue" data-md-color-accent="light-blue"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/BRG-research/compas_tf/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    BRG-research/compas_tf
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="https://brg-research.github.io/compas_tf/" title="COMPAS TF" class="md-nav__button md-logo" aria-label="COMPAS TF" data-md-component="logo">
+      
+  <img src="../assets/logos/compas_icon_white.png" alt="logo">
+
+    </a>
+    COMPAS TF
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/BRG-research/compas_tf/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    BRG-research/compas_tf
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../license/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    License
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Unreleased">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0112-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.12] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.12] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0111-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.11] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.11] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0110-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.10] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.10] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#019-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.9] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.9] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#018-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.8] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.8] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#017-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.7] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.7] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#016-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.6] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.6] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#015-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.5] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.5] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#014-2026-08-09" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.4] 2026-08-09
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.4] 2026-08-09">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#013-2026-08-09" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.3] 2026-08-09
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.3] 2026-08-09">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#012-2026-08-09" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.2] 2026-08-09
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.2] 2026-08-09">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#011-2026-08-09" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.1] 2026-08-09
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.1] 2026-08-09">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fabrication
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Fabrication
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fabrication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Part list
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/010_read_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Read a model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/020_read_brep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Read a STEP file
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/025_read_brep_adjacency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contact adjacency
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/030_extract_bay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extract a bay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/040_project_setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Set up a project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/050_pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The full pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.element/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.element
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.contacts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.contacts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.brep/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.brep
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.writer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.writer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.floor_guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.floor_guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.plate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.plate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.column/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.column
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.connectors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.connectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.schoring_element/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.schoring_element
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.tower_element/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.tower_element
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.geometry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.geometry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/compas_tf.base_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    compas_tf.base_model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#unreleased" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Unreleased
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Unreleased">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0112-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.12] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.12] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0111-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.11] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.11] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0110-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.10] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.10] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#019-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.9] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.9] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#018-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.8] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.8] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#017-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.7] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.7] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#016-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.6] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.6] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#015-2026-08-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.5] 2026-08-10
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.5] 2026-08-10">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#014-2026-08-09" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.4] 2026-08-09
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.4] 2026-08-09">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#013-2026-08-09" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.3] 2026-08-09
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.3] 2026-08-09">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#012-2026-08-09" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.2] 2026-08-09
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.2] 2026-08-09">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#011-2026-08-09" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [0.1.1] 2026-08-09
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[0.1.1] 2026-08-09">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">¤</a></h1>
+<p>All notable changes to this project will be documented in this file.</p>
+<p>The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>,
+and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p>
+<h2 id="unreleased">Unreleased<a class="headerlink" href="#unreleased" title="Permanent link">¤</a></h2>
+<h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">¤</a></h3>
+<ul>
+<li>
+<p>Added <code>docs/fabrication.md</code>, the part list for the shop, and a <code>Fabrication</code> section in <code>mkdocs.yml</code> holding it. One row per part family in <code>data/cantilevers_baked_model.json</code> - all 237 elements - with quantity, the oriented bounding box of the finished part in millimetres (longest side first, a range where the family varies), material, and empty <code>Image</code> and <code>3D model</code> cells to fill in as the per-part files come out of the scripts. Material is only filled where the code states it: the column is glulam, the base is the Sherpa Power Base <code>150402_PB_L-140-C</code> named in <code>SupportElement</code>.</p>
+</li>
+<li>
+<p>Added <code>compas_tf.viewer.dump_scene</code>, which writes the Rhino bundle by walking the finished viewer scene, and <code>scene_nodes</code>, the flattening behind it. Each object contributes the one colour Rhino can show - an explicit <code>color=</code>, else the colour of the buffer its geometry is drawn in, so a polyline keeps its <code>linecolor</code> instead of inheriting a surface grey.</p>
+</li>
+</ul>
+<h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">¤</a></h3>
+<ul>
+<li>Changed every example to draw through <code>viewer.scene</code> - <code>viewer.scene.add(item, parent=group, ...)</code> and <code>viewer.scene.add_group(name, parent=group)</code> - instead of a group handle's own <code>add</code>. A group handle's <code>add</code> is core compas' <code>Group.add</code>, which goes straight to <code>SceneObject.add</code> and never sees <code>compas_viewer.Scene.add</code>'s <code>facecolor</code> -&gt; <code>surfacecolor</code> translation, so <code>facecolor=</code> on a group was silently dropped (<code>example_model_1</code>'s construction planes drew grey, not blue).</li>
+<li>Changed <code>SchoringElement.from_points_and_vectors</code>, <code>from_points_and_vectors_no_foot_no_head</code> and <code>polylines_to_models</code> to build a <code>TFModel</code> instead of a plain <code>compas_model.models.Model</code>. <code>duplicate()</code> - re-clone every element with a fresh guid so the copies can be merged alongside the original - is defined on this project's <code>BaseModel</code>, not upstream, so <code>example_model_10_shoring.py</code> died on <code>'Model' object has no attribute 'duplicate'</code> and took <code>example_model_11_full.py</code> with it (it reads <code>shoring_model.json</code>). These were the last plain-<code>Model</code> constructions in <code>src/</code>.</li>
+<li>Changed the examples' <code>color=(0.85, 0.85, 0.85)</code> to <code>facecolor=</code>. <code>compas.scene.GeometryObject.__init__</code> fills <code>pointcolor</code>, <code>linecolor</code> AND <code>surfacecolor</code> from <code>color</code>, so one <code>color=</code> painted the edges the same grey as the faces and the wireframe disappeared. The viewer's own defaults - <code>linecolor</code> 0.2 grey, <code>surfacecolor</code> 0.9 grey - only survive when <code>color</code> is left unset. Examples 4, 5, 6, 7, 10 and 11 were drawing flat because of it.</li>
+</ul>
+<h3 id="removed">Removed<a class="headerlink" href="#removed" title="Permanent link">¤</a></h3>
+<ul>
+<li>Removed <code>compas_tf.viewer.TeeScene</code>, <code>SceneRecorder</code>, <code>dump_bundle</code> and the <code>_patch_group_nesting</code> monkeypatch that gave <code>compas_viewer</code>'s <code>Group</code> an <code>add_group</code>. The fab examples drew through the tee so the Rhino bundle could be recorded alongside; <code>dump_scene</code> reads the scene itself, so the examples use the stock viewer API and the bundle is what the viewer actually shows. The tee also dropped a group's style kwargs on the live side and kept only a fixed list of style keys.</li>
+</ul>
+<h2 id="0112-2026-08-10">[0.1.12] 2026-08-10<a class="headerlink" href="#0112-2026-08-10" title="Permanent link">¤</a></h2>
+<h3 id="added_1">Added<a class="headerlink" href="#added_1" title="Permanent link">¤</a></h3>
+<h3 id="changed_1">Changed<a class="headerlink" href="#changed_1" title="Permanent link">¤</a></h3>
+<ul>
+<li>Changed <code>docs/installation.md</code> to say how to get uv, per platform - <code>winget install --id=astral-sh.uv</code> or the <code>astral.sh/uv/install.ps1</code> script on Windows, <code>astral.sh/uv/install.sh</code> or Homebrew elsewhere - with links to the repository and the official instructions. The page told you to run <code>uv init</code> without ever saying where <code>uv</code> comes from. Needs <code>pymdownx.tabbed</code>, which <code>mkdocs.yml</code> did not have.</li>
+<li>Changed the example pages to the minimum that is not already in the script beside them - 445 lines to 287. What is left per page is the screenshot, the script, its output, and only the facts the code does not show: the deflection numbers, why the contacts need a second STEP, why <code>neighbors=</code> takes types. <code>040_project_setup</code> gets the uv install link back and drops the <code>--optional viewer</code> / <code>uv sync --extra</code> pair for a plain <code>uv add compas_viewer</code>, both verified by running them into a scratch project.</li>
+<li>Changed the <code>release</code> workflow's build matrix to Python 3.10-3.12. It still ran 3.9, which <code>requires-python = "&gt;=3.10"</code> now rejects, and the <code>publish</code> job needs the build - so the tag went up and nothing was published.</li>
+</ul>
+<h3 id="removed_1">Removed<a class="headerlink" href="#removed_1" title="Permanent link">¤</a></h3>
+<ul>
+<li>Removed <code>examples/example_model_15_fab_formwork.py</code>, <code>example_model_17_quantities.py</code> and their entries in <code>tools/run_examples.py</code>. Both were 0-byte files that the runner counted as passing and the pipeline page described as if they did something. The chain is 21 examples.</li>
+<li>Removed <code>tests/test_placeholder.py</code> - <code>assert True</code>, the stub that kept pytest from failing on an empty suite before there were real tests. 11 remain.</li>
+</ul>
+<h2 id="0111-2026-08-10">[0.1.11] 2026-08-10<a class="headerlink" href="#0111-2026-08-10" title="Permanent link">¤</a></h2>
+<h3 id="added_2">Added<a class="headerlink" href="#added_2" title="Permanent link">¤</a></h3>
+<ul>
+<li>Added <code>compas_tf.viewer.zoom_to</code>, which frames the camera on the geometry before <code>viewer.show()</code>. On a model in millimetres the viewer opens at <code>[-10, -10, 10]</code> with a far plane of 1000 (scaled by <code>camera.scale</code>, which starts at 1), so a 6015 mm building is entirely clipped until you press <span class="keys"><kbd class="key-f">F</kbd></span>. compas_viewer's own <code>zoom_selected</code> cannot be called for you - it reads the scene objects' bounding boxes, which do not exist until the renderer has run - so this does the same arithmetic from <code>element.aabb</code> / <code>brep.aabb</code> instead, keeping the camera's existing view direction. Using <code>target - position</code> as <code>zoom_selected</code> does is degenerate before the first render: the default position sits almost on the origin, so on a model centred 1.5 m up the camera ends up underneath the building.</li>
+</ul>
+<h3 id="changed_2">Changed<a class="headerlink" href="#changed_2" title="Permanent link">¤</a></h3>
+<ul>
+<li>Changed <code>find_groups_with_names(neighbors=...)</code> to accept a tuple of element types, or a predicate, as well as a bool. <code>True</code> admits anything that touches the selection, which is rarely what an assembly means: across the seam a bay touches <code>outer_ribs_1_1</code>, <code>outer_ribs_0_3</code>, <code>inner_beams_2_1</code>, <code>inner_beams_0_3</code> and two oculus plates, so the extraction came out with 2-part fragments of <code>quarter_model_1</code>, <code>quarter_model_3</code> and <code>oculus_model</code> hanging off it. The filter applies to both passes, which matters more than it looks: under <code>True</code> the oculus arrives by contact and then <code>connector_wedge_7</code>'s cylinders arrive because their boxes overlap <code>oculus_3</code> - one wrong admission widening what the box pass tests against.</li>
+<li>Changed <code>example_model_21_extract_bay.py</code> to name only the hardware that mounts the cantilever on its column (<code>ConnectorElement</code>, <code>DowelCylinderElement</code>). The wedges and their bolts are inner-beam hardware and <code>OuterRibConnectorElement</code> joins one quarter to the next, so the bay is 46 elements and 143 contacts rather than 64 and 168. <code>docs/examples/030_extract_bay</code> gets the viewer screenshot of it.</li>
+<li>Changed <code>example_model_18</code> to <code>_22</code> to drop the timing scaffolding and the comment blocks the documentation now carries.</li>
+<li>Changed the docs to say how big anything is - 237 elements and 733 contacts in the building, 185 in the floor, 34 in a quarter, 46 in a bay - in the tutorial tree and the screenshot captions.</li>
+<li>Changed <code>requires-python</code> to <code>&gt;=3.10</code>. It said <code>&gt;=3.9</code>, which <code>shapely &gt;= 2.1</code> rules out, and was briefly capped at <code>&lt;3.13</code> on the assumption that <code>compas_occt</code> and <code>compas_manifold</code> stop at 3.12 - they ship a <code>cp312-abi3</code> wheel, built against the stable ABI, so it installs on every CPython from 3.12 on. Verified up to 3.14; the cap was what broke the docs workflow, which now pins 3.12 to match the local environment rather than out of necessity.</li>
+</ul>
+<h3 id="removed_2">Removed<a class="headerlink" href="#removed_2" title="Permanent link">¤</a></h3>
+<h2 id="0110-2026-08-10">[0.1.10] 2026-08-10<a class="headerlink" href="#0110-2026-08-10" title="Permanent link">¤</a></h2>
+<h3 id="added_3">Added<a class="headerlink" href="#added_3" title="Permanent link">¤</a></h3>
+<ul>
+<li>Added <code>examples/example_model_22_read_brep_adjacency.py</code> and <code>docs/examples/025_read_brep_adjacency</code>, which read the STEP model, the contact STEP and its JSON sidecar together. <code>020_read_brep</code> could draw the contacts but not say which two elements any of them joins, because STEP drops per-shape names; the sidecar describes face <em>i</em> in record <em>i</em>, so the pair is what turns 733 anonymous faces into 585 named joints, an area per pair and a type table.</li>
+</ul>
+<h3 id="changed_3">Changed<a class="headerlink" href="#changed_3" title="Permanent link">¤</a></h3>
+<ul>
+<li>Changed <code>docs/index.md</code> to a two-sentence description of what the package does, the project presentation, and direct download links for the current STEP model, its contacts and their sidecar. The code sample it opened with belonged in the examples, and there was no link to either the presentation or the model.</li>
+<li>Changed <code>requirements-dev.txt</code> to depend on <code>pytest</code> directly. It arrived transitively with <code>sphinx_compas2_theme</code>, so dropping that for mkdocs left the <code>build</code> workflow failing with <code>pytest: command not found</code> - lint green, tests never run.</li>
+<li>Changed <code>find_groups_with_names(neighbors=True)</code> to find the elements that have no interactions at all. It was a graph walk only, and the contact search skips the fasteners (<code>skip=involving(DowelCylinderElement, ConnectorCylinderElement)</code>, 74% of the contacts for no structural information), which leaves 64 of the 237 elements with no edge for a walk to follow: a bay came out with its connectors but without the 32 dowels and 32 cylinders that bolt them on. Geometry is the only signal left for those, so an unlinked element is now included when its bounding box lands inside the bay - applied to the unlinked only, because on elements the graph does describe a box test is far too loose, one diagonal rib's box swallowing half the floor. Bay 0 goes from 49 elements to 77 (+16 cylinders, +12 dowels).</li>
+<li>Changed <code>example_model_21_extract_bay.py</code> back to <code>neighbors=True</code>, which is now worth passing.</li>
+</ul>
+<h3 id="removed_3">Removed<a class="headerlink" href="#removed_3" title="Permanent link">¤</a></h3>
+<ul>
+<li>Removed <code>data/bay_model.stp</code> and the outputs of examples that no longer exist (<code>floor_model_booleans.json</code>, <code>schoring_models.json</code>, <code>orient_2d.json</code>, <code>unwrap_beds.json</code>/<code>.png</code>, <code>example_2_floor_model.obj</code>, <code>example_model_7_contacts_columns.obj</code>), plus the two <code>PLACEHOLDER</code> files that kept the now-populated <code>docs/_images</code> and <code>docs/examples</code> in git.</li>
+</ul>
+<h2 id="019-2026-08-10">[0.1.9] 2026-08-10<a class="headerlink" href="#019-2026-08-10" title="Permanent link">¤</a></h2>
+<h3 id="added_4">Added<a class="headerlink" href="#added_4" title="Permanent link">¤</a></h3>
+<ul>
+<li>Added <code>BaseModel.find_groups_with_names</code> - several named groups extracted at once as one standalone model, for lifting an assembly (one column plus the quarter it carries) out of the building. The plural matters: contacts BETWEEN the groups only survive if the groups come out together, so <code>find_group_with_name</code> twice plus <code>merge</code> keeps every internal contact and drops exactly the joint that connects them. Each group keeps its ancestor chain, pruned to what was asked for, so the extracted parts stay where they are in the world. <code>neighbors=True</code> also brings in the elements that interact with the extracted ones - the fasteners live in their own top-level groups, so a bay extracted by name alone has none - one step out only, or the whole model follows one edge at a time. On the cantilevers model: 49 elements and 208 contacts against 36 and 125 without.</li>
+<li>Added <code>examples/example_model_21_extract_bay.py</code>, and the documentation the reading side never had: <code>docs/examples/010_read_model</code>, <code>020_read_brep</code>, <code>030_extract_bay</code>, <code>040_project_setup</code> (a consumer project from scratch) and <code>050_pipeline</code>, plus a written <code>tutorial</code> and a populated API reference.</li>
+</ul>
+<h3 id="changed_4">Changed<a class="headerlink" href="#changed_4" title="Permanent link">¤</a></h3>
+<ul>
+<li>Changed <code>examples/example_model_19_read_model.py</code> and <code>example_model_20_read_brep.py</code> to the minimum API that does the job. What the comment blocks explained - baking, Brep contacts against mesh contacts, the STEP name/order sidecar, the deflection - is now prose in the docs, where it is read once rather than scrolled past in every example.</li>
+<li>Changed <code>README.md</code>, which still described a <code>compas_viewer</code> fork and an <code>example_0_watch_viewer.py</code> that no longer exist.</li>
+</ul>
+<h3 id="removed_4">Removed<a class="headerlink" href="#removed_4" title="Permanent link">¤</a></h3>
+<h2 id="018-2026-08-10">[0.1.8] 2026-08-10<a class="headerlink" href="#018-2026-08-10" title="Permanent link">¤</a></h2>
+<h3 id="added_5">Added<a class="headerlink" href="#added_5" title="Permanent link">¤</a></h3>
+<h3 id="changed_5">Changed<a class="headerlink" href="#changed_5" title="Permanent link">¤</a></h3>
+<ul>
+<li>Changed <code>PlateElement</code> to build its loft on first use instead of in <code>__init__</code>. <code>compute_elementgeometry</code> is the only reader and it is <code>@baked</code>, so a baked plate returned its stored mesh and the loft was thrown away unused - yet all 145 plates paid for it on every load. <code>compas.json_load</code> of the cantilevers model drops from 3.3 s to 0.60 s (the raw <code>json.loads</code> of the same 3.9 MB file is 0.09 s).</li>
+</ul>
+<h3 id="removed_5">Removed<a class="headerlink" href="#removed_5" title="Permanent link">¤</a></h3>
+<h2 id="017-2026-08-10">[0.1.7] 2026-08-10<a class="headerlink" href="#017-2026-08-10" title="Permanent link">¤</a></h2>
+<h3 id="added_6">Added<a class="headerlink" href="#added_6" title="Permanent link">¤</a></h3>
+<ul>
+<li>Added <code>compas_tf.contacts</code> - contact detection on Brep faces instead of mesh faces: <code>brep_brep_contacts</code>, <code>prepare_faces</code>, the <code>BrepContacts</code> element-pair detector (with a per-element Brep and face cache), the <code>involving</code> / <code>between</code> skip predicates, and the <code>contact_holes</code> accessor. The face pairs are prefiltered on opposite normals and boundary AABBs rather than by <code>Brep.overlap</code>, which would tessellate every Brep first - identical results, 3.8x faster, and no dependence on <code>TOL.lineardeflection</code>.</li>
+<li>Added <code>TFModel.compute_contacts_brep</code>, the one-call Brep version of the contact search, all-pairs or restricted to named groups.</li>
+<li>Added <code>TFModel.clear_contacts</code>, <code>TFModel.contact_pairs</code>, <code>TFModel.contact_breps</code>, <code>TFModel.contact_adjacency</code>, <code>TFModel.contacts_to_step</code> and <code>TFModel.contacts_to_json</code>. STEP drops per-shape names, so the contact faces carry no adjacency; it goes in a JSON sidecar keyed by index, which STEP does preserve.</li>
+<li>Added a <code>contactmethod</code> hook to <code>TFModel.compute_contacts</code> and <code>BaseModel.compute_contacts_between_groups</code>, so the spatial search can be driven by something other than <code>element.compute_contacts</code>.</li>
+<li>Added a <code>cache</code> argument to <code>TFModel.element_breps</code> and <code>TFModel.to_step</code>, to reuse Breps already built by a contact search.</li>
+</ul>
+<h3 id="changed_6">Changed<a class="headerlink" href="#changed_6" title="Permanent link">¤</a></h3>
+<ul>
+<li>Changed <code>example_model_18_write_model_and_brep.py</code> to compute contacts between all elements on the Brep faces, skipping the fasteners, and to write them to both the model JSON and their own STEP file.</li>
+<li>Changed <code>example_model_19_read_model.py</code> and <code>example_model_20_read_brep.py</code> to read the contacts instead of recomputing them.</li>
+<li>Changed <code>example_model_20_read_brep.py</code> to set <code>TOL.lineardeflection = 1.0</code>: at the 0.001 default the Breps tessellate to 2.93M triangles in 67 s, at 1.0 to 19.8k in 2.0 s, for the same picture. The old comment claiming the count was independent of the deflection was wrong.</li>
+</ul>
+<h3 id="removed_6">Removed<a class="headerlink" href="#removed_6" title="Permanent link">¤</a></h3>
+<h2 id="016-2026-08-10">[0.1.6] 2026-08-10<a class="headerlink" href="#016-2026-08-10" title="Permanent link">¤</a></h2>
+<h3 id="added_7">Added<a class="headerlink" href="#added_7" title="Permanent link">¤</a></h3>
+<h3 id="changed_7">Changed<a class="headerlink" href="#changed_7" title="Permanent link">¤</a></h3>
+<h3 id="removed_7">Removed<a class="headerlink" href="#removed_7" title="Permanent link">¤</a></h3>
+<h2 id="015-2026-08-10">[0.1.5] 2026-08-10<a class="headerlink" href="#015-2026-08-10" title="Permanent link">¤</a></h2>
+<h3 id="added_8">Added<a class="headerlink" href="#added_8" title="Permanent link">¤</a></h3>
+<h3 id="changed_8">Changed<a class="headerlink" href="#changed_8" title="Permanent link">¤</a></h3>
+<h3 id="removed_8">Removed<a class="headerlink" href="#removed_8" title="Permanent link">¤</a></h3>
+<h2 id="014-2026-08-09">[0.1.4] 2026-08-09<a class="headerlink" href="#014-2026-08-09" title="Permanent link">¤</a></h2>
+<h3 id="added_9">Added<a class="headerlink" href="#added_9" title="Permanent link">¤</a></h3>
+<h3 id="changed_9">Changed<a class="headerlink" href="#changed_9" title="Permanent link">¤</a></h3>
+<h3 id="removed_9">Removed<a class="headerlink" href="#removed_9" title="Permanent link">¤</a></h3>
+<h2 id="013-2026-08-09">[0.1.3] 2026-08-09<a class="headerlink" href="#013-2026-08-09" title="Permanent link">¤</a></h2>
+<h3 id="added_10">Added<a class="headerlink" href="#added_10" title="Permanent link">¤</a></h3>
+<h3 id="changed_10">Changed<a class="headerlink" href="#changed_10" title="Permanent link">¤</a></h3>
+<h3 id="removed_10">Removed<a class="headerlink" href="#removed_10" title="Permanent link">¤</a></h3>
+<h2 id="012-2026-08-09">[0.1.2] 2026-08-09<a class="headerlink" href="#012-2026-08-09" title="Permanent link">¤</a></h2>
+<h3 id="added_11">Added<a class="headerlink" href="#added_11" title="Permanent link">¤</a></h3>
+<h3 id="changed_11">Changed<a class="headerlink" href="#changed_11" title="Permanent link">¤</a></h3>
+<h3 id="removed_11">Removed<a class="headerlink" href="#removed_11" title="Permanent link">¤</a></h3>
+<h2 id="011-2026-08-09">[0.1.1] 2026-08-09<a class="headerlink" href="#011-2026-08-09" title="Permanent link">¤</a></h2>
+<h3 id="added_12">Added<a class="headerlink" href="#added_12" title="Permanent link">¤</a></h3>
+<ul>
+<li>Column head version based on column centered at the corner of a quarter.</li>
+<li>Dated whole-model OBJ export (<code>floor_model_&lt;YYYY-MM-DD&gt;.obj</code>, one named object per element) in <code>examples/example_2_floor_model_booleans.py</code>.</li>
+<li><code>FloorModel.add_column_connections()</code> — places a <code>FloorColumnConnectionElement</code> on each column and carves the connector pocket out of the column and that quarter's two outer ribs via boolean difference.</li>
+<li><code>FloorGuide.corner_point_column()</code> — column/support grid placement, moved off the removed <code>FloorBuilder</code>.</li>
+<li><code>compas_manifold</code> as a runtime dependency (declared in <code>requirements.txt</code>).</li>
+</ul>
+<h3 id="changed_12">Changed<a class="headerlink" href="#changed_12" title="Permanent link">¤</a></h3>
+<ul>
+<li><strong><code>FloorGuide</code> is now the single parametric source of the floor.</strong> <code>FloorModel</code> is constructed from a guide (<code>FloorModel(guide=...)</code>, was <code>builder=...</code>) and serializes it under the <code>"guide"</code> key.</li>
+<li><strong>All mesh booleans now use <code>compas_manifold</code> exclusively</strong> (difference, union, chain) — the <code>compas_cgal</code> fallback and dependency were removed. <code>compas_cgal</code> no longer in <code>requirements.txt</code>.</li>
+<li><code>compute_contacts_inner_beams</code> no longer calls <code>precompute_boolean_modifiers</code> internally (the caller does it once), removing a duplicate boolean pass.</li>
+<li>Top docstring of <code>example_2</code> is a raw string (fixes the <code>\c</code> SyntaxWarning).</li>
+<li><code>PolylineLoft.to_mesh</code>/<code>multiple_to_mesh</code> repair capped-loft face winding so lofted plates (e.g. t-sections) come out watertight.</li>
+<li><code>PlateElement.compute_contacts</code> supports both <code>polygon_polygon_overlap</code> signatures across <code>compas_model</code> versions.</li>
+<li>Corner column-connection cutter is now drawn yellow instead of orange in the viewer.</li>
+</ul>
+<h3 id="removed_12">Removed<a class="headerlink" href="#removed_12" title="Permanent link">¤</a></h3>
+<ul>
+<li><strong><code>FloorBuilder</code></strong> (<code>floor_builder.py</code>) and the legacy element family built on it: <code>QuarterFloorElement</code> (<code>quarter_floor.py</code>), <code>ColumnHeadElement</code> (<code>column_head.py</code>), <code>OculusElement</code> (<code>oculus.py</code>).</li>
+<li><code>FloorModel.add_oculus()</code> (used the removed <code>OculusElement</code>; oculus geometry now comes from <code>guide.oculus</code>) and <code>build_model()</code> from <code>examples/model.py</code>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../license/" class="md-footer__link md-footer__link--prev" aria-label="Previous: License">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                License
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../fabrication/" class="md-footer__link md-footer__link--next" aria-label="Next: Part list">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Part list
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; ETH Zurich - Block Research Group
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.footnote.tooltips", "navigation.expand", "navigation.footer", "navigation.sections", "navigation.top", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/online-3d-viewer@0.18.0/build/engine/o3dv.min.js"></script>
+      
+        <script src="../assets/o3dv-init.js"></script>
+      
+    
+  </body>
+</html>
