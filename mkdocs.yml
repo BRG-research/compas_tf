@@ -87,6 +87,9 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets:
       check_paths: true
+      # The assembly steps generate their setting-out lists next to the
+      # previews they belong to, so a snippet is pulled from the repo root.
+      base_path: ["."]
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
@@ -154,6 +157,7 @@ nav:
       - Changelog: changelog.md
   - Fabrication:
       - Part list: fabrication.md
+      - Assembly: assembly.md
   - Examples:
       - Read a model: examples/010_read_model.md
       - Read a STEP file: examples/020_read_brep.md

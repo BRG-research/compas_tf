@@ -137,3 +137,36 @@
   line-height: 1;
   cursor: pointer;
 }
+
+/* Assembly page (docs/assembly.md): one big viewer per step, no table around
+   it. Same lazy o3dv viewers as the part list, just given the room to be
+   looked at rather than scanned. */
+.assembly .online_3d_viewer {
+  display: block;
+  width: 100%;
+  height: min(60vh, 560px);
+  margin: 0.6em 0 1.2em;
+  background: #fff;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: zoom-in; /* a clean click expands into the lightbox */
+}
+
+/* The step title sits on the viewer it introduces, and the description reads
+   as a paragraph rather than a spec. */
+.assembly h2 {
+  margin: 1.6em 0 0.2em;
+  padding-top: 0.8em;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.assembly h2:first-child {
+  margin-top: 0.4em;
+  padding-top: 0;
+  border-top: none;
+}
+
+.assembly p {
+  max-width: 62rem;
+}

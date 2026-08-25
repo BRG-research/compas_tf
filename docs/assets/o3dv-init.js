@@ -110,7 +110,18 @@
     Array.prototype.forEach.call(elements, function (element) {
       var model = element.getAttribute("data-model");
       if (model) {
-        element.setAttribute("model", root + model);
+        // `data-model` may name more than one file - an OBJ and its MTL, which
+        // the viewer will not fetch on its own - so every url gets the root,
+        // not just the first.
+        element.setAttribute(
+          "model",
+          model
+            .split(",")
+            .map(function (url) {
+              return root + url.trim();
+            })
+            .join(",")
+        );
       }
       Object.keys(DEFAULTS).forEach(function (attribute) {
         if (!element.hasAttribute(attribute)) {

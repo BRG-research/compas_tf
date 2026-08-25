@@ -17,21 +17,29 @@ import pathlib
 
 from mkdocs.structure.files import File
 
-SOURCE = pathlib.Path(__file__).parent.parent / "data" / "fabrication"
+DATA = pathlib.Path(__file__).parent.parent / "data"
+
+# `data/assembly/` holds the coloured step previews the assembly page embeds -
+# same idea as the part previews, one directory per kind of output. The `.mtl`
+# rides along because Online 3D Viewer fetches nothing the embed did not name,
+# and without it every part in a step comes out the same grey.
+SOURCES = (DATA / "fabrication", DATA / "assembly")
 DEST = "_models"
-PATTERNS = ("*_preview.obj", "*_fab.stp", "*_fab.obj", "*_fab.ifc")
+PATTERNS = ("*_preview.obj", "*_preview.mtl", "*_fab.stp", "*_fab.obj", "*_fab.ifc")
 
 
 def on_files(files, config):
     """Add every fabrication file to the build as if it lived in docs/."""
-    for pattern in PATTERNS:
-        for path in sorted(SOURCE.glob(pattern)):
-            files.append(File.generated(config, f"{DEST}/{path.name}", abs_src_path=str(path)))
+    for source in SOURCES:
+        for pattern in PATTERNS:
+            for path in sorted(source.glob(pattern)):
+                files.append(File.generated(config, f"{DEST}/{path.name}", abs_src_path=str(path)))
     return files
 
 
 def on_serve(server, config, builder):
     """Rebuild when an example rewrites a preview, so `mkdocs serve` keeps up."""
-    if SOURCE.is_dir():
-        server.watch(str(SOURCE), builder)
+    for source in SOURCES:
+        if source.is_dir():
+            server.watch(str(source), builder)
     return server

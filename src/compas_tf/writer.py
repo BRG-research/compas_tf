@@ -278,3 +278,136 @@ def write_parts(
         written[PREVIEW_TAG] = write_mesh([preview], directory / f"{name}_{PREVIEW_TAG}{PREVIEW_SUFFIX}")
 
     return written
+
+
+def _rgba(color) -> tuple:
+    """Coerce a :class:`compas.colors.Color`, a tuple or ``None`` to 0-1 rgba.
+
+    Alpha rides along because an assembly step sometimes wants a part present
+    but see-through - a support shown as a ghost around the points that are the
+    subject of the picture. ``Color`` carries its own alpha; a plain tuple may
+    give one as a fourth value, and is opaque without it.
+    """
+    if color is None:
+        return (0.66, 0.68, 0.70, 1.0)
+    if hasattr(color, "rgba"):
+        return tuple(color.rgba)
+    values = tuple(color)
+    r, g, b = values[:3]
+    alpha = values[3] if len(values) > 3 else 1.0
+    if max(r, g, b) > 1.0:  # 0-255 tuple
+        return (r / 255.0, g / 255.0, b / 255.0, alpha)
+    return (r, g, b, alpha)
+
+
+# Tessellation for a preview. It is the ANGULAR deflection that drives the
+# segment count on a curved face - the linear one barely moves it - and compas'
+# default of 0.1 rad puts ~63 segments on every hole, which is how an 8 mm
+# marker ball ends up with 2022 triangles. 0.5 rad is ~13 segments round a
+# circle: low-poly on purpose, and the right trade for a page that loads
+# several dozen parts at once. Pass `deflection` to a writer to override it.
+PREVIEW_DEFLECTION = 0.5
+
+
+def _as_mesh(geometry, deflection: float = PREVIEW_DEFLECTION) -> Mesh:
+    """A mesh for the writers, from a Mesh or from a Brep.
+
+    Parts are modelled as Breps - exact cylinders, exact holes - and only
+    become triangles on the way into a file a viewer can read, so the
+    tessellation lives here rather than in every example.
+    """
+    if isinstance(geometry, Mesh):
+        return geometry
+    if hasattr(geometry, "to_tesselation"):
+        mesh, _ = geometry.to_tesselation(linear_deflection=deflection, angular_deflection=deflection)
+        mesh.name = geometry.name
+        return mesh
+    raise TypeError(f"cannot write {type(geometry).__name__}: not a Mesh and not a Brep")
+
+
+def write_colored_obj(parts: Iterable, filepath: Union[str, pathlib.Path], deflection: float = PREVIEW_DEFLECTION) -> dict:
+    """Write named, coloured meshes as one OBJ next to its MTL.
+
+    :func:`write_mesh` goes through compas' OBJ writer, which has no notion of
+    materials - every solid comes out the one grey the viewer defaults to. An
+    assembly step is the opposite case: the whole point of the picture is that
+    the instrument, the marked points and the sight lines read as different
+    things. So this writes the OBJ by hand, one ``usemtl`` per part, plus the
+    ``.mtl`` that gives each colour a diffuse value.
+
+    Both files have to reach the docs viewer: Online 3D Viewer only fetches
+    what it is handed, so the embed names them both,
+    ``data-model="_models/x.obj,_models/x.mtl"``.
+
+    Parameters
+    ----------
+    parts : iterable
+        Either meshes or Breps, or ``(geometry, color)`` pairs. A Brep is
+        tessellated on the way out. The colour may be a
+        :class:`compas.colors.Color`, an ``(r, g, b)`` or ``(r, g, b, a)``
+        tuple in 0-1 or 0-255, or ``None`` for the default grey. An alpha below
+        1 is written as the material's ``d``, so the part comes out
+        see-through. Each mesh keeps its ``name`` as the OBJ object name.
+    filepath : str | :class:`pathlib.Path`
+        Where the ``.obj`` goes. The ``.mtl`` lands beside it under the same
+        stem.
+    deflection : float, optional
+        Tessellation tolerance for the Breps, in mm and radians. See
+        :data:`PREVIEW_DEFLECTION`.
+
+    Returns
+    -------
+    dict[str, :class:`pathlib.Path`]
+        The two files written, keyed ``"obj"`` and ``"mtl"``.
+    """
+    filepath = pathlib.Path(filepath).with_suffix(".obj")
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    mtlpath = filepath.with_suffix(".mtl")
+
+    items = []
+    for index, part in enumerate(parts):
+        geometry, color = part if isinstance(part, (tuple, list)) else (part, None)
+        if geometry is None:
+            continue
+        mesh = _as_mesh(geometry, deflection)
+        name = mesh.name if mesh.name and mesh.name != "Mesh" else f"part_{index}"
+        items.append((name, mesh, _rgba(color)))
+
+    if not items:
+        raise ValueError(f"write_colored_obj: nothing to write to {filepath.name}")
+
+    # One material per distinct colour, so a step with 8 red markers carries
+    # one "red" and not eight.
+    materials = {}
+    for _, _, rgba in items:
+        materials.setdefault(rgba, "mat_{:02x}{:02x}{:02x}{:02x}".format(*(int(round(c * 255)) for c in rgba)))
+
+    with open(mtlpath, "w") as f:
+        f.write("# compas_tf assembly step materials\n")
+        for rgba, material in materials.items():
+            f.write(f"\nnewmtl {material}\n")
+            f.write("Kd {:.4f} {:.4f} {:.4f}\n".format(*rgba[:3]))
+            f.write("Ka 0.0000 0.0000 0.0000\n")
+            f.write("Ks 0.0500 0.0500 0.0500\n")
+            f.write("Ns 20.0000\n")
+            f.write(f"d {rgba[3]:.4f}\n")
+            f.write("illum 2\n")
+
+    with open(filepath, "w") as f:
+        f.write("# compas_tf assembly step\n")
+        f.write(f"mtllib {mtlpath.name}\n")
+        offset = 1
+        for name, mesh, rgba in items:
+            index_of = {}
+            f.write(f"\no {name}\n")
+            f.write(f"usemtl {materials[rgba]}\n")
+            for vertex in mesh.vertices():
+                x, y, z = mesh.vertex_coordinates(vertex)
+                f.write(f"v {x:.4f} {y:.4f} {z:.4f}\n")
+                index_of[vertex] = offset
+                offset += 1
+            for face in mesh.faces():
+                vertices = mesh.face_vertices(face)
+                f.write("f {}\n".format(" ".join(str(index_of[vertex]) for vertex in vertices)))
+
+    return {"obj": filepath, "mtl": mtlpath}
