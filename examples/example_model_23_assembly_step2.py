@@ -22,6 +22,7 @@ the model's, not something re-derived for the picture.
 import pathlib
 
 import compas
+from compas.colors import Color
 from compas.geometry import Frame
 from compas.geometry import Point
 from compas.geometry import Transformation
@@ -32,6 +33,7 @@ from compas_viewer import Viewer
 from compas_tf.column import ColumnElement
 from compas_tf.model import TFModel
 from compas_tf.support import SupportElement
+from compas_tf.viewer import human_figure
 from compas_tf.viewer import zoom_to
 from compas_tf.writer import write_colored_obj
 
@@ -158,5 +160,11 @@ for solid in screw_meshes:
 zoom_to(viewer, [timber.aabb() for timber in column_meshes])
 viewer.renderer.camera.position.set(-1800, -600, 1100)
 viewer.renderer.camera.target.set(400, 1050, 170)
+
+
+# A 1.75 m figure, for reading the scale of the model at a glance. Reference
+# geometry only - plain polylines, never added to the model itself.
+for _part in human_figure(point=[3600, 0, 0]):
+    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
 
 viewer.show()

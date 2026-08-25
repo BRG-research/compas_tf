@@ -26,7 +26,7 @@ hide:
 
 | Part | Image | Files | Script | Dimensions (mm) | Qty | Material |
 | --- | :---: | --- | --- | --- | ---: | --- |
-| Column | <span class="online_3d_viewer" data-model="_models/column_0_preview.obj"></span> | [STEP][column-stp] [OBJ][column-obj] [IFC][column-ifc] | [fab_column.py][column-py] | 220 x 220 x 2850 incl. capitel<br>capitel 340 x 340 x 730 | 4 | Spruce |
+| Column | <span class="online_3d_viewer" data-model="_models/column_0_preview.obj"></span> | [STEP][column-stp] [OBJ][column-obj] [IFC][column-ifc] | [fab_column.py][column-py] | 220 x 220 x 3350 incl. capitel<br>capitel 340 x 340 x 730 | 4 | Spruce |
 
 ### Floor quarter
 

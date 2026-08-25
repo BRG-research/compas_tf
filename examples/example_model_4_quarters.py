@@ -2,6 +2,7 @@ import math
 import pathlib
 
 import compas
+from compas.colors import Color
 from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Translation
@@ -11,6 +12,7 @@ from compas_viewer import Viewer
 
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.model import TFModel
+from compas_tf.viewer import human_figure
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -100,4 +102,10 @@ def add_tree(node, viewer_parent):
 
 
 add_tree(quarters_model.tree.root, root_group)
+
+# A 1.75 m figure, for reading the scale of the model at a glance. Reference
+# geometry only - plain polylines, never added to the model itself.
+for _part in human_figure(point=[3600, 0, 0]):
+    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
+
 viewer.show()

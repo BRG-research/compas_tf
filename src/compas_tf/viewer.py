@@ -161,6 +161,85 @@ def frame_rectangle(frame, scale=100):
     return polygon, normal_line
 
 
+def human_figure(point=None, height=1750.0, facing=None):
+    """A human silhouette, for reading the scale of a model at a glance.
+
+    A drawing of a person is the fastest way to tell whether a floor sits at
+    head height or storey height, which a millimetre grid does not convey. It is
+    reference geometry, not part of the structure: plain
+    :class:`compas.geometry.Polyline`, so it draws in the viewer and survives
+    :func:`dump_scene` into the Rhino bundle without needing a scene object of
+    its own, and it never enters the model.
+
+    Parameters
+    ----------
+    point : :class:`compas.geometry.Point` or tuple, optional
+        Where the figure stands - the point BETWEEN THE FEET, so it can be
+        dropped straight onto a ground plane. Default is the world origin.
+    height : float, optional
+        Overall height in model units. The default 1750 is an average adult in
+        millimetres, which is what this project models in.
+    facing : :class:`compas.geometry.Vector` or tuple, optional
+        Direction the figure faces; it is drawn in the vertical plane
+        perpendicular to this. Default faces -Y, i.e. the figure is broadest
+        when seen from the front in the default camera.
+
+    Returns
+    -------
+    list[:class:`compas.geometry.Polyline`]
+
+    Examples
+    --------
+    >>> from compas_tf.viewer import human_figure
+    >>> for part in human_figure(point=[2500, -2500, 0]):
+    ...     viewer.scene.add(part, name="human", linecolor=Color(0.2, 0.2, 0.2))
+
+    """
+    import math
+
+    from compas.geometry import Vector
+
+    point = Point(*(point or [0.0, 0.0, 0.0]))
+    facing = Vector(*(facing or [0.0, -1.0, 0.0]))
+
+    # Body axes: `across` spans the shoulders, `up` is world Z. The figure is
+    # flat, drawn in the plane that faces the viewer head-on.
+    up = Vector(0.0, 0.0, 1.0)
+    across = Vector(*facing).cross(up)
+    if across.length < 1e-9:  # facing straight up/down: pick any horizontal axis
+        across = Vector(1.0, 0.0, 0.0)
+    across.unitize()
+
+    h = float(height)
+
+    def at(x, z):
+        """A point x across and z up from between the feet."""
+        return point + across * (x * h) + up * (z * h)
+
+    # Canonical proportions, as fractions of total height.
+    # head_c is fixed by head_r so the top of the skull lands exactly at `height`.
+    head_r = 0.052
+    head_c = 1.0 - head_r
+    shoulder, hip, crotch = 0.818, 0.530, 0.470
+    half_shoulder, half_hip, half_stance = 0.115, 0.075, 0.055
+
+    head = Polyline([at(head_r * math.cos(a), head_c + head_r * math.sin(a))
+                     for a in [i * math.tau / 24 for i in range(25)]])
+    neck = Polyline([at(0.0, head_c - head_r), at(0.0, shoulder)])
+    torso = Polyline([
+        at(-half_shoulder, shoulder), at(half_shoulder, shoulder),
+        at(half_hip, hip), at(-half_hip, hip), at(-half_shoulder, shoulder),
+    ])
+    arms = Polyline([at(-half_shoulder, shoulder), at(-half_shoulder - 0.020, 0.640),
+                     at(-half_shoulder - 0.010, 0.400)])
+    arms2 = Polyline([at(half_shoulder, shoulder), at(half_shoulder + 0.020, 0.640),
+                      at(half_shoulder + 0.010, 0.400)])
+    leg = Polyline([at(-half_hip, hip), at(-half_hip, crotch), at(-half_stance, 0.250), at(-half_stance, 0.0)])
+    leg2 = Polyline([at(half_hip, hip), at(half_hip, crotch), at(half_stance, 0.250), at(half_stance, 0.0)])
+
+    return [head, neck, torso, arms, arms2, leg, leg2]
+
+
 def zoom_to(viewer, boxes, tightness=10.0):
     """Aim the camera at the geometry, before ``viewer.show()``.
 

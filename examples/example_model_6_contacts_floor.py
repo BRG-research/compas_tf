@@ -13,6 +13,7 @@ from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
 from compas_tf.solid_difference_modifier import CylinderCutFeature
 from compas_tf.solid_difference_modifier import PrismCutFeature
+from compas_tf.viewer import human_figure
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -159,5 +160,11 @@ add_tree(floor_model.tree.root, None)
 contacts_group = viewer.scene.add_group("contacts")
 for i, (_a, _b, contact) in enumerate(contacts):
     viewer.scene.add(contact.polygon, name=f"contact_{i}", parent=contacts_group, facecolor=RED, linecolor=RED)
+
+
+# A 1.75 m figure, for reading the scale of the model at a glance. Reference
+# geometry only - plain polylines, never added to the model itself.
+for _part in human_figure(point=[3600, 0, 0]):
+    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
 
 viewer.show()

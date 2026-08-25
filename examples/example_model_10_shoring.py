@@ -2,6 +2,7 @@ import math
 import pathlib
 
 import compas
+from compas.colors import Color
 from compas.geometry import Point
 from compas.geometry import Rotation
 from compas.geometry import Translation
@@ -14,6 +15,7 @@ from compas_tf.model import TFModel
 from compas_tf.schoring_element import Dataset
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.tower_element import TowerElement
+from compas_tf.viewer import human_figure
 
 SchoringElement.clear_cache()
 
@@ -118,4 +120,10 @@ def add_tree(node, viewer_parent):
 
 viewer = Viewer()
 add_tree(shoring_model.tree.root, None)
+
+# A 1.75 m figure, for reading the scale of the model at a glance. Reference
+# geometry only - plain polylines, never added to the model itself.
+for _part in human_figure(point=[3600, 0, 0]):
+    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
+
 viewer.show()

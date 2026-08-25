@@ -42,7 +42,7 @@ class FloorGuide(Data, BrepMixin):
         rise=453,
         size_oculus=1000,
         wedge_plane_angle=-10,
-        bay_height=3000,
+        bay_height=3500,
     ):
         super().__init__()
 

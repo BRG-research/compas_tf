@@ -5,6 +5,7 @@ from compas.tolerance import TOL
 from compas_occt.brep import OCCBrep
 from compas_viewer import Viewer
 
+from compas_tf.viewer import human_figure
 from compas_tf.viewer import zoom_to
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
@@ -32,5 +33,11 @@ for face in contacts:
 
 # The camera's far plane is 1000 mm, so without this the building starts clipped.
 zoom_to(viewer, [brep.aabb for brep in breps])
+
+
+# A 1.75 m figure, for reading the scale of the model at a glance. Reference
+# geometry only - plain polylines, never added to the model itself.
+for _part in human_figure(point=[3600, 0, 0]):
+    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
 
 viewer.show()

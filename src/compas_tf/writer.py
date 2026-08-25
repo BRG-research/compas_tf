@@ -27,6 +27,12 @@ from typing import Optional
 from typing import Union
 
 from compas.datastructures import Mesh
+from compas.geometry import Frame
+from compas.geometry import Plane
+from compas.geometry import Point
+from compas.geometry import Polygon
+from compas.geometry import Transformation
+from compas.geometry import earclip_polygon
 
 # Mesh formats compas can write AND the docs viewer can read. Keyed by suffix
 # so a caller picks a format by naming the file.
@@ -325,6 +331,31 @@ def _as_mesh(geometry, deflection: float = PREVIEW_DEFLECTION) -> Mesh:
     raise TypeError(f"cannot write {type(geometry).__name__}: not a Mesh and not a Brep")
 
 
+def _face_triangles(points: list) -> list:
+    """Triangle index triples for one planar face, CONCAVE faces included.
+
+    A tessellated Brep face is a planar polygon, not a triangle - a bed comes
+    out as 8 faces, an outer rib has one with 12 vertices - and 64 of the faces
+    in this model are concave. Written to the OBJ as n-gons, they are left for
+    the viewer to triangulate, and viewers fan from the first vertex: correct
+    for a convex polygon, wrong for a concave one, where the fan lays triangles
+    across the notch and outside the outline. That is what made the beds and
+    the ribs read as folded and blotchy in the previews.
+
+    So the faces are triangulated here instead, by ear clipping in the face's
+    own plane, and the OBJ carries triangles only.
+    """
+    if len(points) == 3:
+        return [(0, 1, 2)]
+    polygon = Polygon(points)
+    # into the face's plane, so ear clipping runs on a genuine 2D polygon and
+    # the winding (and with it the normal the viewer derives) is preserved.
+    frame = Frame.from_plane(Plane(polygon.centroid, polygon.normal))
+    to_local = Transformation.from_frame_to_frame(frame, Frame.worldXY())
+    flat = Polygon([Point(*point).transformed(to_local) for point in points])
+    return earclip_polygon(flat)
+
+
 def write_colored_obj(parts: Iterable, filepath: Union[str, pathlib.Path], deflection: float = PREVIEW_DEFLECTION) -> dict:
     """Write named, coloured meshes as one OBJ next to its MTL.
 
@@ -408,6 +439,8 @@ def write_colored_obj(parts: Iterable, filepath: Union[str, pathlib.Path], defle
                 offset += 1
             for face in mesh.faces():
                 vertices = mesh.face_vertices(face)
-                f.write("f {}\n".format(" ".join(str(index_of[vertex]) for vertex in vertices)))
+                points = mesh.face_coordinates(face)
+                for triangle in _face_triangles(points):
+                    f.write("f {}\n".format(" ".join(str(index_of[vertices[index]]) for index in triangle)))
 
     return {"obj": filepath, "mtl": mtlpath}

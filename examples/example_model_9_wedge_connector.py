@@ -1,10 +1,12 @@
 import pathlib
 
+from compas.colors import Color
 from compas.geometry import Point
 from compas.geometry import Vector
 from compas_viewer import Viewer
 
 from compas_tf.connectors import ConnectorWedgeElement
+from compas_tf.viewer import human_figure
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -56,5 +58,11 @@ for i, box in enumerate(face_boxes):
     viewer.scene.add(box, name=f"box_cutter_{i}", parent=connector)
 for i, dowel in enumerate(dowel_cutters):
     viewer.scene.add(dowel, name=f"dowel_{i}", parent=connector)
+
+
+# A 1.75 m figure, for reading the scale of the model at a glance. Reference
+# geometry only - plain polylines, never added to the model itself.
+for _part in human_figure(point=[3600, 0, 0]):
+    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
 
 viewer.show()

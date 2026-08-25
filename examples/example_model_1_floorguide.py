@@ -1,11 +1,13 @@
 import pathlib
 
 import compas
+from compas.colors import Color
 from compas.geometry import Frame
 from compas_viewer import Viewer
 
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.viewer import frame_rectangle
+from compas_tf.viewer import human_figure
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -68,5 +70,11 @@ for key, plane_pairs in guide.construction_planes.items():
             rectangle, normal = frame_rectangle(Frame.from_plane(plane), scale=150)
             viewer.scene.add(rectangle, name=f"{key}_{i}_{j}", parent=group, facecolor=(0.2, 0.6, 0.9), opacity=0.3)
             viewer.scene.add(normal, name=f"{key}_{i}_{j}_normal", parent=group, linewidth=2, linecolor=(0.9, 0.2, 0.2))
+
+
+# A 1.75 m figure, for reading the scale of the model at a glance. Reference
+# geometry only - plain polylines, never added to the model itself.
+for _part in human_figure(point=[3600, 0, 0]):
+    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
 
 viewer.show()

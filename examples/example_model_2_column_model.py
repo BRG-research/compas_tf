@@ -1,6 +1,7 @@
 import pathlib
 
 import compas
+from compas.colors import Color
 from compas.geometry import Frame  # noqa: F401
 from compas.geometry import Transformation  # noqa: F401
 from compas.geometry import Translation
@@ -10,6 +11,7 @@ from compas_tf.column import ColumnElement
 from compas_tf.floor_guide import FloorGuide
 from compas_tf.model import TFModel
 from compas_tf.support import SupportElement
+from compas_tf.viewer import human_figure
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -70,4 +72,10 @@ viewer = Viewer()
 group = viewer.scene.add_group("column_model")
 viewer.scene.add(support, name="support", parent=group, facecolor=(0.9, 0.9, 0.9))
 viewer.scene.add(column, name="column", parent=group, facecolor=(0.9, 0.9, 0.9))
+
+# A 1.75 m figure, for reading the scale of the model at a glance. Reference
+# geometry only - plain polylines, never added to the model itself.
+for _part in human_figure(point=[3600, 0, 0]):
+    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
+
 viewer.show()
