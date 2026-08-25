@@ -223,17 +223,19 @@ def human_figure(point=None, height=1750.0, facing=None):
     shoulder, hip, crotch = 0.818, 0.530, 0.470
     half_shoulder, half_hip, half_stance = 0.115, 0.075, 0.055
 
-    head = Polyline([at(head_r * math.cos(a), head_c + head_r * math.sin(a))
-                     for a in [i * math.tau / 24 for i in range(25)]])
+    head = Polyline([at(head_r * math.cos(a), head_c + head_r * math.sin(a)) for a in [i * math.tau / 24 for i in range(25)]])
     neck = Polyline([at(0.0, head_c - head_r), at(0.0, shoulder)])
-    torso = Polyline([
-        at(-half_shoulder, shoulder), at(half_shoulder, shoulder),
-        at(half_hip, hip), at(-half_hip, hip), at(-half_shoulder, shoulder),
-    ])
-    arms = Polyline([at(-half_shoulder, shoulder), at(-half_shoulder - 0.020, 0.640),
-                     at(-half_shoulder - 0.010, 0.400)])
-    arms2 = Polyline([at(half_shoulder, shoulder), at(half_shoulder + 0.020, 0.640),
-                      at(half_shoulder + 0.010, 0.400)])
+    torso = Polyline(
+        [
+            at(-half_shoulder, shoulder),
+            at(half_shoulder, shoulder),
+            at(half_hip, hip),
+            at(-half_hip, hip),
+            at(-half_shoulder, shoulder),
+        ]
+    )
+    arms = Polyline([at(-half_shoulder, shoulder), at(-half_shoulder - 0.020, 0.640), at(-half_shoulder - 0.010, 0.400)])
+    arms2 = Polyline([at(half_shoulder, shoulder), at(half_shoulder + 0.020, 0.640), at(half_shoulder + 0.010, 0.400)])
     leg = Polyline([at(-half_hip, hip), at(-half_hip, crotch), at(-half_stance, 0.250), at(-half_stance, 0.0)])
     leg2 = Polyline([at(half_hip, hip), at(half_hip, crotch), at(half_stance, 0.250), at(half_stance, 0.0)])
 
