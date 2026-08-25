@@ -11,6 +11,9 @@ Concretely that means:
 
 - Every `compute_elementgeometry` returns a Brep.
 - Every boolean is `compas_occt`. `compas_manifold` is removed.
+- Lofting and capping is `Brep.from_polygons`, not ear-clipping.
+- Interface detection runs Brep-to-Brep, with no mesh conversion in the middle.
+- Every example, including all 14 part-list tutorials, is Brep end to end.
 - `bake()` bakes **Breps**, not meshes.
 - Meshes are created in exactly three places, all of them writers:
   `write_ifc` (compas_ifc needs one), `write_mesh`/`write_colored_obj` (OBJ,
@@ -30,6 +33,40 @@ the equivalent mesh (170 KB vs 14 KB for the connector), so the baked model
 grows from ~4 MB to tens of MB and loads more slowly. That is the correct
 trade. A baked mesh is a lossy cache of a shape the project no longer has to
 approximate.
+
+## Prototype result: the plate loft is already solved
+
+Open question 3 below asked whether `OCCBrep` can reproduce `PlateElement`'s
+loft. **Tested against all 145 plates in `cantilevers_baked_model.json`**,
+building each from its own two polylines as side quads plus two planar caps
+(`Brep.from_polygons`), against the current `PlateElement.loft`:
+
+```
+exact: 121   mismatch: 0   brep-failed: 0   mesh-had-no-volume: 24
+max twist over all plates: 8.5e-11 mm
+```
+
+Three findings, all of them good:
+
+1. **Zero mismatches, zero failures.** Every plate the mesh path can measure,
+   the Brep path reproduces to better than 1e-9 relative volume.
+2. **The twisted quads are a myth.** Max deviation of any side quad from its
+   own plane, across every plate: **8.5e-11 mm**. They are planar to rounding
+   error. `brep.py`'s volume guard exists to protect geometry this project does
+   not actually have, and plain planar `Brep.from_polygons` faces are enough:
+   no `from_loft`, no `from_sweep`.
+3. **It found a live bug.** The 24 plates with "no mesh volume" are the
+   t-sections, and the reason is that *the mesh loft produces an open,
+   non-manifold solid*: 38 faces, `is_closed() == False`, volume uncomputable.
+   Their caps are 14-gons that ear-clipping does not close. The Brep of the
+   same two polylines is a clean solid: **16 faces, `is_solid == True`, volume
+   1 952 697 mm3**. One sixth of the plates in this model are silently broken
+   today and the migration repairs them.
+
+So `PlateElement`, the 145-element bulk of the model and the piece this plan
+calls "the big one", is the *least* risky part of the migration.
+
+---
 
 Two facts make the rest cheap:
 
@@ -218,6 +255,37 @@ Each gets `geometry_as_brep` per the `schoring_element` template:
 plane geometry that never touches a Mesh. It inherits whatever `PlateElement`
 produces. Only `brep_meshes:135` changes.
 
+### Phase 3b — the examples and the part list
+
+**Today only 3 of 35 examples touch Breps at all** — `example_model_18` (write
+STEP), `_20` (read STEP), `_22` (contact adjacency). Everything that *builds*
+the model (`_1` .. `_11`) and **all 14 `example_model_12_fab_*` part-list
+scripts** are pure mesh. They are not incidental: they are the tutorials, and
+`docs/fabrication.md` is generated from what they write.
+
+Each fab script follows one shape — pull an element, pull its feature cutters,
+`write_parts([uncut, cut] + cutters, ...)` — so the change is the same edit 14
+times:
+
+- `element.compute_elementgeometry(types=[...])` and `element.elementgeometry`
+  return Breps, so `uncut` / `cut` need no conversion.
+- `feature.meshes` becomes `feature.solids` (Breps); the per-feature
+  `.transformed(xform)` calls are unchanged.
+- `write_parts` takes Breps. `write_step` stops converting and passes them
+  straight through — this is where the exactness finally reaches the shop
+  files, and the STEP stops being a re-derivation of a triangulation.
+- `preview=` still tessellates, via `writer._as_mesh`.
+
+The payoff is concentrated here: a part list whose STEP files carry real
+cylindrical drillings and single planar faces, instead of merged triangles.
+`example_model_12_fab_column.py` is the one to convert first — it is the
+smallest, and the column is Phase 3 step 5.
+
+Also in scope: `docs/fabrication.md`'s dimensions come from the written parts,
+so regenerate the table (`tools/print_part_table.py`) and re-check the figures
+after the geometry becomes exact. Expect small changes where a faceted cylinder
+was measured before.
+
 ### Phase 4 — collapse the boundaries
 
 - `contacts.py:344-347` — `mesh_to_brep` fallback becomes a pass-through.
@@ -248,10 +316,11 @@ exact, which is the one place this migration gets both.
 1. **Does `compas_rhino` have a Brep scene object registered?** `rhino.py`
    replays a bundle documented as Mesh/Polyline/Polygon/Line. If not,
    `dump_scene` must tessellate on the way out.
-2. **Do Brep booleans reproduce the current results** on the awkward cases —
-   the lofted twisted-quad ribs and t-sections, where `brep.py`'s volume guard
-   exists precisely because near-coplanar merging distorts them? Phase 2
-   answers this before any commitment.
-3. **Is `PlateElement`'s twisted-quad loft a ruled surface** that
-   `OCCBrep.from_loft` produces identically, or does it need `from_sweep`?
-   Prototype one rib before Phase 3 step 6.
+2. **Do Brep booleans reproduce the current results** once cutters are applied?
+   The loft itself is proven exact; the cut geometry is not yet. Phase 2
+   answers this. Note that the volume guard's stated reason — near-coplanar
+   merging distorting twisted quads — does not apply here, because there are no
+   twisted quads.
+3. ~~**Is `PlateElement`'s twisted-quad loft a ruled surface?**~~ **Answered**;
+   see the prototype section above. Planar `Brep.from_polygons` faces reproduce
+   all 145 plates exactly, and fix 24 broken ones.
