@@ -38,7 +38,6 @@ from compas_viewer import Viewer
 
 from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
-from compas_tf.viewer import human_figure
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
 
@@ -136,9 +135,5 @@ print(f"{len(plates)} plates laid flat, {len(plates)} vertical alignment cutters
 print(f"plate volume        : {total_volume:12.0f} mm3")
 print(f"outside footprint   : {overhang_volume:12.0f} mm3  ({overhang_volume / total_volume * 100:.2f}%)")
 
-# A 1.75 m figure, for reading the scale of the model at a glance. Reference
-# geometry only - plain polylines, never added to the model itself.
-for _part in human_figure(point=[3600, 0, 0]):
-    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
 
 viewer.show()

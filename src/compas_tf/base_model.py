@@ -1003,8 +1003,8 @@ class BaseModel(Datastructure):
         contactmethod
             What actually detects the contacts of one accepted pair, called as
             ``contactmethod(a, b, tolerance=, minimum_area=, contacttype=)``.
-            Default is ``a.compute_contacts(b, ...)``, i.e. mesh faces. Pass a
-            :class:`compas_tf.contacts.BrepContacts` to run on Brep faces instead.
+            Default is ``a.compute_contacts(b, ...)``, i.e. the plate's own
+            polygon-face intersection.
 
         Raises
         ------
@@ -1073,6 +1073,116 @@ class BaseModel(Datastructure):
                 key_v = keyof.get(id(nbr))
                 if key_v is None or not accept(key_u, key_v):
                     # a non-participant, same side / same group, or the element itself
+                    continue
+
+                v = nbr.graphnode
+
+                if not self.graph.has_edge((u, v), directed=False):
+                    contacts = contactmethod(
+                        element,
+                        nbr,
+                        tolerance=tolerance,
+                        minimum_area=minimum_area,
+                        contacttype=contacttype,
+                    )
+                    if contacts:
+                        self.graph.add_edge(u, v, contacts=contacts)
+
+                else:
+                    edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
+                    contacts = self.graph.edge_attribute(edge, name="contacts")
+                    if not contacts:
+                        contacts = contactmethod(
+                            element,
+                            nbr,
+                            tolerance=tolerance,
+                            minimum_area=minimum_area,
+                            contacttype=contacttype,
+                        )
+                        if contacts:
+                            self.graph.edge_attribute(edge, name="contacts", value=contacts)
+
+    def compute_contacts_within_groups(
+        self,
+        groups: list[str],
+        tolerance: float = 1e-6,
+        minimum_area: float = 1e-2,
+        contacttype: type[Contact] = Contact,
+        contactmethod: Optional[Callable] = None,
+    ) -> None:
+        """Compute contacts among the elements of the named groups - same group included.
+
+        The complement of :meth:`compute_contacts_between_groups`. There the
+        groups are *sides* and a pair is only tested when its two elements come
+        from different groups; here the groups only say **which elements take
+        part**, and every pair among them is tested - two plates of the same
+        group included.
+
+        Use this to contact one assembly against itself. Within a single floor
+        quarter, for instance, the three bed rows touch each other and so do two
+        of the inner beams: ``compute_contacts_between_groups`` skips those
+        because both elements sit in the same group, and reports 100 contacts
+        where this reports all 117.
+
+        Nested groups behave as in :meth:`compute_contacts_between_groups`: an
+        element takes part when any ancestor group's name was requested, so
+        naming an outer group pulls in all its descendants.
+
+        Like every contact search, this only fills in graph edges that have no
+        contacts yet - it never removes one. Clear the graph first (see
+        :meth:`compas_tf.model.TFModel.clear_contacts`) to report only what this
+        search found.
+
+        Parameters
+        ----------
+        groups
+            Names of the groups whose elements take part.
+        tolerance
+            The distance tolerance.
+        minimum_area
+            The minimum contact size.
+        contacttype
+            The contact class to use for the generated contacts.
+        contactmethod
+            What actually detects the contacts of one accepted pair, called as
+            ``contactmethod(a, b, tolerance=, minimum_area=, contacttype=)``.
+            Default is ``a.compute_contacts(b, ...)``, i.e. the plate's own
+            polygon-face intersection.
+
+        Raises
+        ------
+        ValueError
+            If none of the named groups contains any element.
+
+        """
+        if contactmethod is None:
+            contactmethod = _element_contacts
+
+        names = set(groups)
+
+        def takes_part(element: Element) -> bool:
+            node = element.treenode
+            parent = node.parent if node is not None else None
+            while parent is not None and not parent.is_root:
+                if parent.element.name in names:
+                    return True
+                parent = parent.parent
+            return False
+
+        participants = [element for element in self.elements() if not isinstance(element, Group) and takes_part(element)]
+
+        if not participants:
+            raise ValueError("compute_contacts_within_groups: none of the groups {} contains any element.".format(sorted(names)))
+
+        # Spatial search over participants only; same dedup logic as compute_contacts.
+        bvh = ElementBVH.from_elements(participants)
+        taking_part = {id(element) for element in participants}
+
+        for element in participants:
+            u = element.graphnode
+
+            for nbr in bvh.nearest_neighbors(element):
+                if id(nbr) not in taking_part:
                     continue
 
                 v = nbr.graphnode
@@ -1293,60 +1403,6 @@ class BaseModel(Datastructure):
         """
         self._kdtree = KDTree(list(self.elements()))
         return self._kdtree
-
-    def compute_contacts(self, tolerance: float = 1e-6, minimum_area: float = 1e-2, contacttype: type[Contact] = Contact) -> None:
-        """Compute the contacts between the block elements of this model.
-
-        Computing contacts is done independently of the edges of the interaction graph.
-        If contacts are found between two elements with an existing edge, the contacts attribute of the edge will be replaced.
-        If there is no pre-existing edge, one will be added.
-        No element pairs are excluded in the search based on the existence of an edge between their nodes in the interaction graph.
-
-        The search is conducted entirely based on the BVH of the elements contained in the model.
-        It is a spatial search that creates topological connections between elements based on their geometrical interaction.
-
-        Parameters
-        ----------
-        tolerance
-            The distance tolerance.
-        minimum_area
-            The minimum contact size.
-        contacttype
-            The contact class to use for the generated contacts.
-
-        """
-        # somehow this should not take into account past calculations.
-
-        for element in self.elements():
-            u = element.graphnode
-
-            for nbr in self.bvh.nearest_neighbors(element):
-                v = nbr.graphnode
-
-                if not self.graph.has_edge((u, v), directed=False):
-                    # there is no interaction edge between the two elements
-                    contacts = element.compute_contacts(
-                        nbr,
-                        tolerance=tolerance,
-                        minimum_area=minimum_area,
-                        contacttype=contacttype,
-                    )
-                    if contacts:
-                        self.graph.add_edge(u, v, contacts=contacts)
-
-                else:
-                    # there is an existing edge between the two elements
-                    edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
-                    contacts = self.graph.edge_attribute(edge, name="contacts")
-                    if not contacts:
-                        contacts = element.compute_contacts(
-                            nbr,
-                            tolerance=tolerance,
-                            minimum_area=minimum_area,
-                            contacttype=contacttype,
-                        )
-                        if contacts:
-                            self.graph.edge_attribute(edge, name="contacts", value=contacts)
 
     # =============================================================================
     # Other Methods

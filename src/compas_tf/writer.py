@@ -1,26 +1,3 @@
-"""Write element geometry to the files a shop and the docs need.
-
-One place for the export half of a fabrication example, so every element does
-it the same way. Four formats, each for a different reader:
-
-- **STEP** is the CAD hand-off. The booleans that carve an element leave
-  triangle soup, so the meshes go through :func:`compas_tf.brep.meshes_to_brep`
-  first - ``compas_occt``'s coplanar-face merge behind a volume guard - and the
-  flat faces the part was modelled with come back as single Brep faces.
-- **OBJ** (or PLY/STL/OFF) is the mesh the element already is, no kernel
-  involved. Every solid keeps its name, so the file lands as identifiable
-  pieces rather than one blob.
-- **IFC** is the BIM hand-off, written with ``compas_ifc``: one
-  ``IfcBuildingElementProxy`` per solid inside a minimal
-  project/site/building/storey template, millimetres, IFC4.
-- **A preview** is one mesh on its own, for the viewer embedded in the docs.
-  Same mesh formats; the viewer reads them directly, which is why nothing here
-  needs glTF.
-
-Nothing in here computes geometry. Hand it meshes that are already placed and
-carved - see ``examples/example_model_12_fab_column.py``.
-"""
-
 import pathlib
 from typing import Iterable
 from typing import Optional

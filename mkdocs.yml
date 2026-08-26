@@ -7,6 +7,12 @@ repo_url: https://github.com/BRG-research/compas_tf/
 
 copyright: Copyright &copy; ETH Zurich - Block Research Group
 
+# Port 8000 (the mkdocs default) is often taken on dev machines by Apache/XAMPP
+# and similar. On Windows that collision surfaces as a confusing WinError 10013
+# ("forbidden by its access permissions") rather than "address already in use",
+# so pin a quieter port and let `mkdocs serve` work with no arguments.
+dev_addr: 127.0.0.1:8001
+
 hooks:
   - hooks/fabrication_assets.py
 

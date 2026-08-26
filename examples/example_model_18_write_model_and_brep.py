@@ -1,16 +1,11 @@
 import pathlib
 
 import compas
-from compas.colors import Color
 from compas_model.elements import Group
 from compas_viewer import Viewer
 
-from compas_tf.connectors import ConnectorCylinderElement
-from compas_tf.connectors import DowelCylinderElement
 from compas_tf.contacts import contact_holes
-from compas_tf.contacts import involving
 from compas_tf.model import TFModel
-from compas_tf.viewer import human_figure
 from compas_tf.viewer import zoom_to
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
@@ -26,24 +21,45 @@ model = TFModel.from_model(source, name="cantilevers_baked")
 # Every element's booleans, evaluated once and stored: readers load with none.
 model.bake()
 
-# On Brep faces, not mesh faces: a boolean leaves triangles, and one interface
-# then comes back as several polygons, short on area. skip= drops the fasteners -
-# 2072 of 2805 contacts, no structural information.
-detector = model.compute_contacts_brep(
-    minimum_area=1.0,
-    clear=True,
-    skip=involving(DowelCylinderElement, ConnectorCylinderElement),
-)
+# Plate-to-plate contacts through wood_nano. It reads the top/bottom outline
+# pair of each plate, so it never sees the fasteners the old Brep search had to
+# filter out with skip= - and it is the whole reason this is fast.
+model.compute_contacts_wood(minimum_area=1.0, clear=True)
+
+# ...and the columns, which wood cannot see: it speaks only in plate outline
+# pairs, and a column has none. The group search fills in what wood skipped -
+# every column against the outer ribs it carries. Without this the model ships
+# with zero column contacts, and example_model_23_assembly_step6 (which asks
+# which column a quarter lands on) has nothing to measure.
+#
+# Contacts are additive - a search only fills edges that have none - so this
+# adds to the wood result rather than replacing it. No clear= here.
+for _side_a, _side_b in (
+    (["columns_model"], [f"outer_ribs_{i}" for i in range(4)]),
+    (["connectors"], ["floor_model"]),
+    (["connectors"], ["columns_model"]),
+    (["connector_cylinders"], ["floor_model"]),
+    (["connector_cylinders"], ["connectors"]),
+    (["outer_rib_connectors"], ["floor_model"]),
+):
+    model.compute_contacts_between_groups(_side_a, groups_b=_side_b, tolerance=1.0, minimum_area=1.0)
 
 contacts = list(model.contacts())
 elements = list(model.geometry_elements())
 print(f"{len(elements)} elements, {len(contacts)} contacts")
 
+from compas_tf.wood import skipped_elements  # noqa: E402
+
+skipped = skipped_elements(model)
+if skipped:
+    print(f"not searched (wood reads plates only): {sum(skipped.values())} elements {skipped}")
+
 # Elements, features, the tree, the graph with the contacts on it.
 compas.json_dump(model, MODEL_FILE)
 
-# The solids, for the shop. cache= reuses the Breps the contact search built.
-model.to_step(STEP_FILE, cache=detector.breps)
+# The solids, for the shop. The Brep search used to hand over its cache here;
+# wood works on outlines and builds no Breps, so they are made fresh.
+model.to_step(STEP_FILE)
 
 # Their own file - .solids would drop loose faces - plus the sidecar naming the
 # two elements each face joins, which STEP cannot carry.
@@ -76,9 +92,5 @@ for contact in contacts:
 zoom_to(viewer, [element.aabb for element in elements])
 
 
-# A 1.75 m figure, for reading the scale of the model at a glance. Reference
-# geometry only - plain polylines, never added to the model itself.
-for _part in human_figure(point=[3600, 0, 0]):
-    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
 
 viewer.show()

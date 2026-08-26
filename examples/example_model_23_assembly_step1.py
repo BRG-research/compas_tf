@@ -42,7 +42,6 @@ from compas_viewer import Viewer
 
 from compas_tf.model import TFModel
 from compas_tf.plate import PlateElement
-from compas_tf.viewer import human_figure
 from compas_tf.writer import write_colored_obj
 
 data_dir = pathlib.Path(__file__).parent.parent / "data"
@@ -354,9 +353,5 @@ for pocket in pockets:
 
 print(f"{len(breps)} plates, {len(boards)} jig boards, {len(pockets)} pockets cut")
 
-# A 1.75 m figure, for reading the scale of the model at a glance. Reference
-# geometry only - plain polylines, never added to the model itself.
-for _part in human_figure(point=[3600, 0, 0]):
-    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
 
 viewer.show()

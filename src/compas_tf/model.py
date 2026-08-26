@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from typing import Iterator
 from typing import Optional
 
@@ -7,7 +6,6 @@ from compas_model.interactions import Contact
 from compas_model.models.bvh import ElementBVH
 
 from compas_tf.base_model import BaseModel
-from compas_tf.base_model import _element_contacts
 from compas_tf.brep import BrepMixin
 from compas_tf.element import TFElement
 
@@ -100,8 +98,8 @@ class TFModel(BaseModel, BrepMixin):
         cache : dict[int, :class:`compas_occt.brep.OCCBrep`], optional
             Already-converted Breps keyed by ``id(element)``, reused instead of
             being rebuilt. This is the ``.breps`` of a
-            :class:`compas_tf.contacts.BrepContacts`, so a model that has just
-            had its contacts computed on Breps does not pay for the conversion
+            the wood search, which builds no Breps at all, so nothing is cached
+            here and the solids are always made fresh
             twice. Ignored when ``variant`` is given, since the cache holds the
             finished geometry.
         **kwargs
@@ -319,83 +317,6 @@ class TFModel(BaseModel, BrepMixin):
         )
         return self._bvh
 
-    def compute_contacts(
-        self,
-        tolerance: float = 1e-6,
-        minimum_area: float = 1e-2,
-        contacttype: type[Contact] = Contact,
-        contactmethod: Optional[Callable] = None,
-    ) -> None:
-        """Compute the contacts between the geometry elements of this model.
-
-        Overridden only to iterate :meth:`geometry_elements` instead of
-        ``elements()``: a :class:`Group` has no geometry, so asking the BVH
-        for its neighbours calls the base-class ``compute_aabb`` and raises
-        NotImplementedError. See :meth:`compute_bvh` for the same fix on the
-        other side. Body otherwise verbatim from compas_model.
-
-        Computing contacts is done independently of the edges of the interaction graph.
-        If contacts are found between two elements with an existing edge, the contacts attribute of the edge will be replaced.
-        If there is no pre-existing edge, one will be added.
-        No element pairs are excluded in the search based on the existence of an edge between their nodes in the interaction graph.
-
-        The search is conducted entirely based on the BVH of the elements contained in the model.
-        It is a spatial search that creates topological connections between elements based on their geometrical interaction.
-
-        Parameters
-        ----------
-        tolerance
-            The distance tolerance.
-        minimum_area
-            The minimum contact size.
-        contacttype
-            The contact class to use for the generated contacts.
-        contactmethod
-            What detects the contacts of one candidate pair, called as
-            ``contactmethod(a, b, tolerance=, minimum_area=, contacttype=)``.
-            Default is ``a.compute_contacts(b, ...)``, i.e. mesh faces. Pass a
-            :class:`compas_tf.contacts.BrepContacts` to run on Brep faces
-            instead, or use :meth:`compute_contacts_brep`.
-
-        """
-        # somehow this should not take into account past calculations.
-
-        if contactmethod is None:
-            contactmethod = _element_contacts
-
-        for element in self.geometry_elements():
-            u = element.graphnode
-
-            for nbr in self.bvh.nearest_neighbors(element):
-                v = nbr.graphnode
-
-                if not self.graph.has_edge((u, v), directed=False):
-                    # there is no interaction edge between the two elements
-                    contacts = contactmethod(
-                        element,
-                        nbr,
-                        tolerance=tolerance,
-                        minimum_area=minimum_area,
-                        contacttype=contacttype,
-                    )
-                    if contacts:
-                        self.graph.add_edge(u, v, contacts=contacts)
-
-                else:
-                    # there is an existing edge between the two elements
-                    edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
-                    contacts = self.graph.edge_attribute(edge, name="contacts")
-                    if not contacts:
-                        contacts = contactmethod(
-                            element,
-                            nbr,
-                            tolerance=tolerance,
-                            minimum_area=minimum_area,
-                            contacttype=contacttype,
-                        )
-                        if contacts:
-                            self.graph.edge_attribute(edge, name="contacts", value=contacts)
-
     def clear_contacts(self) -> "TFModel":
         """Drop every contact stored on the interaction graph, keeping the edges.
 
@@ -408,86 +329,161 @@ class TFModel(BaseModel, BrepMixin):
             self.graph.edge_attribute(edge, name="contacts", value=[])
         return self
 
-    def compute_contacts_brep(
+    def compute_contacts_wood(
         self,
-        tolerance: float = 1e-6,
-        minimum_area: float = 1e-1,
         groups: Optional[list[str]] = None,
-        groups_b: Optional[list[str]] = None,
+        search_type: int = 0,
+        minimum_area: float = 1e-2,
         contacttype: type[Contact] = Contact,
         clear: bool = False,
-        **kwargs,
-    ):
-        """Contacts on Brep faces rather than mesh faces - one polygon per interface.
+        face_kinds: Optional[set] = None,
+        connections: Optional[set] = None,
+        kind_pairs: Optional[set] = None,
+        tolerance: float = 1.0,
+    ) -> dict[int, int]:
+        """Detect plate interfaces with ``wood_nano``, keeping each joint's type.
 
-        The same spatial search as :meth:`compute_contacts`, with
-        :class:`compas_tf.contacts.BrepContacts` doing the detection: the BVH
-        still prunes on the mesh AABBs, but each surviving pair is converted to a
-        solid Brep with its coplanar faces merged (``element.get_brep()``) and
-        intersected face against face. A boolean-triangulated interface therefore
-        comes back as ONE contact carrying its hole loops, instead of one contact
-        per triangle - see :mod:`compas_tf.contacts` for the numbers.
+        The geometric searches - :meth:`compute_contacts`,
+        :meth:`compas_tf.base_model.BaseModel.compute_contacts_between_groups` -
+        intersect element geometry pair by pair and answer only *where* two
+        elements touch. ``wood_nano`` takes the whole plate assembly at once, as
+        the top/bottom outline pair every plate is modelled from, and returns
+        each interface **with a joint type** - the classification a joinery
+        solver needs. See :mod:`compas_tf.wood`.
+
+        Only :class:`compas_tf.plate.PlateElement` takes part: wood reads
+        outline pairs, and a column, dowel, cylinder or connector has none. Those
+        elements are invisible to this search, so keep a geometric search for
+        them. The count of what was skipped is reported by
+        :func:`compas_tf.wood.skipped_elements`.
+
+        The joint type of each contact is stored on the interaction graph edge
+        under ``joint_types``, positionally matching the edge's ``contacts``.
+
+        Measured on one quarter (34 plates): 117 interfaces, the same 117 that
+        :meth:`compas_tf.base_model.BaseModel.compute_contacts_within_groups`
+        finds and that a brute-force sweep confirms, with an identical breakdown
+        per group pair.
 
         Parameters
         ----------
-        tolerance : float, optional
-            The distance tolerance.
-        minimum_area : float, optional
-            The minimum contact size. The 1e-2 default of the mesh search is
-            below the noise of a merged Brep face; 1.0 mm2 is a sane floor for
-            this model.
-        groups : list[str], optional
-            Restrict the search to these named groups, as in
-            :meth:`compas_tf.base_model.BaseModel.compute_contacts_between_groups`.
-            Default searches every pair of geometry elements.
-        groups_b : list[str], optional
-            The second side of a two-sided group query. Requires ``groups``.
-        contacttype : type[:class:`compas_model.interactions.Contact`], optional
+        groups
+            Restrict the search to plates under these named groups. Default
+            searches every plate in the model.
+        search_type
+            wood's search type, passed through unchanged.
+        minimum_area
+            Drop interfaces whose joint area is smaller than this.
+        contacttype
             The contact class to instantiate.
-        clear : bool, optional
+        clear
             Clear the contacts already on the graph first, so the result holds
             only what this search found. See :meth:`clear_contacts`.
-        **kwargs
-            Forwarded to :class:`compas_tf.contacts.BrepContacts` - ``holes``,
-            ``strict``, ``skip``, and any ``get_brep()`` keyword.
-            ``skip=involving(DowelCylinderElement, ConnectorCylinderElement)``
-            drops the fastener contacts, which on this model are 74% of the
-            total and are all a shaft touching its own hole.
+        face_kinds
+            Keep only interfaces lying on these faces, a subset of
+            ``{"top", "bottom", "side"}`` - the same filter
+            :meth:`compas_tf.plate.PlateElement.compute_contacts` takes, and
+            applied the same way, to both plates of a pair. wood does not label
+            its joint areas, so the kinds are recovered geometrically by
+            :func:`compas_tf.wood.classify_joint_face`. Default keeps everything.
+        connections
+            Keep only these joint types, in the joinery vocabulary:
+            ``{"face-to-face"}``, ``{"side-to-side"}``, ``{"face-to-side"}``.
+            See :data:`compas_tf.wood.JOINT_CONNECTIONS`. This is the filter to
+            reach for.
+        kind_pairs
+            The finer filter, on the exact faces - ``{"top-bottom"}`` for plates
+            stacked the same way up only, where ``connections={"face-to-face"}``
+            also admits ``top-top``. Rarely needed.
+        tolerance
+            Plane-matching tolerance for that classification, in model units.
 
         Returns
         -------
-        :class:`compas_tf.contacts.BrepContacts`
-            The detector, holding the Brep cache it built (``.breps``) and the
-            face pairs that failed (``.errors``).
-        """
-        from compas_tf.contacts import BrepContacts
+        dict[int, int]
+            How many interfaces came back per joint type. The integers are
+            wood's own - treat them as opaque keys.
 
-        if groups_b and not groups:
-            raise ValueError("compute_contacts_brep: groups_b needs groups; it is the second side of a two-sided query.")
+        Raises
+        ------
+        ImportError
+            If ``wood_nano`` is not installed. The message says how to get it.
+        ValueError
+            If the model has no plates to search.
+
+        """
+        from compas_tf.wood import joint_connection
+        from compas_tf.wood import joint_face_pair
+        from compas_tf.wood import plate_participants
+        from compas_tf.wood import wood_joints
+
+        plates = plate_participants(self, groups)
+        if not plates:
+            raise ValueError("compute_contacts_wood: the model has no PlateElement to search{}.".format(f" under groups {sorted(groups)}" if groups else ""))
 
         if clear:
             self.clear_contacts()
 
-        method = BrepContacts(**kwargs)
+        histogram: dict[int, int] = {}
+        detected = wood_joints(
+            plates,
+            search_type=search_type,
+            face_kinds=face_kinds,
+            connections=connections,
+            kind_pairs=kind_pairs,
+            tolerance=tolerance,
+        )
+        for index_a, index_b, polygon, joint_type, kind_a, kind_b in detected:
+            if polygon.area < minimum_area:
+                continue
 
-        if groups:
-            self.compute_contacts_between_groups(
-                groups,
-                groups_b=groups_b,
-                tolerance=tolerance,
-                minimum_area=minimum_area,
-                contacttype=contacttype,
-                contactmethod=method,
-            )
-        else:
-            self.compute_contacts(
-                tolerance=tolerance,
-                minimum_area=minimum_area,
-                contacttype=contacttype,
-                contactmethod=method,
-            )
+            a, b = plates[index_a], plates[index_b]
+            faces = joint_face_pair(kind_a, kind_b)
+            connection = joint_connection(kind_a, kind_b)
+            contact = contacttype(points=polygon.points, name=f"wood_joint_{joint_type}__{connection}")
 
-        return method
+            u, v = a.graphnode, b.graphnode
+            if not self.graph.has_edge((u, v), directed=False):
+                self.graph.add_edge(
+                    u, v, contacts=[contact], joint_types=[joint_type], joint_faces=[faces], joint_connections=[connection]
+                )
+            else:
+                edge = (u, v) if self.graph.has_edge((u, v)) else (v, u)
+                contacts = self.graph.edge_attribute(edge, name="contacts") or []
+                types = self.graph.edge_attribute(edge, name="joint_types") or []
+                stored_faces = self.graph.edge_attribute(edge, name="joint_faces") or []
+                stored_conn = self.graph.edge_attribute(edge, name="joint_connections") or []
+                self.graph.edge_attribute(edge, name="contacts", value=list(contacts) + [contact])
+                self.graph.edge_attribute(edge, name="joint_types", value=list(types) + [joint_type])
+                self.graph.edge_attribute(edge, name="joint_faces", value=list(stored_faces) + [faces])
+                self.graph.edge_attribute(edge, name="joint_connections", value=list(stored_conn) + [connection])
+
+            histogram[joint_type] = histogram.get(joint_type, 0) + 1
+
+        return histogram
+
+    def joint_type_pairs(self):
+        """``(element_a, element_b, contact, joint_type, connection, faces)`` per contact.
+
+        ``connection`` names the joint the way joinery does -
+        ``"face-to-face"``, ``"face-to-side"``, ``"side-to-side"``. ``faces`` is
+        the finer reading, ``"top-bottom"`` / ``"top-top"`` / ``"side-side"``,
+        kept for when the two large faces of a plate must be told apart.
+
+        Only the contacts a wood search wrote carry these; the group searches
+        leave ``joint_types`` unset, and those edges are skipped here.
+        """
+        for edge in self.graph.edges():
+            contacts = self.graph.edge_attribute(edge, name="contacts")
+            types = self.graph.edge_attribute(edge, name="joint_types")
+            if not contacts or not types:
+                continue
+            faces = self.graph.edge_attribute(edge, name="joint_faces") or [None] * len(contacts)
+            conns = self.graph.edge_attribute(edge, name="joint_connections") or [None] * len(contacts)
+            a = self.graph.node_element(edge[0])
+            b = self.graph.node_element(edge[1])
+            for contact, joint_type, connection, face_pair in zip(contacts, types, conns, faces):
+                yield a, b, contact, joint_type, connection, face_pair
 
     # ==========================================================================
     # Construction

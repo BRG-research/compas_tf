@@ -65,7 +65,6 @@ from compas_tf.model import TFModel
 from compas_tf.schoring_element import Dataset
 from compas_tf.schoring_element import SchoringElement
 from compas_tf.support import SupportElement
-from compas_tf.viewer import human_figure
 from compas_tf.viewer import zoom_to
 from compas_tf.writer import write_colored_obj
 
@@ -293,9 +292,5 @@ viewer.renderer.camera.target.set(0, 0, 1400)
 
 
 
-# A 1.75 m figure, for reading the scale of the model at a glance. Reference
-# geometry only - plain polylines, never added to the model itself.
-for _part in human_figure(point=[3600, 0, 0]):
-    viewer.scene.add(_part, name="scale_figure", linecolor=Color(0.35, 0.35, 0.35), linewidth=2)
 
 viewer.show()
