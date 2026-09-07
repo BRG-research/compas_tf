@@ -47,7 +47,12 @@ from compas_tf.connectors import (
     DowelCylinderElement,
 )
 
+# session_py is imported lazily inside these, so this stays a cheap import.
+from compas_tf.session import model_to_session, write_session
+
 __all__ = [
+    "model_to_session",
+    "write_session",
     "contact_holes",
     "PolylineOffset",
     "PolylineCut",
