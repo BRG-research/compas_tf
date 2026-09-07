@@ -82,4 +82,6 @@ for record, face in zip(records, faces):
 # The camera's far plane is 1000 mm, so without this the building starts clipped.
 zoom_to(viewer, [solid.aabb for solid in solids])
 
+
+
 viewer.show()

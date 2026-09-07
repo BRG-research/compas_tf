@@ -7,6 +7,12 @@ repo_url: https://github.com/BRG-research/compas_tf/
 
 copyright: Copyright &copy; ETH Zurich - Block Research Group
 
+# Port 8000 (the mkdocs default) is often taken on dev machines by Apache/XAMPP
+# and similar. On Windows that collision surfaces as a confusing WinError 10013
+# ("forbidden by its access permissions") rather than "address already in use",
+# so pin a quieter port and let `mkdocs serve` work with no arguments.
+dev_addr: 127.0.0.1:8001
+
 hooks:
   - hooks/fabrication_assets.py
 
@@ -87,6 +93,9 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets:
       check_paths: true
+      # The assembly steps generate their setting-out lists next to the
+      # previews they belong to, so a snippet is pulled from the repo root.
+      base_path: ["."]
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
@@ -154,6 +163,7 @@ nav:
       - Changelog: changelog.md
   - Fabrication:
       - Part list: fabrication.md
+      - Assembly: assembly.md
   - Examples:
       - Read a model: examples/010_read_model.md
       - Read a STEP file: examples/020_read_brep.md

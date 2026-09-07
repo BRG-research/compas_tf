@@ -100,4 +100,6 @@ def add_tree(node, viewer_parent):
 
 
 add_tree(quarters_model.tree.root, root_group)
+
+
 viewer.show()

@@ -118,4 +118,6 @@ def add_tree(node, viewer_parent):
 
 viewer = Viewer()
 add_tree(shoring_model.tree.root, None)
+
+
 viewer.show()

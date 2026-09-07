@@ -39,4 +39,6 @@ for contact in contacts:
 # The camera's far plane is 1000 mm, so without this the building starts clipped.
 zoom_to(viewer, [element.aabb for element in elements])
 
+
+
 viewer.show()

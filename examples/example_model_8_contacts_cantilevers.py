@@ -195,6 +195,8 @@ for i, contact in enumerate(cantilever_model.contacts()):
 # Plain, already-computed geometry for Rhino (no recompute on load) - see RHINO below.
 dump_scene(viewer.scene, data_dir / "cantilevers_rhino.json")
 
+
+
 viewer.show()
 
 

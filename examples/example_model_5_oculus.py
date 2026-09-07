@@ -57,4 +57,6 @@ def add_tree(node, viewer_parent):
 
 
 add_tree(oculus_model.tree.root, root_group)
+
+
 viewer.show()

@@ -57,4 +57,6 @@ for i, box in enumerate(face_boxes):
 for i, dowel in enumerate(dowel_cutters):
     viewer.scene.add(dowel, name=f"dowel_{i}", parent=connector)
 
+
+
 viewer.show()

@@ -53,4 +53,6 @@ for cm in column_models:
     for element in cm.elements():
         if element.modelgeometry is not None:
             viewer.scene.add(element, name=element.name, parent=g, facecolor=(0.9, 0.9, 0.9))
+
+
 viewer.show()

@@ -178,3 +178,7 @@ tmpclaude-*
 
 # Example model data
 examples/model.json
+
+# Contact exports from example_model_8_contacts_quarter.py
+data/quarter_contacts.json
+data/quarter_contacts.stp

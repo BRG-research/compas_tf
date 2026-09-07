@@ -70,4 +70,6 @@ viewer = Viewer()
 group = viewer.scene.add_group("column_model")
 viewer.scene.add(support, name="support", parent=group, facecolor=(0.9, 0.9, 0.9))
 viewer.scene.add(column, name="column", parent=group, facecolor=(0.9, 0.9, 0.9))
+
+
 viewer.show()

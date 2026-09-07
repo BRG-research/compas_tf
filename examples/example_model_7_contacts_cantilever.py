@@ -68,4 +68,6 @@ contacts_group = viewer.scene.add_group("contacts")
 for i, contact in enumerate(cantilever_model.contacts()):
     viewer.scene.add(contact.polygon, name=f"contact_{i}", parent=contacts_group, facecolor=RED, linecolor=RED)
 
+
+
 viewer.show()

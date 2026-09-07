@@ -48,4 +48,6 @@ def add_tree(node, viewer_parent):
 
 viewer = Viewer()
 add_tree(full_model.tree.root, None)
+
+
 viewer.show()

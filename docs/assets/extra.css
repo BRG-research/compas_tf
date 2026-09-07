@@ -137,3 +137,163 @@
   line-height: 1;
   cursor: pointer;
 }
+
+/* Assembly page (docs/assembly.md): one big viewer per step, no table around
+   it. Same lazy o3dv viewers as the part list, just given the room to be
+   looked at rather than scanned. */
+.assembly .online_3d_viewer {
+  display: block;
+  width: 100%;
+  height: min(60vh, 560px);
+  margin: 0.6em 0 1.2em;
+  background: #fff;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: zoom-in; /* a clean click expands into the lightbox */
+}
+
+/* Online 3D Viewer fits the model's bounding SPHERE to the box when it loads,
+   so a `camera` attribute only sets the direction and the up vector - the
+   distance in it is overridden. A wide, short box therefore leaves a whole-bay
+   model small with empty space either side: the sphere is fitted to the
+   HEIGHT. Steps that show the whole bay rather than one part get a squarer,
+   taller box instead, which is the only thing that actually zooms them in. */
+.assembly .viewer-bay {
+  max-width: 880px;
+  margin-inline: auto;
+}
+
+/* The wrapper carries the class, not the viewer: Online 3D Viewer rewrites
+   className on the element it takes over, so anything put there is lost. */
+.assembly .viewer-bay .online_3d_viewer {
+  height: min(78vh, 720px);
+}
+
+/* The step title sits on the viewer it introduces, and the description reads
+   as a paragraph rather than a spec. */
+.assembly h2 {
+  margin: 1.6em 0 0.2em;
+  padding-top: 0.8em;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.assembly h2:first-child {
+  margin-top: 0.4em;
+  padding-top: 0;
+  border-top: none;
+}
+
+.assembly p {
+  max-width: 62rem;
+}
+
+/* Image on one side, text on the other. Reusable anywhere in the docs:
+
+     <div class="side-by-side" markdown>
+     ![alt](_images/photo.webp)
+     <div markdown>
+     The text that sits next to it.
+     </div>
+     </div>
+
+   Needs `attr_list` + `md_in_html`, both already on in mkdocs.yml. The image
+   column is fixed at 20rem so the text keeps a sane measure; below 60rem the
+   two stack, image first. Add `.side-by-side--right` to put the image on the
+   right instead. */
+.md-typeset .side-by-side {
+  display: grid;
+  grid-template-columns: 20rem minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: start;
+  margin: 1em 0 1.4em;
+  max-width: 62rem;
+}
+
+.md-typeset .side-by-side > p:first-child,
+.md-typeset .side-by-side > figure:first-child {
+  margin: 0;
+}
+
+.md-typeset .side-by-side img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* The prose column: normal body text, just without the leading/trailing
+   paragraph margins that would knock it out of line with the image. */
+.md-typeset .side-by-side > :last-child > :first-child {
+  margin-top: 0;
+}
+
+.md-typeset .side-by-side > :last-child > :last-child {
+  margin-bottom: 0;
+}
+
+/* Image on the right: the text is still written first in the source, so only
+   the column order flips. */
+.md-typeset .side-by-side--right {
+  grid-template-columns: minmax(0, 1fr) 20rem;
+}
+
+@media screen and (max-width: 60em) {
+  .md-typeset .side-by-side,
+  .md-typeset .side-by-side--right {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked, the image would otherwise blow up to the full page width. */
+  .md-typeset .side-by-side > :first-child {
+    max-width: 22rem;
+  }
+}
+
+/* A wider side-by-side: the block is allowed the full 80rem page grid instead
+   of the 62rem prose measure, so long lines (the setting-out coordinates)
+   stay on one line next to the image. */
+.md-typeset .side-by-side--wide {
+  max-width: none;
+}
+
+/* A photo with points marked on it (docs/assembly.md, step 1). The dots are
+   positioned in PER CENT of the image in the markup, so they scale with it -
+   the photo itself is never touched. Colours are the ones the 3D viewer above
+   uses: BLUE and PINK from example_model_23_assembly_step1.py. */
+.md-typeset .marked-photo {
+  position: relative;
+  display: block;
+  line-height: 0; /* no descender gap under the image */
+}
+
+/* The image comes in as markdown (so mkdocs rewrites the path), which wraps it
+   in a paragraph - that paragraph must not add space or the dots drift. */
+.md-typeset .marked-photo p {
+  margin: 0;
+}
+
+.md-typeset .marked-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.md-typeset .marked-photo .mark {
+  position: absolute;
+  width: 5%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+}
+
+.md-typeset .marked-photo .mark--hole {
+  background: #1a59d9; /* Color(0.10, 0.35, 0.85) */
+}
+
+.md-typeset .marked-photo .mark--corner {
+  background: #ff59bf; /* Color(1.00, 0.35, 0.75) */
+}

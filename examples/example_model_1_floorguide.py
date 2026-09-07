@@ -69,4 +69,6 @@ for key, plane_pairs in guide.construction_planes.items():
             viewer.scene.add(rectangle, name=f"{key}_{i}_{j}", parent=group, facecolor=(0.2, 0.6, 0.9), opacity=0.3)
             viewer.scene.add(normal, name=f"{key}_{i}_{j}_normal", parent=group, linewidth=2, linecolor=(0.9, 0.2, 0.2))
 
+
+
 viewer.show()

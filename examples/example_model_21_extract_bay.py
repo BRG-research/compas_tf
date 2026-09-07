@@ -76,4 +76,6 @@ add_tree(bay.tree.root)
 # The camera's far plane is 1000 mm, so without this the bay starts clipped.
 zoom_to(viewer, [element.aabb for element in bay.geometry_elements()])
 
+
+
 viewer.show()

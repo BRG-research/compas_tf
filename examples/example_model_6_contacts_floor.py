@@ -160,4 +160,6 @@ contacts_group = viewer.scene.add_group("contacts")
 for i, (_a, _b, contact) in enumerate(contacts):
     viewer.scene.add(contact.polygon, name=f"contact_{i}", parent=contacts_group, facecolor=RED, linecolor=RED)
 
+
+
 viewer.show()
